@@ -13,11 +13,13 @@
     group_leader:     '项目群群主'
   };
 
+  const APPROVAL_ONLY_ROLES = ['sector_director', 'group_leader'];
+
   const NAV_ITEMS = [
     { path: '/dashboard', icon: 'el-icon-s-home',        label: '数据看板'  },
-    { path: '/editor',    icon: 'el-icon-s-grid',        label: '填报表格'  },
+    { path: '/editor',    icon: 'el-icon-s-grid',        label: '填报表格', hideForRoles: ['pm'].concat(APPROVAL_ONLY_ROLES) },
     { path: '/approval',  icon: 'el-icon-s-check',       label: '审批流程', hideForRoles: ['pm'] },
-    { path: '/audit',     icon: 'el-icon-document',      label: '审计日志', hideForRoles: ['pm'] },
+    { path: '/audit',     icon: 'el-icon-document',      label: '审计日志', hideForRoles: ['pm'].concat(APPROVAL_ONLY_ROLES) },
     { path: '/admin',     icon: 'el-icon-setting',       label: '管理设置', adminOnly: true }
   ];
 
@@ -44,21 +46,14 @@
           return true;
         });
       },
-      isPm() { return this.user.role === 'pm'; },
+      approvalOnlyNav() {
+        return APPROVAL_ONLY_ROLES.indexOf(this.user.role) >= 0;
+      },
       lockInfo()  { return LOCK_INFO[Store.lockStatus] || LOCK_INFO.open; },
       activePath(){ return this.$route ? this.$route.path : '/dashboard'; },
       pageTitle() {
         const item = NAV_ITEMS.find(n => this.activePath === n.path);
         return item ? item.label : '项目执行跟踪平台';
-      },
-      approvalBadge() {
-        const map = {
-          draft:    { text: '草稿',   color: '#94a3b8' },
-          approve1: { text: '初审中', color: '#f59e0b' },
-          approve2: { text: '复审中', color: '#3b82f6' },
-          final:    { text: '已归档', color: '#10b981' }
-        };
-        return map[Store.approvalStatus] || map.draft;
       },
       reportingMonth() { return Store.reportingMonth; },
       sidebarCollapsed() { return Store.sidebarCollapsed; }
@@ -173,16 +168,6 @@
 
             <div class="app-header-title">{{ pageTitle }}</div>
 
-            <el-tag
-              v-if="!isPm"
-              size="small"
-              :style="{background: approvalBadge.color + '22', color: approvalBadge.color, border: '1px solid ' + approvalBadge.color + '66'}"
-            >
-              审批：{{ approvalBadge.text }}
-            </el-tag>
-
-            <div v-if="!isPm" style="width:1px;height:20px;background:#e2e8f0;margin:0 4px;"></div>
-
             <el-dropdown trigger="click">
               <div style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 8px;border-radius:6px;" class="hover:bg-gray-100">
                 <div style="width:28px;height:28px;border-radius:50%;background:#007069;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:600;flex-shrink:0;">
@@ -213,7 +198,7 @@
             </el-dropdown>
           </div>
 
-          <div class="app-content" :class="{'no-padding': activePath === '/editor'}">
+          <div class="app-content" :class="{'no-padding': activePath === '/editor' || (activePath === '/approval' && approvalOnlyNav)}">
             <router-view></router-view>
           </div>
         </div>

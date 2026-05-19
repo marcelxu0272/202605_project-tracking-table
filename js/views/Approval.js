@@ -1,6 +1,7 @@
 /**
  * Approval.js — 审批流程页
- * 审批时间轴 + 快照版本列表 + 差异对比弹窗
+ * 板块总监 / 项目群群主：时间轴 + 只读 Luckysheet（新增与变更项目）
+ * 其他角色：时间轴 + 版本快照 + 差异对比
  */
 (function (window) {
   'use strict';
@@ -46,8 +47,13 @@
 
   const FLOW_IDX = { draft: 0, approve1: 1, approve2: 2, final: 3 };
 
+  const APPROVAL_REVIEW_ROLES = ['sector_director', 'group_leader'];
+
   window.ApprovalView = {
     name: 'Approval',
+    components: {
+      ApprovalReviewSheet: window.ApprovalReviewSheet
+    },
     data() {
       return {
         flow: FLOW,
@@ -62,6 +68,9 @@
     computed: {
       store()          { return window.Store; },
       user()           { return Store.currentUser || {}; },
+      isApprovalReviewer() {
+        return APPROVAL_REVIEW_ROLES.indexOf(this.user.role) >= 0;
+      },
       currentStatus()  { return Store.approvalStatus; },
       currentIdx()     { return FLOW_IDX[this.currentStatus] || 0; },
       snapshots()      { return Store.snapshots; },
@@ -70,14 +79,13 @@
           .sort((a, b) => new Date(b.time) - new Date(a.time));
       },
       canApprove() {
-        const node = FLOW[this.currentIdx + 1];
-        if (!node) return false;
-        return node.role.includes(this.user.role) || this.user.role === 'system_admin';
+        const next = FLOW[this.currentIdx + 1];
+        if (!next) return false;
+        if (this.currentStatus === 'draft' && !Store.reportingSubmitted) return false;
+        return next.role.includes(this.user.role) || this.user.role === 'system_admin';
       },
       canReject() {
-        const node = FLOW[this.currentIdx];
-        if (!node || this.currentStatus === 'draft') return false;
-        return node.role.includes(this.user.role) || this.user.role === 'system_admin';
+        return this.canApprove;
       },
       nextActionLabel() {
         const next = FLOW[this.currentIdx + 1];
@@ -85,13 +93,36 @@
       },
       versionOptions() {
         return Object.keys(this.snapshots).map(k => ({ label: k, value: k }));
+      },
+      /** 当前进行中的流程节点下标（approvalStatus 表示上一节点已完成） */
+      activeFlowIdx() {
+        const s = this.currentStatus;
+        if (s === 'final') return -1;
+        if (s === 'draft') return Store.reportingSubmitted ? 1 : 0;
+        if (s === 'approve1') return 2;
+        if (s === 'approve2') return 3;
+        return 0;
       }
     },
     methods: {
       nodeStatus(idx) {
-        if (idx < this.currentIdx) return 'done';
-        if (idx === this.currentIdx) return 'current';
+        if (this.currentStatus === 'final') return 'done';
+        const active = this.activeFlowIdx;
+        if (idx < active) return 'done';
+        if (idx === active) return 'current';
         return 'pending';
+      },
+      nodeStatusLabel(idx) {
+        const s = this.nodeStatus(idx);
+        if (s === 'done') return '已完成';
+        if (s === 'current') return '进行中';
+        return '未完成';
+      },
+      nodeStatusTagType(idx) {
+        const s = this.nodeStatus(idx);
+        if (s === 'done') return 'success';
+        if (s === 'current') return 'warning';
+        return 'info';
       },
       formatTime(iso) {
         if (!iso) return '—';
@@ -100,37 +131,42 @@
       },
       handleApprove() {
         this.$confirm(
-          `确认执行"${this.nextActionLabel}"操作？此操作将推进审批流到下一节点并生成版本快照。`,
+          `确认执行「${this.nextActionLabel}」？此操作将推进审批流程并生成版本快照。`,
           '审批确认', { confirmButtonText: '确认', cancelButtonText: '取消', type: 'warning' }
         ).then(() => {
           this.approveLoading = true;
           Store.advanceApproval()
             .then(() => {
-              this.$message.success('审批操作已完成，版本快照已生成');
+              this.$message.success('审批操作已完成');
             })
             .catch(e => { this.$message.error('操作失败：' + (e.message || e)); })
             .finally(() => { this.approveLoading = false; });
         }).catch(() => {});
       },
       handleReject() {
-        this.$prompt('请填写驳回原因（可选）', '驳回确认', {
-          confirmButtonText: '确认驳回', cancelButtonText: '取消',
-          inputPlaceholder: '请输入驳回原因...'
+        this.$prompt('请填写驳回原因（可选）', '驳回至板块管理员', {
+          confirmButtonText: '确认驳回',
+          cancelButtonText: '取消',
+          inputPlaceholder: '请输入驳回原因，板块管理员可修改后重新提交…'
         }).then(({ value }) => {
           this.rejectLoading = true;
           Store.rejectApproval()
             .then(() => {
               if (value) {
                 return Store.addAuditLog({
-                  projectNo: '—', projectName: '全局审批',
-                  fieldName: 'reject_reason', fieldCN: '驳回原因',
-                  oldVal: '', newVal: value,
-                  userId: this.user.role, userName: this.user.name
+                  projectNo: '—',
+                  projectName: '全局审批',
+                  fieldName: 'reject_reason',
+                  fieldCN: '驳回原因',
+                  oldVal: '',
+                  newVal: value,
+                  userId: this.user.role,
+                  userName: this.user.name
                 });
               }
             })
             .then(() => {
-              this.$message.warning('已驳回，流程退回至 Draft 状态');
+              this.$message.warning('已驳回，流程已退回板块管理员，可修改后重新提交审批');
             })
             .catch(e => { this.$message.error('操作失败：' + (e.message || e)); })
             .finally(() => { this.rejectLoading = false; });
@@ -154,7 +190,6 @@
         const fields = FieldConfig.buildFieldConfig();
         const results = [];
 
-        // 以右边版本为基准遍历
         right.forEach(rp => {
           const lp = left.find(p => p.project_no === rp.project_no);
           const rowDiffs = [];
@@ -163,7 +198,7 @@
           } else {
             const lFlat = FieldConfig.arraysToFlat(lp);
             const rFlat = FieldConfig.arraysToFlat(rp);
-            fields.slice(0, 40).forEach(f => {  // 只对比前40个字段避免过多
+            fields.slice(0, 40).forEach(f => {
               const key = FieldConfig.COL_TO_KEY[f.col];
               const lv = lFlat[key];
               const rv = rFlat[key];
@@ -185,33 +220,32 @@
       }
     },
     template: `
-      <div>
-        <div class="approval-layout" style="align-items:start;">
-          <!-- 左侧：审批时间轴 -->
-          <div>
+      <div :class="isApprovalReviewer ? 'approval-reviewer-page' : ''" style="height:100%;">
+        <!-- 板块总监 / 项目群群主：精简审批 + 只读 Luckysheet -->
+        <template v-if="isApprovalReviewer">
+          <div class="approval-layout approval-reviewer-layout">
+            <div>
             <div class="approval-timeline-card">
-              <div class="card-title" style="margin-bottom:16px;">审批流程</div>
-
+              <div class="card-title" style="margin-bottom:12px;">流程进度</div>
+              <div class="timeline-status-legend">
+                <span class="timeline-legend-item"><span class="timeline-dot done timeline-dot--legend"></span>已完成</span>
+                <span class="timeline-legend-item"><span class="timeline-dot current timeline-dot--legend"></span>进行中</span>
+                <span class="timeline-legend-item"><span class="timeline-dot pending timeline-dot--legend"></span>未完成</span>
+              </div>
               <div class="timeline-node" v-for="(node, idx) in flow" :key="node.key">
                 <div class="timeline-dot" :class="nodeStatus(idx)">
                   <span v-if="nodeStatus(idx) === 'done'"><i class="el-icon-check"></i></span>
+                  <span v-else-if="nodeStatus(idx) === 'current'"><i class="el-icon-more"></i></span>
                   <span v-else>{{ node.icon }}</span>
                 </div>
                 <div class="timeline-content">
-                  <div class="timeline-title" :style="nodeStatus(idx) === 'current' ? 'color:#f59e0b' : ''">
-                    {{ node.title }}
+                  <div class="timeline-title-row">
+                    <span class="timeline-title" :class="{ 'is-current': nodeStatus(idx) === 'current' }">{{ node.title }}</span>
+                    <el-tag size="mini" :type="nodeStatusTagType(idx)">{{ nodeStatusLabel(idx) }}</el-tag>
                   </div>
                   <div class="timeline-sub">{{ node.desc }}</div>
-                  <!-- 快照信息 -->
-                  <div v-if="snapshots[node.label]" style="margin-top:6px;">
-                    <el-tag size="mini" type="success">
-                      {{ snapshots[node.label].user }} · {{ formatTime(snapshots[node.label].time) }}
-                    </el-tag>
-                  </div>
                 </div>
               </div>
-
-              <!-- 操作按钮 -->
               <div style="margin-top:20px;padding-top:16px;border-top:1px solid #e2e8f0;display:flex;gap:8px;flex-wrap:wrap;">
                 <el-button
                   v-if="canApprove"
@@ -233,104 +267,172 @@
                 >
                   <i class="el-icon-close"></i> 驳回
                 </el-button>
-                <div v-if="!canApprove && !canReject" style="font-size:12px;color:#94a3b8;padding:6px 0;">
-                  当前角色无审批权限
+                <div v-if="!canApprove && !canReject" style="font-size:12px;color:#94a3b8;padding:4px 0;">
+                  <template v-if="currentStatus === 'draft' && !store.reportingSubmitted">
+                    等待板块管理员提交审批
+                  </template>
+                  <template v-else-if="currentStatus === 'final'">
+                    审批已归档
+                  </template>
+                  <template v-else>
+                    当前无待您处理的审批节点
+                  </template>
                 </div>
               </div>
             </div>
-
-            <!-- 版本对比按钮 -->
-            <el-button
-              v-if="snapshotList.length >= 2"
-              style="margin-top:12px;width:100%;"
-              size="small"
-              icon="el-icon-view"
-              @click="openDiffDialog"
-            >版本差异对比</el-button>
+            </div>
+            <approval-review-sheet></approval-review-sheet>
           </div>
+        </template>
 
-          <!-- 右侧：快照列表 -->
-          <div>
-            <div class="card" style="padding:20px;">
-              <div class="card-header">
-                <div class="card-title">版本快照记录</div>
-                <el-tag size="mini">{{ snapshotList.length }} 个版本</el-tag>
-              </div>
-
-              <div v-if="snapshotList.length === 0" class="empty-state">
-                <i class="el-icon-document"></i>
-                <div>暂无快照版本</div>
-                <div style="font-size:12px;margin-top:4px;color:#94a3b8;">提交填报后将自动生成快照</div>
-              </div>
-
-              <el-timeline v-else style="padding:0;margin:0;">
-                <el-timeline-item
-                  v-for="snap in snapshotList"
-                  :key="snap.version"
-                  :timestamp="formatTime(snap.time)"
-                  placement="top"
-                  size="large"
-                  :color="snap.version === 'J版' ? '#007069' : (snap.version.startsWith('Approve') ? '#10b981' : '#94a3b8')"
-                >
-                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                    <el-tag
-                      size="small"
-                      :type="snap.version === 'J版' ? 'success' : (snap.version === 'Draft' ? 'info' : 'warning')"
-                    >{{ snap.version }}</el-tag>
-                    <span style="font-size:13px;">{{ snap.user }}</span>
-                    <span style="font-size:12px;color:#94a3b8;">{{ snap.projects ? snap.projects.length + ' 条项目' : '' }}</span>
+        <!-- 其他角色：原时间轴 + 快照列表 + 版本对比 -->
+        <template v-else>
+          <div class="approval-layout" style="align-items:start;">
+            <div>
+              <div class="approval-timeline-card">
+                <div class="card-title" style="margin-bottom:12px;">流程进度</div>
+                <div class="timeline-status-legend">
+                  <span class="timeline-legend-item"><span class="timeline-dot done timeline-dot--legend"></span>已完成</span>
+                  <span class="timeline-legend-item"><span class="timeline-dot current timeline-dot--legend"></span>进行中</span>
+                  <span class="timeline-legend-item"><span class="timeline-dot pending timeline-dot--legend"></span>未完成</span>
+                </div>
+                <div class="timeline-node" v-for="(node, idx) in flow" :key="node.key">
+                  <div class="timeline-dot" :class="nodeStatus(idx)">
+                    <span v-if="nodeStatus(idx) === 'done'"><i class="el-icon-check"></i></span>
+                    <span v-else-if="nodeStatus(idx) === 'current'"><i class="el-icon-more"></i></span>
+                  <span v-else>{{ node.icon }}</span>
                   </div>
-                </el-timeline-item>
-              </el-timeline>
-            </div>
-          </div>
-        </div>
+                  <div class="timeline-content">
+                    <div class="timeline-title-row">
+                      <span class="timeline-title" :class="{ 'is-current': nodeStatus(idx) === 'current' }">{{ node.title }}</span>
+                      <el-tag size="mini" :type="nodeStatusTagType(idx)">{{ nodeStatusLabel(idx) }}</el-tag>
+                    </div>
+                    <div class="timeline-sub">{{ node.desc }}</div>
+                    <div v-if="snapshots[node.label]" style="margin-top:6px;">
+                      <el-tag size="mini" type="success">
+                        {{ snapshots[node.label].user }} · {{ formatTime(snapshots[node.label].time) }}
+                      </el-tag>
+                    </div>
+                  </div>
+                </div>
 
-        <!-- 版本差异对比弹窗 -->
-        <el-dialog
-          title="版本差异对比"
-          :visible.sync="diffDialogVisible"
-          width="80%"
-          :before-close="() => diffDialogVisible = false"
-        >
-          <div style="display:flex;gap:12px;margin-bottom:16px;align-items:center;">
-            <span style="font-size:13px;color:#64748b;">对比版本：</span>
-            <el-select v-model="diffLeftVersion" size="small" style="width:150px;" @change="computeDiff">
-              <el-option v-for="v in versionOptions" :key="v.value" :label="v.label" :value="v.value"></el-option>
-            </el-select>
-            <i class="el-icon-right" style="color:#94a3b8;"></i>
-            <el-select v-model="diffRightVersion" size="small" style="width:150px;" @change="computeDiff">
-              <el-option v-for="v in versionOptions" :key="v.value" :label="v.label" :value="v.value"></el-option>
-            </el-select>
-            <span style="font-size:12px;color:#94a3b8;margin-left:8px;">共 {{ diffResults.length }} 个项目有变更</span>
-          </div>
-
-          <div v-if="diffResults.length === 0" class="empty-state">
-            <i class="el-icon-success" style="color:#10b981;"></i>
-            <div>两个版本无差异</div>
-          </div>
-
-          <div v-else style="max-height:480px;overflow-y:auto;">
-            <div v-for="row in diffResults" :key="row.projectNo" style="margin-bottom:16px;">
-              <div style="font-size:13px;font-weight:600;color:#1e293b;padding:6px 0;border-bottom:1px solid #e2e8f0;margin-bottom:8px;">
-                {{ row.projectName }} <span style="color:#94a3b8;font-weight:400;font-size:12px;">{{ row.projectNo }}</span>
+                <div style="margin-top:20px;padding-top:16px;border-top:1px solid #e2e8f0;display:flex;gap:8px;flex-wrap:wrap;">
+                  <el-button
+                    v-if="canApprove"
+                    type="primary"
+                    size="small"
+                    style="background:#007069;border-color:#007069;"
+                    :loading="approveLoading"
+                    @click="handleApprove"
+                  >
+                    <i class="el-icon-check"></i> {{ nextActionLabel }}
+                  </el-button>
+                  <el-button
+                    v-if="canReject"
+                    type="danger"
+                    size="small"
+                    plain
+                    :loading="rejectLoading"
+                    @click="handleReject"
+                  >
+                    <i class="el-icon-close"></i> 驳回
+                  </el-button>
+                  <div v-if="!canApprove && !canReject" style="font-size:12px;color:#94a3b8;padding:6px 0;">
+                    当前角色无审批权限
+                  </div>
+                </div>
               </div>
-              <el-table :data="row.diffs" size="mini" border style="width:100%;">
-                <el-table-column prop="field" label="字段" width="140"></el-table-column>
-                <el-table-column label="原值（左）">
-                  <template slot-scope="{row:d}">
-                    <span class="diff-remove amount">{{ d.leftVal }}</span>
-                  </template>
-                </el-table-column>
-                <el-table-column label="新值（右）">
-                  <template slot-scope="{row:d}">
-                    <span class="diff-change amount">{{ d.rightVal }}</span>
-                  </template>
-                </el-table-column>
-              </el-table>
+
+              <el-button
+                v-if="snapshotList.length >= 2"
+                style="margin-top:12px;width:100%;"
+                size="small"
+                icon="el-icon-view"
+                @click="openDiffDialog"
+              >版本差异对比</el-button>
+            </div>
+
+            <div>
+              <div class="card" style="padding:20px;">
+                <div class="card-header">
+                  <div class="card-title">版本快照记录</div>
+                  <el-tag size="mini">{{ snapshotList.length }} 个版本</el-tag>
+                </div>
+
+                <div v-if="snapshotList.length === 0" class="empty-state">
+                  <i class="el-icon-document"></i>
+                  <div>暂无快照版本</div>
+                  <div style="font-size:12px;margin-top:4px;color:#94a3b8;">提交填报后将自动生成快照</div>
+                </div>
+
+                <el-timeline v-else style="padding:0;margin:0;">
+                  <el-timeline-item
+                    v-for="snap in snapshotList"
+                    :key="snap.version"
+                    :timestamp="formatTime(snap.time)"
+                    placement="top"
+                    size="large"
+                    :color="snap.version === 'J版' ? '#007069' : (snap.version.startsWith('Approve') ? '#10b981' : '#94a3b8')"
+                  >
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                      <el-tag
+                        size="small"
+                        :type="snap.version === 'J版' ? 'success' : (snap.version === 'Draft' ? 'info' : 'warning')"
+                      >{{ snap.version }}</el-tag>
+                      <span style="font-size:13px;">{{ snap.user }}</span>
+                      <span style="font-size:12px;color:#94a3b8;">{{ snap.projects ? snap.projects.length + ' 条项目' : '' }}</span>
+                    </div>
+                  </el-timeline-item>
+                </el-timeline>
+              </div>
             </div>
           </div>
-        </el-dialog>
+
+          <el-dialog
+            title="版本差异对比"
+            :visible.sync="diffDialogVisible"
+            width="80%"
+            :before-close="() => diffDialogVisible = false"
+          >
+            <div style="display:flex;gap:12px;margin-bottom:16px;align-items:center;">
+              <span style="font-size:13px;color:#64748b;">对比版本：</span>
+              <el-select v-model="diffLeftVersion" size="small" style="width:150px;" @change="computeDiff">
+                <el-option v-for="v in versionOptions" :key="v.value" :label="v.label" :value="v.value"></el-option>
+              </el-select>
+              <i class="el-icon-right" style="color:#94a3b8;"></i>
+              <el-select v-model="diffRightVersion" size="small" style="width:150px;" @change="computeDiff">
+                <el-option v-for="v in versionOptions" :key="v.value" :label="v.label" :value="v.value"></el-option>
+              </el-select>
+              <span style="font-size:12px;color:#94a3b8;margin-left:8px;">共 {{ diffResults.length }} 个项目有变更</span>
+            </div>
+
+            <div v-if="diffResults.length === 0" class="empty-state">
+              <i class="el-icon-success" style="color:#10b981;"></i>
+              <div>两个版本无差异</div>
+            </div>
+
+            <div v-else style="max-height:480px;overflow-y:auto;">
+              <div v-for="row in diffResults" :key="row.projectNo" style="margin-bottom:16px;">
+                <div style="font-size:13px;font-weight:600;color:#1e293b;padding:6px 0;border-bottom:1px solid #e2e8f0;margin-bottom:8px;">
+                  {{ row.projectName }} <span style="color:#94a3b8;font-weight:400;font-size:12px;">{{ row.projectNo }}</span>
+                </div>
+                <el-table :data="row.diffs" size="mini" border style="width:100%;">
+                  <el-table-column prop="field" label="字段" width="140"></el-table-column>
+                  <el-table-column label="原值（左）">
+                    <template slot-scope="{row:d}">
+                      <span class="diff-remove amount">{{ d.leftVal }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="新值（右）">
+                    <template slot-scope="{row:d}">
+                      <span class="diff-change amount">{{ d.rightVal }}</span>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </div>
+            </div>
+          </el-dialog>
+        </template>
       </div>
     `
   };

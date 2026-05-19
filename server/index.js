@@ -5,6 +5,7 @@ const fs = require('fs');
 const express = require('express');
 const { loadBrowserScripts } = require('./load-modules');
 const { projectsFromXlsxBuffer } = require('./xlsx-seed');
+const { seedPriorMonthSnapshot } = require('./prior-month-snapshot');
 const dbm = require('./db');
 
 const ROOT = path.join(__dirname, '..');
@@ -359,6 +360,26 @@ function importProjectsFromInitXlsx(reportingMonth) {
   return { count: projects.length, file: path.basename(xlsxPath) };
 }
 
+/** 基于当前库生成上一报告月对比快照（剔除部分项目，用于「新增项目」演示） */
+app.post('/api/admin/seed-prior-month-snapshot', (req, res) => {
+  try {
+    const body = req.body || {};
+    const reportingMonth = body.reportingMonth
+      || dbm.getMeta(db, 'reportingMonth')
+      || '2026-05';
+    const removeCount = body.removeCount != null ? Number(body.removeCount) : 5;
+    const result = seedPriorMonthSnapshot(db, modules, {
+      reportingMonth,
+      removeCount,
+      user: body.userName || '系统',
+      role: body.role || 'system_admin'
+    });
+    res.json({ ok: true, state: dbm.getBootstrapState(db), ...result });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: String(e.message) });
+  }
+});
+
 app.post('/api/admin/reseed', (_req, res) => {
   try {
     dbm.ensureDefaultMeta(db);
@@ -366,6 +387,7 @@ app.post('/api/admin/reseed', (_req, res) => {
     const { count, file } = importProjectsFromInitXlsx(reportingMonth);
     dbm.clearAudit(db);
     dbm.clearSnapshots(db);
+    db.prepare('DELETE FROM meta WHERE key = ?').run('priorMonthSnapshotVersion');
     dbm.clearLockOverride(db);
     dbm.setMeta(db, 'approvalStatus', 'draft');
     dbm.setMeta(db, 'reportingSubmitted', false);

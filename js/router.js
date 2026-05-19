@@ -80,6 +80,18 @@
       return;
     }
 
+    // 板块总监 / 项目群群主：仅数据看板与审批流程
+    const approvalOnlyRoles = ['sector_director', 'group_leader'];
+    const approvalOnlyRestricted = ['/editor', '/audit', '/admin'];
+    if (
+      Store.currentUser &&
+      approvalOnlyRoles.includes(Store.currentUser.role) &&
+      approvalOnlyRestricted.includes(to.path)
+    ) {
+      next('/dashboard');
+      return;
+    }
+
     next();
   });
 

@@ -9,40 +9,44 @@
 
 | 文件 | 类型 | 大小 | 说明 |
 |---|---|---|---|
-| `package.json` | 📦 Node 配置 | ~0.5KB | 依赖 `express`、`better-sqlite3`、`xlsx`；`npm start` 启动 API + 静态站点。 |
-| `server/index.js` | 🖥 服务端入口 | ~8KB | Express：`/api/*` 读写 SQLite，托管项目根目录静态文件；含 `POST /api/pm-submissions/submit` 与 `receive` 端点。 |
-| `server/db.js` | 🗃 SQLite 封装 | ~6KB | 库路径 `data/ptrack.sqlite`；projects / audit_log / snapshots / meta；含 `getPmSubmissions` / `setPmSubmissions`。 |
+| `package.json` | 📦 Node 配置 | ~0.5KB | 依赖 `express`、`better-sqlite3`、`xlsx`；`npm start` 启动 API + 静态站点；`npm run seed:prior-month` 生成上月对比快照。 |
+| `server/index.js` | 🖥 服务端入口 | ~9KB | Express：`/api/*` 读写 SQLite，托管静态文件；PM 提交/接收；`POST /api/admin/seed-prior-month-snapshot` 生成上月归档快照。 |
+| `server/db.js` | 🗃 SQLite 封装 | ~6KB | 库路径 `data/ptrack.sqlite`；projects / audit_log / snapshots / meta；bootstrap 含 `priorMonthSnapshotVersion`。 |
 | `server/load-modules.js` | 🔧 模块加载 | ~1KB | 在 Node 中 vm 执行 `fields-data.js`、`formula-engine.js`、`field-config.js`。 |
 | `server/xlsx-seed.js` | 📥 服务端解析 | ~3KB | xlsx → projects（与 `js/xlsx-importer.js` 对齐）。 |
+| `server/prior-month-snapshot.js` | 📅 上月快照 | ~3KB | 从当前库剔除部分项目生成 `Month:YYYY-MM` 快照，供「新增项目」对比。 |
+| `server/seed-prior-month-snapshot.js` | 🔧 CLI | ~1KB | `npm run seed:prior-month [剔除条数]`，默认剔除 48 条。 |
 | `初始数据.xlsx` | 📊 初始化数据 | 视文件 | 置于项目根目录；库为空时自动导入；管理页可「从初始 Excel 恢复」。 |
 | `data/ptrack.sqlite` | 🗄 运行时库 | 自动生成 | SQLite 数据文件（`.gitignore`）；种子来源见上或 S520 源表。 |
 | `字段字典.md` | 📄 核心文档 | ~15KB | **本项目的核心参考文档**。完整梳理了 Excel 源表的全部 83 个字段，按 11 个功能分区组织，包含字段名（中英文）、数据类型、枚举值/示例、说明。末尾附带数据特征统计和线上化建议。 |
-| `线上化需求.md` | 📋 需求文档 | ~7KB | 线上化系统的需求记录。已包含角色定义、PM提交与板块接收（§2.11）、双轨填报、实时刷新+锁定期、动态时间窗、数据变更审计、审批流与版本快照、项目准入机制、动态年份与历史归档机制等核心逻辑。 |
-| `技术栈与开发规范.md` | 🛠 技术规范 | ~4KB | 定义了项目的开发原则、技术栈清单、CDN 引入示例、项目结构建议及注意事项。包含 Luckysheet 在线表格组件的引入与权限控制说明。 |
-| `产值报告线上化讨论_精修版.md` | 📝 会议记录 | ~4KB | 精修版会议记录，已清理无关内容、修正识别错误（CRM→CRB）、梳理对话逻辑。 |
-| `产值报告线上化讨论_关键要点.md` | 📌 要点提取 | ~2KB | 从讨论中提炼的决策要点、业务规则、体验设计及待确认问题。供 Ethan 选择性采纳。 |
-| `S520_金山中心_项目执行跟踪详细数据2026年05月.xlsx` | 📊 原始数据 | 822KB | Excel 源文件，Sheet = `S520`，约 1220 条项目记录，83 列。**无「初始数据.xlsx」时服务端可选作自动导入文件。** |
-| `column_analysis.py` / `column_analysis.txt` | 🐍📝 分析产物 | ~20KB | 字段级数据分析脚本及输出结果，用于理解每个字段的数据特征（唯一值、样本等）。 |
-| `excel_structure.txt` | 📝 结构导出 | ~5KB | Excel 表结构快照，记录了分区标题行、字段标题行及样本数据行内容。 |
-| `index.html` | 🌐 应用入口 | ~3KB | 全 CDN 引入（Vue2/ElementUI/ECharts/SheetJS/Tailwind）。**通过 `npm start` 访问 http://127.0.0.1:3000/ 与 API 同域。** |
-| `css/style.css` | 🎨 全局样式 | ~14KB | 品牌色变量、diff 高亮、填报期 badge、金额等宽字体、卡片/看板/时间轴等全局样式。 |
-| `js/formatters.js` | 🔧 格式化工具 | ~4KB | 金额千分位（1,234,567.89）、等宽数字、百分比、日期等格式化函数。 |
-| `js/formula-engine.js` | ⚙️ 公式引擎 | ~8KB | 83 字段中所有 auto_calc 字段的计算逻辑（O/Q/R/S/U/V/W/X/Z/AB~AF/AG~AL/AP/AQ），含汇总函数。 |
-| `js/field-config.js` | 🔐 字段权限 | ~7KB | 基于 fields-data.js 扩展角色权限矩阵，定义各角色在不同锁定期的字段可写范围。 |
-| `js/mock-data.js` | 📦 备用示例 | ~31KB | 20 条约示例数据；**不再默认引入**；仅供离线对照时手动加 `<script>`。 |
-| `js/store.js` | 🗄️ 状态管理 | ~12KB | Vue.observable；**业务数据经 `/api` 同步至 SQLite**；含 `pmSubmissions`、`submitPmReporting`、`receivePmSubmission` 等 PM 提交流程方法。 |
-| `js/xlsx-importer.js` | 📥 导入导出 | ~6KB | SheetJS 驱动的 xlsx 解析导入器，支持初始数据导入和填报数据导出。 |
-| `js/import-merge.js` | 📥 导入合并 | ~2KB | 按 `project_no` 合并 Excel 导入：仅覆盖当前角色可编辑字段，供填报页「上传导入」使用。 |
-| `js/change-meta.js` | 📝 变更批注 | ~2KB | `_field_change_log` 记录与 Luckysheet 批注（`ps`）文案：修改前/后值、修改人、修改时间。 |
-| `js/router.js` | 🔀 路由配置 | ~2KB | Vue Router hash 模式，6 条路由 + 登录守卫 + admin 权限守卫。 |
-| `js/app.js` | 🚀 应用初始化 | ~2KB | `Store.init()` 后再挂载 Vue；失败提示启动 Node 服务。 |
-| `js/components/AppLayout.js` | 🖼️ 主布局 | ~7KB | 侧边栏（深色）+ 顶栏（用户/角色/审批状态）+ 内容区路由出口。 |
-| `js/views/Login.js` | 🔑 登录页 | ~6KB | 6 个角色卡片登录，支持角色内用户切换，直接写入 Store。 |
-| `js/views/Dashboard.js` | 📊 数据看板 | ~12KB | KPI 卡片（4项）+ 月度完成趋势（折线+柱图）+ WIP 账龄饼图 + 开票回款对比 + WIP 预警列表。 |
-| `js/views/ProjectEditor.js` | 📝 填报表格 | ~22KB | Luckysheet 填报（默认）；有变更单元格橙字高亮 + 批注（悬停/角标查看变更详情）；工具栏含保存、上传导入、历史版本、导出与提交；PM 过滤与板块待接收面板。 |
-| `js/views/Approval.js` | ✅ 审批流程 | ~13KB | 四节点时间轴（Draft→Approve1→Approve2→J版）+ 版本快照列表 + diff 对比弹窗。 |
-| `js/views/AuditLog.js` | 📋 审计日志 | ~9KB | 变更历史表格，支持日期范围/操作人/项目/字段多维筛选，可导出 xlsx。 |
-| `js/views/AdminSettings.js` | ⚙️ 管理设置 | ~17KB | 填报周期、锁定/解锁、Excel 导入、从初始 Excel 恢复 SQLite、用户列表。 |
+| `线上化需求.md` | 📋 需求文档 | ~14KB | 需求记录：角色、PM 提交、审批决策界面、流程进度、变更批注、上月快照等。 |
+| `技术栈与开发规范.md` | 🛠 技术规范 | ~4KB | 开发原则、技术栈清单、CDN 引入、Luckysheet 权限说明。 |
+| `产值报告线上化讨论_精修版.md` | 📝 会议记录 | ~4KB | 精修版会议记录。 |
+| `产值报告线上化讨论_关键要点.md` | 📌 要点提取 | ~2KB | 决策要点与业务规则。 |
+| `S520_金山中心_项目执行跟踪详细数据2026年05月.xlsx` | 📊 原始数据 | 822KB | Excel 源文件，Sheet = `S520`，约 1220 条。**无「初始数据.xlsx」时可选作自动导入。** |
+| `column_analysis.py` / `column_analysis.txt` | 🐍📝 分析产物 | ~20KB | 字段级数据分析。 |
+| `excel_structure.txt` | 📝 结构导出 | ~5KB | 表结构快照。 |
+| `index.html` | 🌐 应用入口 | ~3KB | CDN + 业务脚本；`npm start` → http://127.0.0.1:3000/ |
+| `css/style.css` | 🎨 全局样式 | ~15KB | 品牌色、变更字段色（`--color-changed-field-*`）、图例、侧栏、工具栏。 |
+| `js/formatters.js` | 🔧 格式化工具 | ~4KB | 金额、日期、百分比等。 |
+| `js/formula-engine.js` | ⚙️ 公式引擎 | ~8KB | 83 字段 `auto_calc` 逻辑与汇总。 |
+| `js/field-config.js` | 🔐 字段权限 | ~7KB | 角色 × 锁定期字段可写矩阵。 |
+| `js/change-meta.js` | 📝 变更批注 | ~3KB | `_field_change_log`、Luckysheet `ps` 批注、变更高亮色 `CHANGED_FIELD_STYLE`。 |
+| `js/project-month-diff.js` | 🆕 新增项目 | ~1KB | 对比 `Month:YYYY-MM` 快照，设置 `_added_this_month`。 |
+| `js/import-merge.js` | 📥 导入合并 | ~2KB | 填报页按 `project_no` 合并可编辑字段。 |
+| `js/mock-data.js` | 📦 备用示例 | ~31KB | 20 条示例；**不默认引入**。 |
+| `js/store.js` | 🗄️ 状态管理 | ~12KB | Vue.observable + `/api`；`seedPriorMonthSnapshot` 等。 |
+| `js/xlsx-importer.js` | 📥 导入导出 | ~6KB | SheetJS xlsx 解析/导出。 |
+| `js/router.js` | 🔀 路由配置 | ~2KB | Hash 路由 + 登录/管理员守卫。 |
+| `js/app.js` | 🚀 应用初始化 | ~2KB | `Store.init()` 后挂载 Vue。 |
+| `js/components/AppLayout.js` | 🖼️ 主布局 | ~7KB | 侧栏（底部折叠/展开）+ 顶栏 + 路由出口；板块总监/群主仅看板+审批导航。 |
+| `js/components/ApprovalReviewSheet.js` | 📋 审批表格 | ~3KB | 总监/群主审批页只读 Luckysheet（新增+变更项目，无工具栏）。 |
+| `js/views/Login.js` | 🔑 登录页 | ~6KB | 6 角色卡片登录。 |
+| `js/views/Dashboard.js` | 📊 数据看板 | ~12KB | KPI + 图表 + WIP 预警。 |
+| `js/views/ProjectEditor.js` | 📝 填报表格 | ~22KB | Luckysheet 默认；保存/导入/历史版本；变更批注；新增项目高亮。 |
+| `js/views/Approval.js` | ✅ 审批流程 | ~15KB | 流程进度时间轴（三态）；总监/群主只读 Luckysheet；其他角色快照+Diff。 |
+| `js/views/AuditLog.js` | 📋 审计日志 | ~9KB | 多维筛选 + 导出。 |
+| `js/views/AdminSettings.js` | ⚙️ 管理设置 | ~18KB | 周期、锁定、导入、**生成上月对比快照**、用户列表。 |
 
 ---
 
@@ -57,6 +61,7 @@
 ### 后端与数据（运行时）
 - `package.json`、`server/` — Node + SQLite API（`PTRACK_PORT`、`PTRACK_INIT_XLSX` 可配置）
 - `data/ptrack.sqlite` — 本地数据库
+- **上月对比快照：** 版本键 `Month:2026-04`（报告月 `2026-05` 时）；管理页或 `npm run seed:prior-month` 生成
 
 ### 会议记录与要点（保留）
 - `产值报告线上化讨论_精修版.md` — 精修后的完整会议记录

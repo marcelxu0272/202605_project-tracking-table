@@ -29,6 +29,7 @@
         importLoading: false,
         importResult: null,
         importFile: null,
+        priorMonthSeedLoading: false,
         users: DEMO_USERS,
         activeSection: 'period',
         resetConfirmVisible: false
@@ -157,6 +158,29 @@
             })
             .catch(e => { this.$message.error('恢复失败：' + (e.message || e)); });
         }).catch(() => {});
+      },
+      handleSeedPriorMonthSnapshot() {
+        const self = this;
+        this.$confirm(
+          '将基于当前库项目生成「上一报告月」归档快照（默认剔除 5 条项目）。' +
+          '填报页将把不在该快照中的项目标为「本月新增」。确认？',
+          '生成上月对比快照',
+          { confirmButtonText: '确认生成', cancelButtonText: '取消', type: 'info' }
+        ).then(function () {
+          self.priorMonthSeedLoading = true;
+          Store.seedPriorMonthSnapshot(5)
+            .then(function (d) {
+              const msg = d
+                ? '已生成 ' + (d.version || '') + '：上月 ' + d.projectCount + ' 条，' +
+                  '本月新增标记约 ' + d.removedCount + ' 条'
+                : '已生成上月对比快照';
+              self.$message.success(msg);
+            })
+            .catch(function (e) {
+              self.$message.error('生成失败：' + (e.message || e));
+            })
+            .finally(function () { self.priorMonthSeedLoading = false; });
+        }).catch(function () {});
       },
       setFinanceOnlyPeriod() {
         Store.setLockStatus('finance_only')
@@ -298,6 +322,19 @@
                 <el-button size="mini" type="warning" plain icon="el-icon-refresh-left" @click="handleReseedFromXlsx">
                   从初始 Excel 恢复
                 </el-button>
+                <el-button
+                  size="mini"
+                  type="primary"
+                  plain
+                  icon="el-icon-document-copy"
+                  :loading="priorMonthSeedLoading"
+                  :disabled="!isAdmin || projectCount === 0"
+                  style="margin-left:8px;"
+                  @click="handleSeedPriorMonthSnapshot"
+                >生成上月对比快照</el-button>
+                <div style="font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.6;">
+                  报告月为 2026-05 时生成 <code>Month:2026-04</code>，用于填报页「新增项目」高亮演示。
+                </div>
               </div>
             </div>
 

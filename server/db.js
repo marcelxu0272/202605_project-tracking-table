@@ -125,6 +125,8 @@ function getBootstrapState(db) {
     snapshots[row.version] = JSON.parse(row.payload);
   }
 
+  const priorMonthSnapshotVersion = getMeta(db, 'priorMonthSnapshotVersion', null);
+
   return {
     projects,
     auditLog,
@@ -134,7 +136,8 @@ function getBootstrapState(db) {
     approvalStatus,
     lockStatus,
     reportingSubmitted,
-    pmSubmissions
+    pmSubmissions,
+    priorMonthSnapshotVersion
   };
 }
 
@@ -184,6 +187,7 @@ function resetDevMeta(db) {
   clearLockOverride(db);
   clearAudit(db);
   clearSnapshots(db);
+  db.prepare('DELETE FROM meta WHERE key = ?').run('priorMonthSnapshotVersion');
   setMeta(db, 'approvalStatus', 'draft');
   setMeta(db, 'reportingSubmitted', false);
   setMeta(db, 'pmSubmissions', {});

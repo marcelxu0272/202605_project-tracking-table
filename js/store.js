@@ -86,6 +86,8 @@
     /** PM 提交状态 { '2026-05': { '何孝刚': { status, submittedAt, snapshotVersion, projectNos } } } */
     pmSubmissions: {},
     snapshots: {},
+    /** 与本月对比的「上月归档」快照版本键，如 Month:2026-04 */
+    priorMonthSnapshotVersion: null,
     auditLog: [],
     sidebarCollapsed: !!lsGet(LS_KEY_SIDEBAR, false),
     editorViewMode: 'all',
@@ -106,6 +108,7 @@
     Store.reportingSubmitted = d.reportingSubmitted === true
       || !!(d.snapshots && d.snapshots.Draft);
     Store.pmSubmissions = d.pmSubmissions || {};
+    Store.priorMonthSnapshotVersion = d.priorMonthSnapshotVersion || null;
     Store._hydrated = true;
   }
 
@@ -117,6 +120,20 @@
   Store.reseedFromInit = async function () {
     await apiFetch('/admin/reseed', { method: 'POST' });
     await Store.init();
+  };
+
+  /** 生成上一报告月对比快照（演示新增项目高亮） */
+  Store.seedPriorMonthSnapshot = async function (removeCount) {
+    const user = Store.currentUser || { name: '系统', role: 'system_admin' };
+    const body = {
+      removeCount: removeCount != null ? removeCount : 5,
+      userName: user.name,
+      role: user.role
+    };
+    const d = await apiFetch('/admin/seed-prior-month-snapshot', { method: 'POST', body });
+    if (d && d.state) applyBootstrap(d.state);
+    else await Store.init();
+    return d;
   };
 
   /** 开发测试：流程、配置与项目数据恢复为初始默认 */
@@ -247,7 +264,7 @@
       fieldName: 'approvalStatus',
       fieldCN: '审批状态',
       oldVal: prev,
-      newVal: 'draft（已驳回）',
+      newVal: 'draft（已驳回至板块管理员）',
       userId: Store.currentUser && Store.currentUser.role,
       userName: Store.currentUser && Store.currentUser.name
     });

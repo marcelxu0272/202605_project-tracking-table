@@ -7,6 +7,7 @@
   --color-brand:        #007069;
   --color-brand-dark:   #005c56;
   --color-brand-light:  rgba(0, 112, 105, 0.1);
+  --color-new-project-bg: #d9e7d8;
   --color-brand-border: rgba(0, 112, 105, 0.3);
   --color-editable-header-bg:     #fef9c3;
   --color-editable-header-text:   #92400e;
@@ -281,7 +282,19 @@ body {
   padding: 20px;
   background: var(--color-bg);
 }
-.app-content.no-padding { padding: 0; overflow: hidden; }
+.app-content.no-padding {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.app-content.no-padding > * {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 
 /* ── 卡片 ──────────────────────────────────────────────── */
 .card {
@@ -424,8 +437,10 @@ body {
 }
 
 /* ── Diff 高亮 ─────────────────────────────────────────── */
-.diff-new-row {
-  background: var(--color-brand-light) !important;
+.diff-new-row,
+.editor-table tr.row-new-project td,
+.editor-table td.new-project-cell {
+  background: var(--color-new-project-bg) !important;
 }
 .diff-changed-cell,
 .editor-table td.field-changed {
@@ -469,7 +484,7 @@ body {
 .editor-legend-swatch--new {
   width: 12px;
   height: 12px;
-  background: rgba(0, 112, 105, 0.15);
+  background: var(--color-new-project-bg);
 }
 .editor-legend-swatch--changed {
   width: 28px;
@@ -574,6 +589,7 @@ body {
   grid-template-columns: 300px 1fr;
   gap: 20px;
   height: 100%;
+  padding: 20px;
 }
 .approval-timeline-card {
   background: var(--color-card);
@@ -615,6 +631,98 @@ body {
 .timeline-content { flex: 1; }
 .timeline-title { font-size: 14px; font-weight: 600; color: var(--color-text); }
 .timeline-sub { font-size: 12px; color: var(--color-text-secondary); margin-top: 2px; }
+.timeline-status-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+.timeline-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.timeline-dot--legend {
+  width: 12px;
+  height: 12px;
+  font-size: 0;
+  box-shadow: none;
+}
+.timeline-dot--legend.current {
+  box-shadow: 0 0 0 2px var(--color-warning-bg);
+}
+.timeline-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.timeline-title.is-current {
+  color: #f59e0b;
+}
+
+/* 板块总监 / 项目群群主审批页 */
+.approval-reviewer-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+/* 与 .approval-layout 同列宽（300px + 1fr），右侧 Luckysheet 纵向占满 */
+.approval-reviewer-layout {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  align-items: stretch;
+}
+.approval-reviewer-layout > .approval-review-sheet {
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.approval-review-sheet {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.approval-review-sheet .editor-diff-hint {
+  flex-shrink: 0;
+}
+.approval-review-sheet-empty {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.approval-reviewer-layout .luckysheet-editor-wrap {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+#approval-luckysheet-mount {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  position: relative;
+}
+#approval-luckysheet-mount .luckysheet {
+  height: 100% !important;
+}
 
 /* ── 登录页 ────────────────────────────────────────────── */
 .login-page {

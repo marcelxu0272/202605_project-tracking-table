@@ -175,6 +175,19 @@
           const sp = Store.projects.find(function (x) { return x.project_no === p.project_no; });
           return ChangeMeta.attachChangeTracking(p, sp);
         });
+        if (!this.isViewingSnapshot && window.ProjectMonthDiff) {
+          const priorSnap = ProjectMonthDiff.resolvePriorSnapshot(
+            Store.snapshots,
+            Store.reportingMonth,
+            Store.priorMonthSnapshotVersion
+          );
+          if (priorSnap && priorSnap.projects) {
+            this.tableProjects = ProjectMonthDiff.applyAddedThisMonthFlags(
+              this.tableProjects,
+              priorSnap.projects
+            );
+          }
+        }
         if (!this.isViewingSnapshot) {
           this.capturePmBaselineFromTable();
         }
@@ -486,13 +499,20 @@
         if (ORDER_LABELS[versionKey]) {
           return ORDER_LABELS[versionKey] + ' · ' + timeStr;
         }
+        const monthM = /^Month:(\d{4})-(\d{2})$/.exec(versionKey);
+        if (monthM) {
+          return monthM[1] + '年' + parseInt(monthM[2], 10) + '月归档 · ' + timeStr;
+        }
+        if (snap && snap.label) {
+          return snap.label + ' · ' + timeStr;
+        }
         return timeStr;
       },
 
       setupLuckysheetResizeObserver() {
         var self = this;
         this.teardownLuckysheetResizeObserver();
-        var el = document.getElementById('luckysheet-mount');
+        var el = document.getElementById(this.lsMountId);
         if (!el || typeof ResizeObserver === 'undefined') return;
         this._lsResizeObserver = new ResizeObserver(function () {
           self.resizeLuckysheetLayout();
@@ -1105,7 +1125,7 @@
         }
         if (this.isFieldChanged(project, field)) return '#fff7ed';
         if (project._added_this_month) {
-          return readonly ? 'rgba(0,112,105,0.07)' : 'rgba(0,112,105,0.05)';
+          return (window.ProjectMonthDiff && ProjectMonthDiff.NEW_PROJECT_BG) || '#d9e7d8';
         }
         if (readonly || field.source_type !== 'manual_input') {
           return this.lsZebraBg(dataRowIndex);
@@ -1453,7 +1473,7 @@
         if (!$) return;
         const file = this.lsGetActiveLuckysheetFile();
         if (!file || !file.filter_select) return;
-        const cellMain = document.querySelector('#luckysheet-mount #luckysheet-cell-main');
+        const cellMain = document.querySelector('#' + this.lsMountId + ' #luckysheet-cell-main');
         if (!cellMain) return;
         const $opts = $('#luckysheet-filter-options-sheet' + file.index + ' .luckysheet-filter-options');
         if (!$opts.length) return;
@@ -1494,7 +1514,7 @@
         this.unbindLuckysheetFilterFreezeSync();
         const $ = window.jQuery;
         if (!$) return;
-        const cellMain = $('#luckysheet-mount').find('#luckysheet-cell-main');
+        const cellMain = $('#' + this.lsMountId).find('#luckysheet-cell-main');
         if (!cellMain.length) return;
         const self = this;
         const handler = function () { self.syncLuckysheetFilterWithFreeze(); };
@@ -1505,7 +1525,7 @@
       unbindLuckysheetFilterFreezeSync() {
         const $ = window.jQuery;
         if ($) {
-          $('#luckysheet-mount').find('#luckysheet-cell-main').off('scroll.lsFilterFreeze');
+          $('#' + this.lsMountId).find('#luckysheet-cell-main').off('scroll.lsFilterFreeze');
         }
         this._lsFilterScrollHandler = null;
       },
@@ -1596,7 +1616,7 @@
           this.$message.warning('Luckysheet 未正确加载，请检查网络或 CDN');
           return;
         }
-        if (document.getElementById('luckysheet-mount') == null) return;
+        if (document.getElementById(this.lsMountId) == null) return;
 
         this.destroyLuckysheet();
         this._lsLoading = true;
@@ -1610,16 +1630,16 @@
         var calcChain = this.buildLuckysheetCalcChain(celldata, sheetIndex, lay);
 
         luckysheet.create({
-          container: 'luckysheet-mount',
+          container: this.lsMountId,
           showinfobar: false,
           showsheetbar: false,
           showstatisticBar: false,
-          showtoolbar: true,
+          showtoolbar: this.lsShowToolbar,
           enableAddRow: false,
           enableAddBackTop: false,
           row: rows,
           column: cols,
-          gridKey: 'ptrack_editor',
+          gridKey: this.lsGridKey,
           data: [{
             name: '项目执行跟踪',
             index: sheetIndex,
@@ -1871,7 +1891,6 @@
                 v-for="(project, ri) in filteredProjects"
                 :key="project.project_no"
                 :class="getRowClass(project)"
-                :style="project._added_this_month ? {background:'rgba(0,112,105,0.07)'} : {}"
               >
                 <td
                   v-for="field in tableFields"
@@ -1881,7 +1900,7 @@
                   :style="{
                     padding: '4px 8px',
                     border: '1px solid #e2e8f0',
-                    background: field.source_type !== 'manual_input' ? '#f8fafc' : (project._added_this_month ? 'rgba(0,112,105,0.05)' : '#fff'),
+                    background: field.source_type !== 'manual_input' ? '#f8fafc' : '#fff',
                     textAlign: field.data_type === '金额' || field.data_type === '比率' ? 'right' : 'left',
                     minWidth: field.colWidth + 'px',
                     position: 'relative',
@@ -2022,6 +2041,9 @@
       monthIdx()   { return Store.getMonthIdx(); },
       isPm()    { return this.user.role === 'pm'; },
       isSectorAdmin() { return this.user.role === 'sector_admin'; },
+      lsMountId() { return 'luckysheet-mount'; },
+      lsShowToolbar() { return true; },
+      lsGridKey() { return 'ptrack_editor'; },
 
       // PM 专属：当前 PM 是否处于「已提交待接收」锁定
       pmName()  { return this.user.pmName || this.user.name || ''; },
