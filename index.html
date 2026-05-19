@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>项目执行跟踪平台</title>
+
+  <!-- Tailwind CSS (Play CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      corePlugins: { preflight: false },
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              DEFAULT: '#007069',
+              light: 'rgba(0,112,105,0.1)',
+              50: '#e6f2f1',
+              100: '#b3d9d6',
+              200: '#80c0bb',
+              500: '#007069',
+              600: '#005c56',
+              700: '#004840'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Element UI CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/element-ui@2.15.14/lib/theme-chalk/index.css">
+
+  <!-- Luckysheet CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@3.3.7/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/luckysheet@2.1.13/dist/plugins/css/pluginsCss.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/luckysheet@2.1.13/dist/plugins/plugins.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/luckysheet@2.1.13/dist/css/luckysheet.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/luckysheet@2.1.13/dist/assets/iconfont/iconfont.css">
+
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+  <div id="app"></div>
+
+  <!-- jQuery (Luckysheet 依赖) -->
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
+
+  <!-- Vue 2 -->
+  <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+
+  <!-- Vue Router 3 -->
+  <script src="https://cdn.jsdelivr.net/npm/vue-router@3.6.5/dist/vue-router.js"></script>
+
+  <!-- Element UI JS -->
+  <script src="https://unpkg.com/element-ui@2.15.14/lib/index.js"></script>
+
+  <!-- Luckysheet JS -->
+  <script src="https://cdn.jsdelivr.net/npm/luckysheet@2.1.13/dist/plugins/js/plugin.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/luckysheet@2.1.13/dist/luckysheet.umd.js"></script>
+
+  <!-- ECharts 5 -->
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+
+  <!-- SheetJS (xlsx 导入/导出) -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+
+  <!-- 数据层 (按加载顺序) -->
+  <script src="./fields-data.js"></script>
+  <script src="./js/formatters.js"></script>
+  <script src="./js/formula-engine.js"></script>
+  <script src="./js/field-config.js"></script>
+  <script src="./js/store.js"></script>
+  <script src="./js/xlsx-importer.js"></script>
+
+  <!-- 组件层 -->
+  <script src="./js/components/AppLayout.js"></script>
+
+  <!-- 视图层 -->
+  <script src="./js/views/Login.js"></script>
+  <script src="./js/views/Dashboard.js"></script>
+  <script src="./js/views/ProjectEditor.js"></script>
+  <script src="./js/views/Approval.js"></script>
+  <script src="./js/views/AuditLog.js"></script>
+  <script src="./js/views/AdminSettings.js"></script>
+
+  <!-- 路由 + 应用初始化 -->
+  <script src="./js/router.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>

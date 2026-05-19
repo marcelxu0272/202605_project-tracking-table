@@ -1,0 +1,14 @@
+{
+  "name": "project-track-platform",
+  "private": true,
+  "version": "1.0.0",
+  "description": "项目执行跟踪平台 — Express + SQLite API",
+  "scripts": {
+    "start": "node server/index.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "express": "^4.21.2",
+    "xlsx": "^0.18.5"
+  }
+}
