@@ -67,8 +67,15 @@
         luckysheetReady: false,
         viewMode: 'all',       // 'all' | 'new_only' | 'changed_only'
         submitLoading: false,
+        saveLoading: false,
+        importLoading: false,
         exportLoading: false,
         showDiffHint: true,
+        viewingVersion: '__current__',
+        snapshotLoading: false,
+        snapshotProjects: null,
+        _lsResizeObserver: null,
+        _lsResizeTimer: null,
         tableFields: [],
         tableProjects: [],
         activeTab: 'luckysheet', // 'luckysheet' | 'table'（仅 showLegacyHtmlTable 为 true 时可切 table）
@@ -97,11 +104,20 @@
           self.$nextTick(function () { self.initLuckysheet(); }.bind(self));
         }
       });
+      this.$nextTick(function () { this.setupLuckysheetResizeObserver(); }.bind(this));
+      this._unwatchSidebar = this.$watch(
+        function () { return Store.sidebarCollapsed; },
+        function () { this.resizeLuckysheetLayout(); }.bind(this)
+      );
     },
     activated() {
       const self = this;
       const afterData = function () {
-        self.buildTableData();
+        if (self.viewingVersion !== '__current__') {
+          self.handleViewingVersionChange(self.viewingVersion);
+        } else {
+          self.buildTableData();
+        }
         self.whenPmBaselineReady(function () {
           if (self.activeTab === 'luckysheet') {
             self.$nextTick(function () { self.refreshLuckysheet(); }.bind(self));
@@ -119,6 +135,15 @@
         clearTimeout(this._lsRefreshTimer);
         this._lsRefreshTimer = null;
       }
+      if (this._lsResizeTimer) {
+        clearTimeout(this._lsResizeTimer);
+        this._lsResizeTimer = null;
+      }
+      this.teardownLuckysheetResizeObserver();
+      if (this._unwatchSidebar) {
+        this._unwatchSidebar();
+        this._unwatchSidebar = null;
+      }
       this.destroyLuckysheet();
     },
     watch: {
@@ -134,14 +159,20 @@
         } else {
           this.destroyLuckysheet();
         }
-      }
+      },
+      viewingVersion: function (val) {
+        this.handleViewingVersionChange(val);
+      },
     },
     methods: {
       buildTableData() {
-        this.tableProjects = FormulaEngine.computeAll(
-          Store.projects, this.monthIdx
-        );
-        this.capturePmBaselineFromTable();
+        const source = (this.isViewingSnapshot && this.snapshotProjects)
+          ? this.snapshotProjects
+          : Store.projects;
+        this.tableProjects = FormulaEngine.computeAll(source, this.monthIdx);
+        if (!this.isViewingSnapshot) {
+          this.capturePmBaselineFromTable();
+        }
       },
 
       capturePmBaselineFromTable() {
@@ -249,8 +280,9 @@
         return Promise.resolve(this._cellSaveChain).catch(function () {});
       },
 
-      /** 提交前：结束编辑态，把 Luckysheet 里未触发 cellUpdated 的格子写入库 */
-      async persistLuckysheetBeforeSubmit() {
+      /** 结束编辑态，把 Luckysheet 里未触发 cellUpdated 的格子写入库 */
+      async flushLuckysheetToStore() {
+        if (this.isViewingSnapshot) return;
         if (this.activeTab !== 'luckysheet' || typeof luckysheet === 'undefined') return;
         try {
           if (luckysheet.exitEditMode) luckysheet.exitEditMode();
@@ -285,8 +317,190 @@
         await this._waitCellSaves();
       },
 
+      async persistLuckysheetBeforeSubmit() {
+        return this.flushLuckysheetToStore();
+      },
+
+      async handleSave() {
+        if (!this.canEdit) return;
+        this.saveLoading = true;
+        try {
+          await this.flushLuckysheetToStore();
+          this.$message.success('已保存（未提交的编辑已写入数据库）');
+        } catch (e) {
+          this.$message.error('保存失败：' + (e.message || e));
+        } finally {
+          this.saveLoading = false;
+        }
+      },
+
+      onImportFileChange(e) {
+        const file = e.target && e.target.files && e.target.files[0];
+        if (!file) return;
+        const self = this;
+        this.importLoading = true;
+        XlsxImporter.importFromFile(file)
+          .then(function (result) {
+            const imported = result.projects || [];
+            if (imported.length === 0) {
+              self.$message.error('未识别到有效数据，请检查文件格式');
+              return;
+            }
+            const scopeFilter = self.isPm
+              ? function (p) { return p.pm_name === self.pmName; }
+              : function () { return true; };
+            const merged = ImportMerge.mergeImportedProjects(
+              imported,
+              Store.projects,
+              {
+                role: self.user.role,
+                lockStatus: self.lockStatus,
+                monthIdx: self.monthIdx,
+                scopeFilter: scopeFilter
+              }
+            );
+            if (merged.updates.length === 0) {
+              self.$message.warning(
+                '没有可合并的更新（跳过 ' + merged.skipped.length + ' 条）'
+              );
+              return;
+            }
+            return self.$confirm(
+              '将按项目号更新 ' + merged.updates.length + ' 条项目的可编辑字段' +
+              (merged.skipped.length ? '，跳过 ' + merged.skipped.length + ' 条' : '') +
+              '。确认导入？',
+              '上传导入确认',
+              { confirmButtonText: '确认导入', cancelButtonText: '取消', type: 'warning' }
+            ).then(function () {
+              var chain = Promise.resolve();
+              merged.updates.forEach(function (p) {
+                chain = chain.then(function () { return Store.updateProject(p); });
+              });
+              return chain.then(function () {
+                return Store.addAuditLog({
+                  projectNo: '—',
+                  projectName: 'Excel导入',
+                  fieldName: 'import',
+                  fieldCN: '填报页导入',
+                  oldVal: '—',
+                  newVal: merged.updates.length + ' 条',
+                  userId: self.user.role,
+                  userName: self.user.name
+                });
+              }).then(function () {
+                self.buildTableData();
+                self.$nextTick(function () { self.refreshLuckysheet(); });
+                self.$message.success('成功导入并更新 ' + merged.updates.length + ' 条项目');
+              });
+            });
+          })
+          .catch(function (err) {
+            if (err === 'cancel' || err === 'close') return;
+            self.$message.error('导入失败：' + (err && err.message ? err.message : err));
+          })
+          .finally(function () {
+            self.importLoading = false;
+            if (e.target) e.target.value = '';
+          });
+      },
+
+      async handleViewingVersionChange(val) {
+        if (val === '__current__') {
+          this.snapshotProjects = null;
+          this.buildTableData();
+          this.$nextTick(function () { this.refreshLuckysheet(); }.bind(this));
+          return;
+        }
+        this.snapshotLoading = true;
+        try {
+          const snap = await Store.fetchSnapshot(val);
+          if (!snap || !snap.projects) {
+            this.$message.warning('快照不存在或已过期');
+            this.viewingVersion = '__current__';
+            return;
+          }
+          this.snapshotProjects = snap.projects;
+          this.buildTableData();
+          this.$nextTick(function () { this.refreshLuckysheet(); }.bind(this));
+        } catch (e) {
+          this.$message.error('加载版本失败：' + (e.message || e));
+          this.viewingVersion = '__current__';
+        } finally {
+          this.snapshotLoading = false;
+        }
+      },
+
+      formatSnapshotTime(iso, withSeconds) {
+        if (!iso) return '';
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return '';
+        const opts = { hour: '2-digit', minute: '2-digit' };
+        if (withSeconds) opts.second = '2-digit';
+        return d.toLocaleDateString('zh-CN') + ' ' + d.toLocaleTimeString('zh-CN', opts);
+      },
+
+      resolveSnapshotTime(versionKey, snap) {
+        if (snap && snap.time) return snap.time;
+        const parts = String(versionKey || '').split(':');
+        const last = parts[parts.length - 1];
+        if (/^\d{10,}$/.test(last)) return new Date(Number(last)).toISOString();
+        return null;
+      },
+
+      formatSnapshotOptionLabel(versionKey, snap) {
+        const ORDER_LABELS = {
+          Draft: '草稿',
+          Approve1: '初审',
+          Approve2: '复审',
+          'J版': 'J版'
+        };
+        const iso = this.resolveSnapshotTime(versionKey, snap);
+        const timeStr = iso ? this.formatSnapshotTime(iso, true) : '时间未知';
+        if (ORDER_LABELS[versionKey]) {
+          return ORDER_LABELS[versionKey] + ' · ' + timeStr;
+        }
+        return timeStr;
+      },
+
+      setupLuckysheetResizeObserver() {
+        var self = this;
+        this.teardownLuckysheetResizeObserver();
+        var el = document.getElementById('luckysheet-mount');
+        if (!el || typeof ResizeObserver === 'undefined') return;
+        this._lsResizeObserver = new ResizeObserver(function () {
+          self.resizeLuckysheetLayout();
+        });
+        this._lsResizeObserver.observe(el);
+      },
+
+      teardownLuckysheetResizeObserver() {
+        if (this._lsResizeObserver) {
+          this._lsResizeObserver.disconnect();
+          this._lsResizeObserver = null;
+        }
+      },
+
+      resizeLuckysheetLayout() {
+        if (this._lsLoading) return;
+        var self = this;
+        if (this._lsResizeTimer) clearTimeout(this._lsResizeTimer);
+        this._lsResizeTimer = setTimeout(function () {
+          self._lsResizeTimer = null;
+          try {
+            window.dispatchEvent(new Event('resize'));
+            if (typeof luckysheet !== 'undefined' && luckysheet) {
+              if (typeof luckysheet.refresh === 'function') {
+                luckysheet.refresh();
+              } else if (typeof luckysheet.jfrefreshgrid === 'function') {
+                luckysheet.jfrefreshgrid();
+              }
+            }
+          } catch (err) { /* ignore */ }
+        }, 260);
+      },
+
       async preparePmSubmit() {
-        await this.persistLuckysheetBeforeSubmit();
+        await this.flushLuckysheetToStore();
         await Store.syncPmProjectsToServer(this.pmName, this.monthIdx);
       },
 
@@ -689,10 +903,29 @@
        * Luckysheet 公式链：先数据行公式，再小计 SUBTOTAL / 合计 SUM（官方要求否则公式不生效）
        * https://dream-num.github.io/LuckysheetDocs/zh/guide/sheet.html#calcchain
        */
+      /** celldata → 二维 data，避免 Luckysheet mergeCalculation 访问 data[r] 为 undefined */
+      buildLuckysheetDataMatrix(celldata, rowCount, colCount) {
+        const data = [];
+        for (let r = 0; r < rowCount; r++) {
+          const row = [];
+          for (let c = 0; c < colCount; c++) {
+            row.push(null);
+          }
+          data.push(row);
+        }
+        (celldata || []).forEach(function (item) {
+          if (item.r >= 0 && item.r < rowCount && item.c >= 0 && item.c < colCount) {
+            data[item.r][item.c] = item.v;
+          }
+        });
+        return data;
+      },
+
       buildLuckysheetCalcChain(celldata, sheetIndex, lay) {
+        if (!celldata || !celldata.length) return [];
         const dataEntries = [];
         const totalEntries = [];
-        const sheetIdx = sheetIndex != null ? sheetIndex : 'ptrack_sheet';
+        const sheetIdx = sheetIndex != null ? sheetIndex : 0;
 
         celldata.forEach(function (item) {
           const v = item.v;
@@ -700,7 +933,7 @@
           const entry = {
             r: item.r,
             c: item.c,
-            index: sheetIdx,
+            index: String(sheetIdx),
             func: [true, v.v != null && v.v !== '' ? v.v : 0, v.f],
             color: 'w',
             parent: null,
@@ -1257,7 +1490,8 @@
         var rows = Math.max(48, lay.dataEnd + 12);
         var cols = Math.max(64, this.tableFields.length + 4);
         var celldata = this.buildLuckysheetCelldata();
-        var sheetIndex = 'ptrack_sheet';
+        var sheetIndex = 0;
+        var dataMatrix = this.buildLuckysheetDataMatrix(celldata, rows, cols);
         var calcChain = this.buildLuckysheetCalcChain(celldata, sheetIndex, lay);
 
         luckysheet.create({
@@ -1270,13 +1504,19 @@
           enableAddBackTop: false,
           row: rows,
           column: cols,
+          gridKey: 'ptrack_editor',
           data: [{
             name: '项目执行跟踪',
             index: sheetIndex,
             status: 1,
             order: 0,
             celldata: celldata,
+            data: dataMatrix,
             calcChain: calcChain,
+            luckysheet_select_save: [{
+              row: [LS_FROZEN_ROW, LS_FROZEN_ROW],
+              column: [LS_FROZEN_COL, LS_FROZEN_COL]
+            }],
             dataVerification: this.buildLuckysheetDataVerification(),
             filter_select: this.buildLuckysheetFilterSelect(),
             filter: null,
@@ -1354,13 +1594,34 @@
       <div style="display:flex;flex-direction:column;height:100%;">
         <!-- 工具栏 -->
         <div class="editor-toolbar">
-          <!-- 填报期状态 -->
-          <span class="period-banner" :class="lockBannerClass" style="flex-shrink:0;">
+          <el-select
+            v-model="viewingVersion"
+            size="small"
+            class="editor-version-select"
+            placeholder="版本"
+            :loading="snapshotLoading"
+            :disabled="snapshotLoading"
+          >
+            <el-option label="当前填报" value="__current__"></el-option>
+            <el-option
+              v-for="opt in editorSnapshotOptions"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+            ></el-option>
+          </el-select>
+          <span
+            v-if="isViewingSnapshot && snapshotViewMeta"
+            class="editor-snapshot-badge"
+          >
+            当前正在查看快照 · {{ snapshotViewMeta.label }}
+          </span>
+          <span v-else class="period-banner" :class="lockBannerClass">
             <span class="period-dot"></span>
             {{ lockBannerText }}
           </span>
 
-          <div style="flex:1;"></div>
+          <div class="editor-toolbar-spacer"></div>
 
           <!-- 视图切换 -->
           <el-radio-group v-model="viewMode" size="small" class="view-toggle">
@@ -1375,24 +1636,52 @@
 
           <el-divider direction="vertical"></el-divider>
 
-          <!-- 操作按钮 -->
-          <el-button
-            size="small"
-            icon="el-icon-download"
-            :loading="exportLoading"
-            @click="handleExport"
-          >导出 Excel</el-button>
+          <div class="editor-toolbar-group">
+            <el-button
+              size="small"
+              icon="el-icon-download"
+              :loading="exportLoading"
+              @click="handleExport"
+            >导出 Excel</el-button>
+            <template v-if="canImport">
+              <input
+                ref="importFileInput"
+                type="file"
+                accept=".xlsx,.xls"
+                style="display:none;"
+                @change="onImportFileChange"
+              >
+              <el-button
+                size="small"
+                icon="el-icon-upload2"
+                :loading="importLoading"
+                @click="$refs.importFileInput.click()"
+              >上传导入</el-button>
+            </template>
+          </div>
 
-          <el-button
-            v-if="canShowSubmitButton"
-            size="small"
-            type="primary"
-            icon="el-icon-s-promotion"
-            style="background:#007069;border-color:#007069;"
-            :loading="submitLoading"
-            :disabled="!canSubmit"
-            @click="handleSubmit"
-          >{{ submitButtonLabel }}</el-button>
+          <template v-if="canEdit || canShowSubmitButton">
+            <el-divider direction="vertical"></el-divider>
+            <div class="editor-toolbar-group">
+              <el-button
+                v-if="canEdit"
+                size="small"
+                icon="el-icon-folder-checked"
+                :loading="saveLoading"
+                @click="handleSave"
+              >保存</el-button>
+              <el-button
+                v-if="canShowSubmitButton"
+                size="small"
+                type="primary"
+                icon="el-icon-s-promotion"
+                class="editor-submit-btn"
+                :loading="submitLoading"
+                :disabled="!canSubmit"
+                @click="handleSubmit"
+              >{{ submitButtonLabel }}</el-button>
+            </div>
+          </template>
         </div>
 
         <!-- 图例说明 -->
@@ -1638,12 +1927,14 @@
           .map(([pmName, v]) => ({ pmName, ...v }));
       },
 
-      // 通用：提交按钮是否显示（PM 和板块管理员）
+      // 通用：提交按钮是否显示（PM 和板块管理员；查看快照时隐藏）
       canShowSubmitButton() {
+        if (this.isViewingSnapshot) return false;
         return this.isPm || this.isSectorAdmin;
       },
       // 板块管理员提交审批是否可用
       canSubmit() {
+        if (this.isViewingSnapshot) return false;
         if (this.isPm) return this.canPmSubmitNow;
         return this.isSectorAdmin
           && this.lockStatus === 'open'
@@ -1657,7 +1948,60 @@
         }
         return this.reportingSubmitted ? '已提交审批' : '提交审批';
       },
+      isViewingSnapshot() {
+        return this.viewingVersion !== '__current__';
+      },
+      canImport() {
+        const role = this.user.role;
+        if (role === 'sector_director' || role === 'group_leader') return false;
+        if (!this.canEdit) return false;
+        return ['system_admin', 'sector_admin', 'pm', 'finance'].indexOf(role) >= 0;
+      },
+      editorSnapshotOptions() {
+        const self = this;
+        const ORDER = ['Draft', 'Approve1', 'Approve2', 'J版'];
+        const snaps = Store.snapshots || {};
+        const keys = Object.keys(snaps);
+        const pm = this.pmName;
+        let filtered = keys;
+        if (this.isPm) {
+          filtered = keys.filter(function (k) {
+            if (ORDER.indexOf(k) >= 0) return true;
+            return k.indexOf('PM:' + pm + ':') === 0;
+          });
+        }
+        const ordered = [];
+        ORDER.forEach(function (v) {
+          if (filtered.indexOf(v) >= 0) {
+            ordered.push({
+              value: v,
+              label: self.formatSnapshotOptionLabel(v, snaps[v])
+            });
+          }
+        });
+        filtered
+          .filter(function (k) { return ORDER.indexOf(k) < 0; })
+          .sort(function (a, b) {
+            return new Date(self.resolveSnapshotTime(b, snaps[b]) || 0) -
+              new Date(self.resolveSnapshotTime(a, snaps[a]) || 0);
+          })
+          .forEach(function (k) {
+            ordered.push({
+              value: k,
+              label: self.formatSnapshotOptionLabel(k, snaps[k])
+            });
+          });
+        return ordered;
+      },
+      snapshotViewMeta() {
+        if (!this.isViewingSnapshot) return null;
+        const snap = Store.snapshots[this.viewingVersion];
+        return {
+          label: this.formatSnapshotOptionLabel(this.viewingVersion, snap)
+        };
+      },
       canEdit() {
+        if (this.isViewingSnapshot) return false;
         const role = this.user.role;
         if (role === 'system_admin') return true;
         // PM：个人锁定或板块正式提交后均不可编辑

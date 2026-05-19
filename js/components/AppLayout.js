@@ -168,14 +168,7 @@
 
         <div class="app-main">
           <div class="app-header">
-            <button
-              type="button"
-              class="header-sidebar-toggle"
-              :title="sidebarCollapsed ? '展开菜单' : '收起菜单'"
-              @click="toggleSidebar"
-            >
-              <i :class="sidebarCollapsed ? 'el-icon-s-unfold' : 'el-icon-s-fold'"></i>
-            </button>
+
             <div class="app-header-title">{{ pageTitle }}</div>
 
             <el-tag
