@@ -19,6 +19,7 @@
     const lockStatus = opts.lockStatus || 'open';
     const monthIdx = opts.monthIdx != null ? opts.monthIdx : 0;
     const scopeFilter = opts.scopeFilter || function () { return true; };
+    const user = opts.user || { name: '—', role: opts.role || '' };
     const fields = FieldConfig.buildFieldConfig();
     const storeByNo = {};
     storeProjects.forEach(function (p) {
@@ -47,6 +48,10 @@
       try {
         const flat = FieldConfig.arraysToFlat(existing);
         const impFlat = FieldConfig.arraysToFlat(imp);
+        const tracking = window.ChangeMeta
+          ? ChangeMeta.mergeChangeTracking(existing)
+          : { _field_change_log: Object.assign({}, existing._field_change_log || {}), _changed_fields: (existing._changed_fields || []).slice() };
+        const changeLog = tracking._field_change_log;
         let changed = false;
 
         fields.forEach(function (field) {
@@ -59,6 +64,11 @@
           if (newVal === oldVal || String(newVal) === String(oldVal)) return;
           flat[key] = newVal;
           changed = true;
+          if (window.ChangeMeta) {
+            ChangeMeta.recordFieldChangeLog(
+              { _field_change_log: changeLog }, field, oldVal, newVal, user
+            );
+          }
         });
 
         if (!changed) {
@@ -66,12 +76,19 @@
           return;
         }
 
+        Object.keys(changeLog).forEach(function (col) {
+          if (tracking._changed_fields.indexOf(col) < 0) tracking._changed_fields.push(col);
+        });
+
         const merged = FieldConfig.flatToArrays(flat);
         merged.project_no = existing.project_no;
         merged.id = existing.id || existing.project_no;
         merged._added_this_month = existing._added_this_month;
-        merged._changed_fields = (existing._changed_fields || []).slice();
+        merged._changed_fields = tracking._changed_fields;
+        merged._field_change_log = changeLog;
         const recomputed = FormulaEngine.compute(merged, monthIdx);
+        recomputed._changed_fields = tracking._changed_fields;
+        recomputed._field_change_log = changeLog;
         updates.push(recomputed);
       } catch (e) {
         errors.push({ projectNo: projectNo, msg: e.message || String(e) });

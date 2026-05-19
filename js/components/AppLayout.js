@@ -113,14 +113,6 @@
               金山中心<br><span>项目执行跟踪</span>
             </div>
             <div v-else class="sidebar-logo-mark" title="金山中心 · 项目执行跟踪">金</div>
-            <button
-              type="button"
-              class="sidebar-collapse-btn"
-              :title="sidebarCollapsed ? '展开菜单' : '收起菜单'"
-              @click="toggleSidebar"
-            >
-              <i :class="sidebarCollapsed ? 'el-icon-s-unfold' : 'el-icon-s-fold'"></i>
-            </button>
           </div>
           <div class="sidebar-nav">
             <el-menu
@@ -143,26 +135,36 @@
           </div>
           <div class="sidebar-footer">
             <template v-if="!sidebarCollapsed">
-              <div style="color:rgba(255,255,255,0.35);font-size:11px;margin-bottom:6px;">
-                填报月份：{{ reportingMonth }}
-              </div>
-              <div style="display:flex;align-items:center;gap:6px;">
+              <div class="sidebar-footer-status">
+                <div class="sidebar-footer-month">填报月份：{{ reportingMonth }}</div>
                 <span
-                  class="period-banner"
+                  class="period-banner sidebar-footer-period"
                   :class="lockInfo.type"
-                  style="font-size:11px;padding:3px 8px;"
                   :title="lockInfo.tip"
                 >
                   <span class="period-dot"></span>
                   {{ lockInfo.text }}
                 </span>
               </div>
+              <button
+                type="button"
+                class="sidebar-collapse-btn sidebar-footer-toggle"
+                title="收起菜单"
+                @click="toggleSidebar"
+              >
+                <i class="el-icon-s-fold"></i>
+                <span>收起菜单</span>
+              </button>
             </template>
-            <el-tooltip v-else :content="lockInfo.tip + ' · ' + reportingMonth" placement="right">
-              <span class="period-banner sidebar-footer-compact" :class="lockInfo.type">
-                <span class="period-dot"></span>
-              </span>
-            </el-tooltip>
+            <button
+              v-else
+              type="button"
+              class="sidebar-collapse-btn sidebar-footer-toggle is-expand-only"
+              title="展开菜单"
+              @click="toggleSidebar"
+            >
+              <i class="el-icon-s-unfold"></i>
+            </button>
           </div>
         </aside>
 

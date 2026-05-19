@@ -169,10 +169,19 @@
         const source = (this.isViewingSnapshot && this.snapshotProjects)
           ? this.snapshotProjects
           : Store.projects;
-        this.tableProjects = FormulaEngine.computeAll(source, this.monthIdx);
+        const self = this;
+        this.tableProjects = FormulaEngine.computeAll(source, this.monthIdx).map(function (p) {
+          if (self.isViewingSnapshot || !window.ChangeMeta) return p;
+          const sp = Store.projects.find(function (x) { return x.project_no === p.project_no; });
+          return ChangeMeta.attachChangeTracking(p, sp);
+        });
         if (!this.isViewingSnapshot) {
           this.capturePmBaselineFromTable();
         }
+      },
+
+      getStoreProject(projectNo) {
+        return Store.projects.find(function (p) { return p.project_no === projectNo; });
       },
 
       capturePmBaselineFromTable() {
@@ -255,8 +264,18 @@
           cls.push('month-locked-cell');
         }
         if (project._added_this_month) cls.push('new-project-cell');
-        if (this.isFieldChanged(project, field)) cls.push('changed-cell');
+        if (window.ChangeMeta
+          ? ChangeMeta.hasFieldChangeMarkup(project, field)
+          : this.isFieldChanged(project, field)) {
+          cls.push('field-changed');
+        }
         return cls.join(' ');
+      },
+
+      cellChangeTitle(project, field) {
+        if (!window.ChangeMeta || !ChangeMeta.hasFieldChangeMarkup(project, field)) return '';
+        const meta = ChangeMeta.resolveFieldChangeMeta(project, field, Store.auditLog);
+        return ChangeMeta.formatChangeComment(meta, field);
       },
       getCellValue(project, field) {
         const flat = FieldConfig.arraysToFlat(project);
@@ -311,10 +330,15 @@
             const oldFlat = FieldConfig.arraysToFlat(project);
             const oldVal = oldFlat[key];
             if (newVal === oldVal || String(newVal) === String(oldVal)) continue;
-            await this.handleCellEdit(project, field, newVal, { fromLuckysheet: true });
+            await this.handleCellEdit(project, field, newVal, {
+              fromLuckysheet: true,
+              lsRow: r,
+              lsCol: c
+            });
           }
         }
         await this._waitCellSaves();
+        this.syncAllLuckysheetChangeDecor();
       },
 
       async persistLuckysheetBeforeSubmit() {
@@ -326,6 +350,8 @@
         this.saveLoading = true;
         try {
           await this.flushLuckysheetToStore();
+          this.buildTableData();
+          this.syncAllLuckysheetChangeDecor();
           this.$message.success('已保存（未提交的编辑已写入数据库）');
         } catch (e) {
           this.$message.error('保存失败：' + (e.message || e));
@@ -354,6 +380,7 @@
               Store.projects,
               {
                 role: self.user.role,
+                user: self.user,
                 lockStatus: self.lockStatus,
                 monthIdx: self.monthIdx,
                 scopeFilter: scopeFilter
@@ -523,14 +550,29 @@
 
         const self = this;
         return this._trackCellSave((async function () {
+          const storeProj = self.getStoreProject(project.project_no) || project;
           flat[key] = newVal;
           const updated = FieldConfig.flatToArrays(flat);
+          const tracking = window.ChangeMeta
+            ? ChangeMeta.mergeChangeTracking(storeProj, project, updated)
+            : { _field_change_log: {}, _changed_fields: [] };
+          const changeLog = tracking._field_change_log;
+          if (window.ChangeMeta) {
+            ChangeMeta.recordFieldChangeLog(
+              { _field_change_log: changeLog }, field, oldVal, newVal, self.user
+            );
+          }
           const recomputed = FormulaEngine.compute(updated, self.monthIdx);
-
-          if (!recomputed._changed_fields) recomputed._changed_fields = [];
-          if (!recomputed._changed_fields.includes(field.col)) {
+          recomputed._field_change_log = changeLog;
+          recomputed._changed_fields = tracking._changed_fields.slice();
+          if (recomputed._changed_fields.indexOf(field.col) < 0) {
             recomputed._changed_fields.push(field.col);
           }
+          Object.keys(changeLog).forEach(function (col) {
+            if (recomputed._changed_fields.indexOf(col) < 0) {
+              recomputed._changed_fields.push(col);
+            }
+          });
 
           await Store.updateProject(recomputed);
           await Store.addAuditLog({
@@ -544,7 +586,17 @@
             userName:    self.user.name
           });
           self.buildTableData();
-          if ((!opts || !opts.fromLuckysheet) && self.activeTab === 'luckysheet') {
+          if (opts && opts.fromLuckysheet && self.activeTab === 'luckysheet') {
+            const fresh = self.getStoreProject(project.project_no) || recomputed;
+            if (opts.lsRow != null) {
+              const rowIdx = opts.lsRow - self.lsLayout().dataStart;
+              self.syncLuckysheetProjectRowDecor(rowIdx, fresh);
+              self.recalcLuckysheetFormulas();
+              setTimeout(function () {
+                self.syncLuckysheetProjectRowDecor(rowIdx, fresh);
+              }, 320);
+            }
+          } else if ((!opts || !opts.fromLuckysheet) && self.activeTab === 'luckysheet') {
             self.scheduleRefreshLuckysheet();
           }
         })().catch(function (e) {
@@ -1045,6 +1097,12 @@
       },
 
       luckysheetCellBg(project, field, readonly, dataRowIndex) {
+        if (window.ChangeMeta && ChangeMeta.hasFieldChangeMarkup(project, field)) {
+          return ChangeMeta.CHANGED_FIELD_STYLE.bg;
+        }
+        if (this.isFieldChanged(project, field) && window.ChangeMeta) {
+          return ChangeMeta.CHANGED_FIELD_STYLE.bg;
+        }
         if (this.isFieldChanged(project, field)) return '#fff7ed';
         if (project._added_this_month) {
           return readonly ? 'rgba(0,112,105,0.07)' : 'rgba(0,112,105,0.05)';
@@ -1078,16 +1136,65 @@
         return this.lsApplyCellLock(cell, true);
       },
 
-      /** 与 HTML 表一致：变更列橙字 + 左边框色条（Luckysheet 用 bd） */
+      /** 本月有变更：浅橙底 + 橙字 + 左边框（与图例 / HTML .field-changed 一致） */
       applyLuckysheetHighlight(cell, project, field) {
+        if (window.ChangeMeta) {
+          return ChangeMeta.applyLuckysheetChangedStyle(cell, project, field);
+        }
         if (!this.isFieldChanged(project, field)) return cell;
         cell.fc = '#b45309';
-        cell.bd = {
-          borderType: 'border-left',
-          style: '1',
-          color: '#f59e0b'
-        };
+        cell.bg = '#fff7ed';
+
         return cell;
+      },
+
+      applyLuckysheetChangeComment(cell, project, field) {
+        if (!window.ChangeMeta || !ChangeMeta.hasFieldChangeMarkup(project, field)) return cell;
+        const meta = ChangeMeta.resolveFieldChangeMeta(project, field, Store.auditLog);
+        const text = ChangeMeta.formatChangeComment(meta, field);
+        if (text) cell.ps = ChangeMeta.buildLuckysheetCommentPs(text);
+        return cell;
+      },
+
+      /** 按项目变更记录，同步该行所有批注与高亮（公式重算后防丢失） */
+      syncLuckysheetProjectRowDecor(dataRowIndex, project) {
+        if (!project || dataRowIndex < 0) return;
+        const file = this.lsGetActiveLuckysheetFile();
+        if (!file || !file.data) return;
+        const layout = this.lsLayout();
+        const r = layout.dataStart + dataRowIndex;
+        const row = file.data[r];
+        if (!row) return;
+        for (let c = 0; c < this.tableFields.length; c++) {
+          const field = this.tableFields[c];
+          if (!field) continue;
+          const cell = row[c];
+          if (!cell) continue;
+          if (window.ChangeMeta && ChangeMeta.hasFieldChangeMarkup(project, field)) {
+            this.applyLuckysheetHighlight(cell, project, field);
+            this.applyLuckysheetChangeComment(cell, project, field);
+          }
+        }
+      },
+
+      syncAllLuckysheetChangeDecor() {
+        if (this.activeTab !== 'luckysheet' || typeof luckysheet === 'undefined') return;
+        const self = this;
+        const n = this.filteredProjects.length;
+        for (let i = 0; i < n; i++) {
+          const p = self.getStoreProject(self.filteredProjects[i].project_no)
+            || self.filteredProjects[i];
+          self.syncLuckysheetProjectRowDecor(i, p);
+        }
+        try {
+          if (typeof luckysheet.jfrefreshgrid === 'function') luckysheet.jfrefreshgrid();
+        } catch (e) { /* ignore */ }
+      },
+
+      /** 编辑后不整表刷新时，就地更新高亮与批注 */
+      applyLuckysheetCellChangeDecor(r, c, project, field) {
+        const rowIdx = r - this.lsLayout().dataStart;
+        this.syncLuckysheetProjectRowDecor(rowIdx, project);
       },
 
       makeLuckysheetDataCell(project, field, row0, dataRowIndex) {
@@ -1096,8 +1203,12 @@
         if (field.source_type === 'auto_calc' && row0 != null) {
           const formula = this.buildLuckysheetFieldFormula(field.col, row0);
           if (formula) {
-            return this.applyLuckysheetHighlight(
-              this.makeLuckysheetFormulaCell(formula, field, project, bg),
+            return this.applyLuckysheetChangeComment(
+              this.applyLuckysheetHighlight(
+                this.makeLuckysheetFormulaCell(formula, field, project, bg),
+                project,
+                field
+              ),
               project,
               field
             );
@@ -1105,7 +1216,11 @@
         }
         const val = this.getCellValue(project, field);
         const cell = this.makeLuckysheetCell(val, field, ro, bg);
-        return this.applyLuckysheetHighlight(cell, project, field);
+        return this.applyLuckysheetChangeComment(
+          this.applyLuckysheetHighlight(cell, project, field),
+          project,
+          field
+        );
       },
 
       buildLuckysheetMerge() {
@@ -1564,10 +1679,13 @@
               var oldVal = oldFlat[key];
               if (newVal === oldVal) return;
               if (String(newVal) === String(oldVal)) return;
-              self.handleCellEdit(project, field, newVal, { fromLuckysheet: true })
+              self.handleCellEdit(project, field, newVal, {
+                fromLuckysheet: true,
+                lsRow: r,
+                lsCol: c
+              })
                 .then(function () {
                   self.buildTableData();
-                  self.recalcLuckysheetFormulas();
                 })
                 .catch(function () { self.scheduleRefreshLuckysheet(); });
             }
@@ -1685,11 +1803,18 @@
         </div>
 
         <!-- 图例说明 -->
-        <div v-if="showDiffHint" style="padding:6px 16px;background:#fffbeb;border-bottom:1px solid #fde68a;display:flex;align-items:center;gap:16px;font-size:12px;color:#92400e;flex-shrink:0;">
-          <span><span style="display:inline-block;width:12px;height:12px;background:rgba(0,112,105,0.15);border-radius:2px;vertical-align:middle;margin-right:4px;"></span>本月新增项目</span>
-          <span><span style="display:inline-block;width:4px;height:12px;background:#f59e0b;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>本月有变更字段</span>
-          <span><span style="display:inline-block;width:12px;height:12px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>系统只读字段</span>
-          <span><span style="display:inline-block;width:12px;height:12px;background:#fef9c3;border:1px solid #fde68a;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>可编辑列（表头黄字）</span>
+        <div v-if="showDiffHint" class="editor-diff-hint">
+          <span class="editor-legend-item">
+            <span class="editor-legend-swatch editor-legend-swatch--new"></span>本月新增项目
+          </span>
+          <span class="editor-legend-item">
+            <span class="editor-legend-swatch editor-legend-swatch--editable"></span>可编辑列（表头黄字）
+          </span>
+          <span class="editor-legend-item">
+            <span class="editor-legend-swatch editor-legend-swatch--changed" aria-hidden="true">Aa</span>本月有变更字段
+          </span>
+
+
           <span style="flex:1;"></span>
           <span style="cursor:pointer;" @click="showDiffHint=false"><i class="el-icon-close"></i></span>
         </div>
@@ -1752,6 +1877,7 @@
                   v-for="field in tableFields"
                   :key="'c-'+field.col"
                   :class="cellClass(project, field)"
+                  :title="cellChangeTitle(project, field)"
                   :style="{
                     padding: '4px 8px',
                     border: '1px solid #e2e8f0',
@@ -1763,15 +1889,9 @@
                     maxWidth: field.data_type === '文本' ? '200px' : 'none',
                     overflow: field.data_type === '文本' ? 'hidden' : 'visible',
                     textOverflow: field.data_type === '文本' ? 'ellipsis' : 'clip',
-                    fontVariantNumeric: field.data_type === '金额' ? 'tabular-nums' : 'normal',
-                    color: isFieldChanged(project, field) ? '#b45309' : 'inherit'
+                    fontVariantNumeric: field.data_type === '金额' ? 'tabular-nums' : 'normal'
                   }"
                 >
-                  <!-- 变更标记条 -->
-                  <span
-                    v-if="isFieldChanged(project, field)"
-                    style="position:absolute;top:0;left:0;width:3px;height:100%;background:#f59e0b;"
-                  ></span>
                   <!-- 可编辑字段 + 枚举下拉 -->
                   <template v-if="canEditField(field) && canEdit">
                     <el-select

@@ -33,12 +33,13 @@
 | `js/store.js` | 🗄️ 状态管理 | ~12KB | Vue.observable；**业务数据经 `/api` 同步至 SQLite**；含 `pmSubmissions`、`submitPmReporting`、`receivePmSubmission` 等 PM 提交流程方法。 |
 | `js/xlsx-importer.js` | 📥 导入导出 | ~6KB | SheetJS 驱动的 xlsx 解析导入器，支持初始数据导入和填报数据导出。 |
 | `js/import-merge.js` | 📥 导入合并 | ~2KB | 按 `project_no` 合并 Excel 导入：仅覆盖当前角色可编辑字段，供填报页「上传导入」使用。 |
+| `js/change-meta.js` | 📝 变更批注 | ~2KB | `_field_change_log` 记录与 Luckysheet 批注（`ps`）文案：修改前/后值、修改人、修改时间。 |
 | `js/router.js` | 🔀 路由配置 | ~2KB | Vue Router hash 模式，6 条路由 + 登录守卫 + admin 权限守卫。 |
 | `js/app.js` | 🚀 应用初始化 | ~2KB | `Store.init()` 后再挂载 Vue；失败提示启动 Node 服务。 |
 | `js/components/AppLayout.js` | 🖼️ 主布局 | ~7KB | 侧边栏（深色）+ 顶栏（用户/角色/审批状态）+ 内容区路由出口。 |
 | `js/views/Login.js` | 🔑 登录页 | ~6KB | 6 个角色卡片登录，支持角色内用户切换，直接写入 Store。 |
 | `js/views/Dashboard.js` | 📊 数据看板 | ~12KB | KPI 卡片（4项）+ 月度完成趋势（折线+柱图）+ WIP 账龄饼图 + 开票回款对比 + WIP 预警列表。 |
-| `js/views/ProjectEditor.js` | 📝 填报表格 | ~22KB | Luckysheet 填报（默认）；工具栏含保存、上传导入（可编辑字段合并）、历史版本只读预览、导出与提交；侧栏折叠时表格区自适应宽度；PM 过滤与板块待接收面板。 |
+| `js/views/ProjectEditor.js` | 📝 填报表格 | ~22KB | Luckysheet 填报（默认）；有变更单元格橙字高亮 + 批注（悬停/角标查看变更详情）；工具栏含保存、上传导入、历史版本、导出与提交；PM 过滤与板块待接收面板。 |
 | `js/views/Approval.js` | ✅ 审批流程 | ~13KB | 四节点时间轴（Draft→Approve1→Approve2→J版）+ 版本快照列表 + diff 对比弹窗。 |
 | `js/views/AuditLog.js` | 📋 审计日志 | ~9KB | 变更历史表格，支持日期范围/操作人/项目/字段多维筛选，可导出 xlsx。 |
 | `js/views/AdminSettings.js` | ⚙️ 管理设置 | ~17KB | 填报周期、锁定/解锁、Excel 导入、从初始 Excel 恢复 SQLite、用户列表。 |
