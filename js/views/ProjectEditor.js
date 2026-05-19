@@ -20,6 +20,37 @@
     '开票与回款统计预测': '#e8f0fa'
   };
 
+  /** Luckysheet 大类行各分区背景色（按分区名单独配置，未列出的用默认色） */
+  const LS_SECTION_ROW_BG_DEFAULT = '#1e3a5f';
+  const LS_SECTION_ROW_BG = {
+    '项目基本信息': '#26878c',
+    '合同签署与进展':   '#c2d600',
+    '合同额':           '#c2d600',
+    '开票差与完成差':   '#00b050',
+    '始累完成合同额':   '#2dbdb6',
+    '年度完成额申报':   '#5f2167',
+    '开票回款情况':     '#00848a',
+    '财务数据（WIP/应收）': '#ffc000',
+    '应收账款及WIP':    '#243945',
+    'WIP分析与措施':    '#24394b',
+    '完成额统计与预测': '#5f2167',
+    '开票与回款统计预测': '#00848a'
+  };
+
+  /**
+   * Luckysheet 行布局（0-based）
+   * 0 大类 | 1 字段标题 | 2 小计 | 3 合计 | 4+ 项目数据
+   * 注意：Luckysheet 列 A=索引0，我们在 0 列放「#」，字段 A 在索引 1（界面列 B），公式/引用须用索引而非 Excel 列字母 P/O
+   */
+  const LS_ROW_SECTION = 0;
+  const LS_ROW_HEADER = 1;
+  const LS_ROW_SUBTOTAL = 2;
+  const LS_ROW_SUM = 3;
+  const LS_ROW_DATA_START = 4;
+  const LS_FROZEN_ROW = LS_ROW_SUM;
+  const LS_FROZEN_COL = 6; // 冻结至 F 列（项目号）含左侧 #、A–E
+  const LS_NARROW_COLS = { E: 72, F: 88, G: 110 };
+
   window.ProjectEditorView = {
     name: 'ProjectEditor',
     data() {
@@ -177,10 +208,46 @@
         return SECTION_COLORS[field.section] || '#fff';
       },
 
+      lsSectionRowBg(sectionName) {
+        return LS_SECTION_ROW_BG[sectionName] || LS_SECTION_ROW_BG_DEFAULT;
+      },
+
+      lsLayout() {
+        const n = this.filteredProjects.length;
+        return {
+          section: LS_ROW_SECTION,
+          header: LS_ROW_HEADER,
+          subtotal: LS_ROW_SUBTOTAL,
+          sum: LS_ROW_SUM,
+          dataStart: LS_ROW_DATA_START,
+          dataEnd: n > 0 ? LS_ROW_DATA_START + n - 1 : LS_ROW_DATA_START - 1
+        };
+      },
+
+      lsFieldColIndex(fieldColLetter) {
+        for (var i = 0; i < this.tableFields.length; i++) {
+          if (this.tableFields[i].col === fieldColLetter) return i + 1;
+        }
+        return -1;
+      },
+
+      sumProjectsField(projs, fld) {
+        const key = FieldConfig.COL_TO_KEY[fld.col];
+        if (!key) return 0;
+        var s = 0;
+        for (var i = 0; i < projs.length; i++) {
+          const flat = FieldConfig.arraysToFlat(projs[i]);
+          s += Number(flat[key]) || 0;
+        }
+        return s;
+      },
+
       canEditLuckysheetCell(r, c) {
-        if (r === 0 || c === 0) return false;
-        const projs = this.filteredProjects;
-        if (r < 1 || r - 1 >= projs.length) return false;
+        if (c === 0) return false;
+        const lay = this.lsLayout();
+        if (r === lay.section || r === lay.header) return false;
+        if (r === lay.subtotal || r === lay.sum) return false;
+        if (r < lay.dataStart || r > lay.dataEnd) return false;
         const field = this.tableFields[c - 1];
         if (!field) return false;
         return this.canEditField(field) && this.canEdit;
@@ -242,29 +309,114 @@
         return '#ffffff';
       },
 
+      buildLuckysheetMerge() {
+        const merge = {};
+        const sections = FieldConfig.getSections(this.tableFields);
+        const fields = this.tableFields;
+        sections.forEach(function (sec) {
+          if (!sec.fields.length) return;
+          const first = sec.fields[0];
+          const last = sec.fields[sec.fields.length - 1];
+          const c0 = fields.indexOf(first) + 1;
+          const cs = fields.indexOf(last) - fields.indexOf(first) + 1;
+          if (c0 < 1 || cs < 1) return;
+          merge[LS_ROW_SECTION + '_' + c0] = {
+            r: LS_ROW_SECTION, c: c0, rs: 1, cs: cs
+          };
+        });
+        return merge;
+      },
+
+      buildLuckysheetTotalRowCells(r, label) {
+        const cells = [];
+        const projs = this.filteredProjects;
+        const labelC = this.lsFieldColIndex('F');
+        const labelCol = labelC >= 0 ? labelC : 1;
+
+        cells.push({
+          r: r, c: 0,
+          v: { v: label, m: label, bg: '#e2e8f0', bl: 1, ht: '0', ct: { fa: 'General', t: 'g' } }
+        });
+        for (var j = 0; j < this.tableFields.length; j++) {
+          var fld = this.tableFields[j];
+          var c = j + 1;
+          var base = {
+            bg: '#e2e8f0', bl: 1, ht: fld.data_type === '金额' || fld.data_type === '比率' ? '2' : '0'
+          };
+          if (c === labelCol) {
+            cells.push({
+              r: r, c: c,
+              v: Object.assign({ v: label, m: label, ct: { fa: 'General', t: 'g' } }, base)
+            });
+            continue;
+          }
+          if (fld.data_type === '金额') {
+            var total = this.sumProjectsField(projs, fld);
+            var cell = this.makeLuckysheetCell(total, fld, true, '#e2e8f0');
+            Object.assign(cell, base);
+            cells.push({ r: r, c: c, v: cell });
+          } else {
+            cells.push({
+              r: r, c: c,
+              v: Object.assign({ v: '', m: '', ct: { fa: 'General', t: 'g' } }, base)
+            });
+          }
+        }
+        return cells;
+      },
+
       buildLuckysheetCelldata() {
         const celldata = [];
         const fields = this.tableFields;
         const projs = this.filteredProjects;
+        const lay = this.lsLayout();
         const push = function (r, c, v) {
           celldata.push({ r: r, c: c, v: v });
         };
 
-        push(0, 0, {
+        // 行0：大类（分区名，合并单元格由 config.merge 定义）
+        push(LS_ROW_SECTION, 0, {
+          v: '分区', m: '分区', ct: { fa: 'General', t: 'g' },
+          bg: '#0f2027', fc: '#ffffff', bl: 1, ht: '0'
+        });
+        const self = this;
+        const sections = FieldConfig.getSections(fields);
+        sections.forEach(function (sec) {
+          if (!sec.fields.length) return;
+          const c0 = fields.indexOf(sec.fields[0]) + 1;
+          const secBg = self.lsSectionRowBg(sec.name);
+          push(LS_ROW_SECTION, c0, {
+            v: sec.name, m: sec.name, ct: { fa: 'General', t: 'g' },
+            bg: secBg, fc: '#ffffff', bl: 1, ht: '0', tb: '2'
+          });
+        });
+
+        // 行1：字段标题
+        push(LS_ROW_HEADER, 0, {
           v: '#', m: '#', ct: { fa: 'General', t: 'g' }, bg: '#0f2027', fc: '#ffffff', bl: 1, ht: 0
         });
         for (var j = 0; j < fields.length; j++) {
           var f = fields[j];
           var hl = f.name_cn + '\n(' + f.col + ')';
-          push(0, j + 1, {
-            v: hl, m: hl, ct: { fa: 'General', t: 'g' }, bg: '#f1f5f9', bl: 1,
+          push(LS_ROW_HEADER, j + 1, {
+            v: hl, m: hl, ct: { fa: 'General', t: 'g' }, bg: '#8f96a0', fc: '#ffffff', bl: 1,
             tb: '2', ht: '1', vt: '0'
           });
         }
 
+        // 小计 / 合计（紧挨标题行下方，在数据行之上）
+        this.buildLuckysheetTotalRowCells(lay.subtotal, '小计 Subtotal').forEach(function (item) {
+          push(item.r, item.c, item.v);
+        });
+        this.buildLuckysheetTotalRowCells(lay.sum, '合计 Sum').forEach(function (item) {
+          push(item.r, item.c, item.v);
+        });
+
+        // 数据行
         for (var i = 0; i < projs.length; i++) {
           var p = projs[i];
-          push(i + 1, 0, {
+          var row = lay.dataStart + i;
+          push(row, 0, {
             v: i + 1, m: String(i + 1), ct: { fa: 'General', t: 'g' },
             bg: '#f1f5f9', ht: '0'
           });
@@ -273,9 +425,10 @@
             var ro = !this.canEditField(fld) || !this.canEdit;
             var bg = this.luckysheetCellBg(p, fld, ro);
             var val = this.getCellValue(p, fld);
-            push(i + 1, k + 1, this.makeLuckysheetCell(val, fld, ro, bg));
+            push(row, k + 1, this.makeLuckysheetCell(val, fld, ro, bg));
           }
         }
+
         return celldata;
       },
 
@@ -283,9 +436,65 @@
         var columnlen = { 0: 44 };
         for (var j = 0; j < this.tableFields.length; j++) {
           var f = this.tableFields[j];
-          columnlen[j + 1] = Math.min(220, Math.max(72, f.colWidth || 90));
+          var narrow = LS_NARROW_COLS[f.col];
+          columnlen[j + 1] = narrow != null
+            ? narrow
+            : Math.min(220, Math.max(72, f.colWidth || 90));
         }
         return columnlen;
+      },
+
+      buildLuckysheetRowlen() {
+        return {
+          0: 28,
+          1: 40,
+          2: 26,
+          3: 26
+        };
+      },
+
+      /**
+       * Luckysheet 数据验证：下拉列表（与 Excel 数据有效性类似）
+       * 文档：https://dream-num.github.io/LuckysheetDocs/zh/guide/sheet.html#dataverification
+       * 注意：value1 仅支持英文逗号分隔；若某选项文本内含英文逗号则该格不下发校验。
+       */
+      buildLuckysheetDataVerification() {
+        var dv = {};
+        var fields = this.tableFields;
+        var projs = this.filteredProjects;
+        for (var i = 0; i < projs.length; i++) {
+          var p = projs[i];
+          for (var k = 0; k < fields.length; k++) {
+            var fld = fields[k];
+            if (!fld.enum_values || !fld.enum_values.length) continue;
+            var ro = !this.canEditField(fld) || !this.canEdit;
+            if (ro) continue;
+            var hasCommaInOption = false;
+            for (var e = 0; e < fld.enum_values.length; e++) {
+              if (String(fld.enum_values[e]).indexOf(',') >= 0) {
+                hasCommaInOption = true;
+                break;
+              }
+            }
+            if (hasCommaInOption) continue;
+            var lay = this.lsLayout();
+            var r = lay.dataStart + i;
+            var c = k + 1;
+            var value1 = fld.enum_values.map(function (ev) { return String(ev).trim(); }).join(',');
+            dv[String(r) + '_' + String(c)] = {
+              type: 'dropdown',
+              type2: false,
+              value1: value1,
+              value2: '',
+              prohibitInput: true,
+              hintShow: false,
+              hintText: '',
+              remote: false,
+              checked: false
+            };
+          }
+        }
+        return dv;
       },
 
       destroyLuckysheet() {
@@ -307,7 +516,8 @@
         this.destroyLuckysheet();
         this._lsLoading = true;
 
-        var rows = Math.max(48, this.filteredProjects.length + 20);
+        var lay = this.lsLayout();
+        var rows = Math.max(48, lay.dataEnd + 12);
         var cols = Math.max(64, this.tableFields.length + 4);
         var celldata = this.buildLuckysheetCelldata();
 
@@ -327,15 +537,20 @@
             status: 1,
             order: 0,
             celldata: celldata,
+            dataVerification: this.buildLuckysheetDataVerification(),
+            frozen: {
+              type: 'rangeBoth',
+              range: { row_focus: LS_FROZEN_ROW, column_focus: LS_FROZEN_COL }
+            },
             config: {
               columnlen: this.buildLuckysheetColumnlen(),
+              merge: this.buildLuckysheetMerge(),
               customWidth: 1,
-              rowlen: { 0: 40 }
+              rowlen: this.buildLuckysheetRowlen()
             }
           }],
           hook: {
             workbookCreateAfter: function () {
-              try { luckysheet.setBothFrozen(false); } catch (e2) { /* ignore */ }
               self._lsLoading = false;
             },
             cellEditBefore: function (range) {
@@ -348,17 +563,16 @@
             },
             cellUpdateBefore: function (r, c, value, isRefresh) {
               if (self._lsLoading) return false;
-              if (r === 0 || c === 0) return false;
               return self.canEditLuckysheetCell(r, c);
             },
             cellUpdated: function (r, c, oldValue, newValue, isRefresh) {
               if (self._lsLoading || isRefresh) return;
-              if (r === 0 || c === 0) return;
               var projs = self.filteredProjects;
-              if (r - 1 < 0 || r - 1 >= projs.length) return;
+              var layout = self.lsLayout();
+              if (r < layout.dataStart || r > layout.dataEnd) return;
               var field = self.tableFields[c - 1];
               if (!field || !self.canEditLuckysheetCell(r, c)) return;
-              var project = projs[r - 1];
+              var project = projs[r - layout.dataStart];
               var newVal = self.coerceFieldValue(self.extractLuckysheetInput(newValue), field);
               var oldFlat = FieldConfig.arraysToFlat(project);
               var key = FieldConfig.COL_TO_KEY[field.col];
