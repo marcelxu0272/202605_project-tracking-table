@@ -22,8 +22,15 @@
     },
     computed: {
       store() { return window.Store; },
+      user()  { return Store.currentUser || {}; },
       monthIdx() { return Store.getMonthIdx(); },
-      currentMonthName() { return MONTHS[this.monthIdx]; }
+      currentMonthName() { return MONTHS[this.monthIdx]; },
+      isPm() { return this.user.role === 'pm'; },
+      scopeNote() {
+        if (!this.isPm) return '';
+        const cnt = this.summary ? this.summary.computed.length : 0;
+        return '以下统计仅含您负责的项目，共 ' + cnt + ' 项';
+      }
     },
     mounted() {
       this.refresh();
@@ -37,8 +44,22 @@
       if (this.chartInv)   { this.chartInv.dispose();   this.chartInv = null; }
     },
     methods: {
+      projectsForUser() {
+        const user = Store.currentUser || {};
+        const projects = Store.projects;
+        if (user.role === 'pm') {
+          const pmName = user.pmName || user.name;
+          return projects.filter(p => p.pm_name === pmName);
+        }
+        if (user.role === 'sector_admin') {
+          const sector = user.sector || 'S520';
+          return projects.filter(p => (p.unit_code || 'S520') === sector);
+        }
+        return projects;
+      },
       refresh() {
-        this.summary = Store.getSummary();
+        const projects = this.projectsForUser();
+        this.summary = FormulaEngine.summarize(projects, Store.getMonthIdx());
         this.$nextTick(() => {
           this.initCharts();
         });
@@ -176,6 +197,10 @@
     },
     template: `
       <div>
+        <!-- PM 数据范围提示 -->
+        <div v-if="isPm && scopeNote" style="margin-bottom:12px;padding:8px 14px;background:#fff8e1;border:1px solid #f59e0b44;border-radius:8px;font-size:12px;color:#92400e;">
+          <i class="el-icon-info" style="margin-right:4px;"></i>{{ scopeNote }}
+        </div>
         <!-- KPI 卡片 -->
         <div class="kpi-grid" v-if="summary">
           <div class="kpi-card">

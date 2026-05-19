@@ -133,6 +133,10 @@
             p[key] = _toNum(val);
           } else if (f.data_type === '金额' || f.data_type === '比率') {
             p[key] = _toNum(val);
+          } else if (f.data_type === '日期') {
+            p[key] = window.Formatters
+              ? Formatters.normalizeDateValue(val)
+              : (val != null && val !== '' ? String(val) : '');
           } else {
             p[key] = val !== null && val !== undefined ? String(val) : '';
           }

@@ -9,9 +9,8 @@
     { name: '管理员 Admin',   role: 'system_admin',    sector: '—',   status: '在线' },
     { name: '财务总监 张颖',   role: 'finance',         sector: '财务部', status: '在线' },
     { name: '运营总监 周明',   role: 'sector_admin',    sector: 'S520', status: '在线' },
-    { name: '项目经理 张伟',   role: 'pm',              sector: 'S520', status: '离线' },
-    { name: '项目经理 李娜',   role: 'pm',              sector: 'S520', status: '在线' },
-    { name: '项目经理 王强',   role: 'pm',              sector: 'S520', status: '离线' },
+    { name: '何孝刚',         role: 'pm',              sector: 'S520', status: '在线' },
+    { name: '宋建生',         role: 'pm',              sector: 'S520', status: '在线' },
     { name: '板块总监 陈磊',   role: 'sector_director', sector: 'S52X', status: '在线' },
     { name: '项目群主 王总',   role: 'group_leader',    sector: '—',   status: '在线' }
   ];

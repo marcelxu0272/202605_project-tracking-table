@@ -87,6 +87,14 @@ function ensureDefaultMeta(db) {
   }
 }
 
+function getPmSubmissions(db) {
+  return getMeta(db, 'pmSubmissions', {});
+}
+
+function setPmSubmissions(db, data) {
+  setMeta(db, 'pmSubmissions', data);
+}
+
 function getBootstrapState(db) {
   ensureDefaultMeta(db);
   const periodConfig = Object.assign({}, DEFAULT_PERIOD_CONFIG, getMeta(db, 'periodConfig') || {});
@@ -100,6 +108,8 @@ function getBootstrapState(db) {
   const reportingSubmittedMeta = getMeta(db, 'reportingSubmitted', null);
   const reportingSubmitted = reportingSubmittedMeta === true
     || (reportingSubmittedMeta !== false && hasDraftSnapshot);
+
+  const pmSubmissions = getPmSubmissions(db);
 
   const projectRows = db.prepare('SELECT payload FROM projects ORDER BY project_no ASC').all();
   const projects = projectRows.map(r => JSON.parse(r.payload));
@@ -123,7 +133,8 @@ function getBootstrapState(db) {
     reportingMonth,
     approvalStatus,
     lockStatus,
-    reportingSubmitted
+    reportingSubmitted,
+    pmSubmissions
   };
 }
 
@@ -165,11 +176,26 @@ function clearLockOverride(db) {
   db.prepare('DELETE FROM meta WHERE key = ?').run('lockStatus');
 }
 
+/** 开发测试：流程与配置恢复为默认值（不含项目数据，需配合 xlsx 重导） */
+function resetDevMeta(db) {
+  const pc = Object.assign({}, DEFAULT_PERIOD_CONFIG);
+  setMeta(db, 'periodConfig', pc);
+  setMeta(db, 'reportingMonth', pc.reportingMonth);
+  clearLockOverride(db);
+  clearAudit(db);
+  clearSnapshots(db);
+  setMeta(db, 'approvalStatus', 'draft');
+  setMeta(db, 'reportingSubmitted', false);
+  setMeta(db, 'pmSubmissions', {});
+}
+
 module.exports = {
   openDb,
   DB_PATH,
   getMeta,
   setMeta,
+  getPmSubmissions,
+  setPmSubmissions,
   getBootstrapState,
   replaceAllProjects,
   upsertProject,
@@ -178,6 +204,7 @@ module.exports = {
   clearSnapshots,
   clearAudit,
   clearLockOverride,
+  resetDevMeta,
   ensureDefaultMeta,
   DEFAULT_PERIOD_CONFIG,
   _calcLockStatus

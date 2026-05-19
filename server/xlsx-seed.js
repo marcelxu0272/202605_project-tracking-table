@@ -45,6 +45,24 @@ function toNum(v) {
   return isNaN(n) ? 0 : n;
 }
 
+const EXCEL_EPOCH_UTC_MS = Date.UTC(1899, 11, 30);
+
+function normalizeDateValue(val) {
+  if (val === null || val === undefined || val === '') return '';
+  if (val instanceof Date) return val.toISOString().slice(0, 10);
+  if (typeof val === 'number' && val >= 20000 && val < 120000) {
+    return new Date(EXCEL_EPOCH_UTC_MS + Math.round(val) * 86400000).toISOString().slice(0, 10);
+  }
+  const s = String(val).trim();
+  if (!s) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const n = parseFloat(s);
+  if (!isNaN(n) && n >= 20000 && n < 120000 && /^\d+(\.\d+)?$/.test(s)) {
+    return new Date(EXCEL_EPOCH_UTC_MS + Math.round(n) * 86400000).toISOString().slice(0, 10);
+  }
+  return s.slice(0, 10);
+}
+
 /**
  * @param {Buffer} buf
  * @param {{ FieldConfig: object, FormulaEngine: object }} modules
@@ -73,6 +91,8 @@ function projectsFromXlsxBuffer(buf, modules, reportingMonth) {
         p[key] = toNum(val);
       } else if (f.data_type === '金额' || f.data_type === '比率') {
         p[key] = toNum(val);
+      } else if (f.data_type === '日期') {
+        p[key] = normalizeDateValue(val);
       } else {
         p[key] = val !== null && val !== undefined ? String(val) : '';
       }

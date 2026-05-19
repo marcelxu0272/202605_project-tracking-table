@@ -16,8 +16,8 @@
   const NAV_ITEMS = [
     { path: '/dashboard', icon: 'el-icon-s-home',        label: '数据看板'  },
     { path: '/editor',    icon: 'el-icon-s-grid',        label: '填报表格'  },
-    { path: '/approval',  icon: 'el-icon-s-check',       label: '审批流程'  },
-    { path: '/audit',     icon: 'el-icon-document',      label: '审计日志'  },
+    { path: '/approval',  icon: 'el-icon-s-check',       label: '审批流程', hideForRoles: ['pm'] },
+    { path: '/audit',     icon: 'el-icon-document',      label: '审计日志', hideForRoles: ['pm'] },
     { path: '/admin',     icon: 'el-icon-setting',       label: '管理设置', adminOnly: true }
   ];
 
@@ -29,15 +29,22 @@
 
   window.AppLayoutComponent = {
     name: 'AppLayout',
+    data() {
+      return { resetDevLoading: false };
+    },
     computed: {
       store()     { return window.Store; },
       user()      { return Store.currentUser || {}; },
       roleName()  { return ROLE_LABELS[this.user.role] || this.user.role || '—'; },
       navItems()  {
-        return NAV_ITEMS.filter(item =>
-          !item.adminOnly || this.user.role === 'system_admin'
-        );
+        const role = this.user.role;
+        return NAV_ITEMS.filter(item => {
+          if (item.adminOnly && role !== 'system_admin') return false;
+          if (item.hideForRoles && item.hideForRoles.includes(role)) return false;
+          return true;
+        });
       },
+      isPm() { return this.user.role === 'pm'; },
       lockInfo()  { return LOCK_INFO[Store.lockStatus] || LOCK_INFO.open; },
       activePath(){ return this.$route ? this.$route.path : '/dashboard'; },
       pageTitle() {
@@ -53,10 +60,12 @@
         };
         return map[Store.approvalStatus] || map.draft;
       },
-      reportingMonth() { return Store.reportingMonth; }
+      reportingMonth() { return Store.reportingMonth; },
+      sidebarCollapsed() { return Store.sidebarCollapsed; }
     },
     methods: {
       goTo(path) { if (this.$route.path !== path) this.$router.push(path); },
+      toggleSidebar() { Store.toggleSidebar(); },
       handleLogout() {
         this.$confirm('确认退出当前账号？', '提示', {
           confirmButtonText: '退出', cancelButtonText: '取消', type: 'warning'
@@ -64,19 +73,63 @@
           Store.logout();
           this.$router.push('/login');
         }).catch(() => {});
+      },
+      handleResetDev() {
+        this.$confirm(
+          '将执行以下操作且不可撤销：\n\n' +
+          '· 从「初始数据.xlsx」重新导入全部项目\n' +
+          '· 审批状态恢复为「草稿」，清除已提交标记\n' +
+          '· 清空审计日志与全部版本快照\n' +
+          '· 填报周期配置恢复默认值（含报告月份）\n' +
+          '· 锁定状态恢复为按日期自动计算\n\n' +
+          '仅用于开发测试，确认继续？',
+          '重置为初始状态',
+          {
+            confirmButtonText: '确认重置',
+            cancelButtonText: '取消',
+            type: 'warning'
+          }
+        ).then(() => {
+          this.resetDevLoading = true;
+          return Store.resetDevEnvironment();
+        }).then((r) => {
+          this.$message.success(
+            '已恢复初始状态' + (r && r.count ? '（' + r.count + ' 条项目）' : '')
+          );
+          window.location.reload();
+        }).catch((e) => {
+          if (e === 'cancel' || e === 'close') return;
+          this.$message.error('重置失败：' + (e && e.message ? e.message : e));
+        }).finally(() => {
+          this.resetDevLoading = false;
+        });
       }
     },
     template: `
       <div class="app-layout">
-        <!-- 侧边栏 -->
-        <div class="app-sidebar">
+        <aside class="app-sidebar" :class="{ 'is-collapsed': sidebarCollapsed }">
           <div class="sidebar-logo">
-            <div class="sidebar-logo-text">
-              项目执行<br><span>跟踪平台</span>
+            <div v-if="!sidebarCollapsed" class="sidebar-logo-text">
+              金山中心<br><span>项目执行跟踪</span>
             </div>
+            <div v-else class="sidebar-logo-mark" title="金山中心 · 项目执行跟踪">金</div>
+            <button
+              type="button"
+              class="sidebar-collapse-btn"
+              :title="sidebarCollapsed ? '展开菜单' : '收起菜单'"
+              @click="toggleSidebar"
+            >
+              <i :class="sidebarCollapsed ? 'el-icon-s-unfold' : 'el-icon-s-fold'"></i>
+            </button>
           </div>
           <div class="sidebar-nav">
-            <el-menu :default-active="activePath" background-color="transparent" text-color="rgba(255,255,255,0.65)">
+            <el-menu
+              :default-active="activePath"
+              :collapse="sidebarCollapsed"
+              :collapse-transition="false"
+              background-color="transparent"
+              text-color="rgba(255,255,255,0.65)"
+            >
               <el-menu-item
                 v-for="item in navItems"
                 :key="item.path"
@@ -84,46 +137,57 @@
                 @click="goTo(item.path)"
               >
                 <i :class="item.icon"></i>
-                <span>{{ item.label }}</span>
+                <span slot="title">{{ item.label }}</span>
               </el-menu-item>
             </el-menu>
           </div>
           <div class="sidebar-footer">
-            <div style="color:rgba(255,255,255,0.35);font-size:11px;margin-bottom:6px;">
-              报告月份：{{ reportingMonth }}
-            </div>
-            <div style="display:flex;align-items:center;gap:6px;">
-              <span
-                class="period-banner"
-                :class="lockInfo.type"
-                style="font-size:11px;padding:3px 8px;"
-                :title="lockInfo.tip"
-              >
+            <template v-if="!sidebarCollapsed">
+              <div style="color:rgba(255,255,255,0.35);font-size:11px;margin-bottom:6px;">
+                填报月份：{{ reportingMonth }}
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span
+                  class="period-banner"
+                  :class="lockInfo.type"
+                  style="font-size:11px;padding:3px 8px;"
+                  :title="lockInfo.tip"
+                >
+                  <span class="period-dot"></span>
+                  {{ lockInfo.text }}
+                </span>
+              </div>
+            </template>
+            <el-tooltip v-else :content="lockInfo.tip + ' · ' + reportingMonth" placement="right">
+              <span class="period-banner sidebar-footer-compact" :class="lockInfo.type">
                 <span class="period-dot"></span>
-                {{ lockInfo.text }}
               </span>
-            </div>
+            </el-tooltip>
           </div>
-        </div>
+        </aside>
 
-        <!-- 主内容区 -->
         <div class="app-main">
-          <!-- 顶栏 -->
           <div class="app-header">
+            <button
+              type="button"
+              class="header-sidebar-toggle"
+              :title="sidebarCollapsed ? '展开菜单' : '收起菜单'"
+              @click="toggleSidebar"
+            >
+              <i :class="sidebarCollapsed ? 'el-icon-s-unfold' : 'el-icon-s-fold'"></i>
+            </button>
             <div class="app-header-title">{{ pageTitle }}</div>
 
-            <!-- 审批状态 -->
             <el-tag
+              v-if="!isPm"
               size="small"
               :style="{background: approvalBadge.color + '22', color: approvalBadge.color, border: '1px solid ' + approvalBadge.color + '66'}"
             >
               审批：{{ approvalBadge.text }}
             </el-tag>
 
-            <!-- 分隔 -->
-            <div style="width:1px;height:20px;background:#e2e8f0;margin:0 4px;"></div>
+            <div v-if="!isPm" style="width:1px;height:20px;background:#e2e8f0;margin:0 4px;"></div>
 
-            <!-- 用户信息 -->
             <el-dropdown trigger="click">
               <div style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 8px;border-radius:6px;" class="hover:bg-gray-100">
                 <div style="width:28px;height:28px;border-radius:50%;background:#007069;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:600;flex-shrink:0;">
@@ -142,6 +206,10 @@
                 <el-dropdown-item divided @click.native="$router.push('/login')">
                   <i class="el-icon-switch-button"></i> 切换角色
                 </el-dropdown-item>
+                <el-dropdown-item :disabled="resetDevLoading" @click.native="handleResetDev">
+                  <i class="el-icon-refresh-left" style="color:#f59e0b;"></i>
+                  <span style="color:#b45309;">重置为初始状态（开发）</span>
+                </el-dropdown-item>
                 <el-dropdown-item @click.native="handleLogout">
                   <i class="el-icon-right" style="color:#ef4444;"></i>
                   <span style="color:#ef4444;">退出登录</span>
@@ -150,7 +218,6 @@
             </el-dropdown>
           </div>
 
-          <!-- 路由视图 -->
           <div class="app-content" :class="{'no-padding': activePath === '/editor'}">
             <router-view></router-view>
           </div>

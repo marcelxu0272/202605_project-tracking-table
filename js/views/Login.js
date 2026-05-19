@@ -33,7 +33,7 @@
       id: 'pm',
       name: '项目经理',
       icon: 'el-icon-s-custom',
-      users: ['项目经理 张伟', '项目经理 李娜', '项目经理 王强'],
+      users: ['何孝刚', '宋建生'],
       desc: '本项目产值/进度/WIP填报',
       color: '#f59e0b'
     },
@@ -73,11 +73,16 @@
       },
       confirmLogin() {
         if (!this.selectedRole || !this.selectedUser) return;
-        Store.login({
+        const user = {
           name: this.selectedUser,
           role: this.selectedRole.id,
-          sector: this.selectedRole.id === 'pm' ? 'S520' : null
-        });
+          sector: 'S520'
+        };
+        // 项目经理：name 即 pmName（与数据库 pm_name 字段一致）
+        if (this.selectedRole.id === 'pm') {
+          user.pmName = this.selectedUser;
+        }
+        Store.login(user);
         this.$router.push('/dashboard');
       },
       backToRoles() {

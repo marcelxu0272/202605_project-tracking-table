@@ -44,22 +44,53 @@
     return n.toFixed(d) + '%';
   }
 
+  /** Excel 序列日 → UTC 毫秒（1900 日期系统，与 SheetJS/Luckysheet 一致） */
+  const EXCEL_EPOCH_UTC_MS = Date.UTC(1899, 11, 30);
+
+  function excelSerialToIso(serial) {
+    const n = Number(serial);
+    if (isNaN(n) || n < 1) return '';
+    const ms = EXCEL_EPOCH_UTC_MS + Math.round(n) * 86400000;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+
+  function looksLikeExcelSerial(val) {
+    const n = typeof val === 'number' ? val : Number(String(val).trim());
+    return !isNaN(n) && n >= 20000 && n < 120000;
+  }
+
+  /**
+   * 入库/展示前统一为 YYYY-MM-DD（兼容 Excel 序列号、Date、文本）
+   */
+  function normalizeDateValue(val) {
+    if (val === null || val === undefined || val === '') return '';
+    if (val instanceof Date) return val.toISOString().slice(0, 10);
+    if (typeof val === 'number' && looksLikeExcelSerial(val)) {
+      return excelSerialToIso(val);
+    }
+    const s = String(val).trim();
+    if (!s) return '';
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    if (looksLikeExcelSerial(s)) return excelSerialToIso(parseFloat(s));
+    return s.slice(0, 10);
+  }
+
+  /** ISO 日期 → Luckysheet 使用的 Excel 序列日 */
+  function dateToExcelSerial(isoStr) {
+    const iso = normalizeDateValue(isoStr);
+    if (!iso) return null;
+    const ms = Date.parse(iso + 'T00:00:00Z');
+    if (isNaN(ms)) return null;
+    return Math.round((ms - EXCEL_EPOCH_UTC_MS) / 86400000);
+  }
+
   /**
    * 格式化日期 (Date | string) → YYYY-MM-DD
    */
   function formatDate(val) {
-    if (!val) return '—';
-    if (val instanceof Date) {
-      return val.toISOString().slice(0, 10);
-    }
-    const s = String(val).trim();
-    if (!s) return '—';
-    // 处理 Excel 日期序列号
-    if (/^\d{5}$/.test(s)) {
-      const d = new Date((parseInt(s) - 25569) * 86400 * 1000);
-      return d.toISOString().slice(0, 10);
-    }
-    return s.slice(0, 10);
+    if (!val && val !== 0) return '—';
+    const iso = normalizeDateValue(val);
+    return iso || '—';
   }
 
   /**
@@ -124,6 +155,9 @@
     formatAmountShort,
     formatPercent,
     formatDate,
+    normalizeDateValue,
+    dateToExcelSerial,
+    excelSerialToIso,
     formatBool,
     formatTaxRate,
     formatByType,

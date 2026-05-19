@@ -10,8 +10,8 @@
       key: 'draft',
       label: 'Draft',
       title: '提交填报',
-      desc: '各板块/中心完成填报并提交，系统生成 Draft 草稿版快照',
-      role: ['pm', 'sector_admin'],
+      desc: '板块管理员汇总各 PM 填报后提交，系统生成 Draft 草稿版快照',
+      role: ['sector_admin'],
       action: '提交填报',
       icon: '1'
     },

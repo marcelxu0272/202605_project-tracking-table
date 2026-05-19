@@ -73,6 +73,13 @@
       return;
     }
 
+    // 项目经理仅允许访问看板和填报
+    const pmRestrictedPaths = ['/approval', '/audit', '/admin'];
+    if (Store.currentUser && Store.currentUser.role === 'pm' && pmRestrictedPaths.includes(to.path)) {
+      next('/dashboard');
+      return;
+    }
+
     next();
   });
 
