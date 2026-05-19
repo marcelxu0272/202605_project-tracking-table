@@ -127,6 +127,9 @@ app.patch('/api/meta', (req, res) => {
     if (body.reportingMonth != null) dbm.setMeta(db, 'reportingMonth', body.reportingMonth);
     if (body.approvalStatus != null) dbm.setMeta(db, 'approvalStatus', body.approvalStatus);
     if (body.lockStatus !== undefined) dbm.setMeta(db, 'lockStatus', body.lockStatus);
+    if (body.reportingSubmitted !== undefined) {
+      dbm.setMeta(db, 'reportingSubmitted', !!body.reportingSubmitted);
+    }
     res.json(dbm.getBootstrapState(db));
   } catch (e) {
     res.status(500).json({ error: String(e.message) });
@@ -153,6 +156,7 @@ app.post('/api/admin/reseed', (_req, res) => {
     dbm.clearSnapshots(db);
     dbm.clearLockOverride(db);
     dbm.setMeta(db, 'approvalStatus', 'draft');
+    dbm.setMeta(db, 'reportingSubmitted', false);
     res.json({ ok: true, count: projects.length, file: path.basename(xlsxPath) });
   } catch (e) {
     res.status(500).json({ error: String(e.message) });

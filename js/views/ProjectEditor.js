@@ -39,15 +39,16 @@
 
   /**
    * Luckysheet 行布局（0-based）
-   * 0 大类 | 1 字段标题 | 2 小计 | 3 合计 | 4+ 项目数据
+   * 0 小计 | 1 合计 | 2 大类 | 3 字段标题 | 4+ 项目数据
+   * 小计/合计置于大分类之上，默认筛选仅覆盖「字段标题 + 数据」行
    * 列：字段字典列号 = Luckysheet 列字母（A→索引0，E→索引4）；无额外「#」列
    */
-  const LS_ROW_SECTION = 0;
-  const LS_ROW_HEADER = 1;
-  const LS_ROW_SUBTOTAL = 2;  // 小计行（Subtotal，用 SUBTOTAL 函数）
-  const LS_ROW_SUM = 3;       // 合计行（Total，用 SUM 函数）
+  const LS_ROW_SUBTOTAL = 0;  // 小计行（Subtotal，用 SUBTOTAL 函数）
+  const LS_ROW_SUM = 1;       // 合计行（Total，用 SUM 函数）
+  const LS_ROW_SECTION = 2;
+  const LS_ROW_HEADER = 3;
   const LS_ROW_DATA_START = 4;
-  const LS_FROZEN_ROW = LS_ROW_SUM;
+  const LS_FROZEN_ROW = LS_ROW_HEADER;
   const LS_FROZEN_COL = 5; // 冻结至 F 列（项目号），左侧 A–E 固定
   /** 键为字段字典列字母，与 Luckysheet 表头一致 */
   const LS_NARROW_COLS = { D: 60, E: 72, F: 88, G: 110 };
@@ -72,7 +73,8 @@
         tableProjects: [],
         activeTab: 'luckysheet', // 'luckysheet' | 'table'
         _lsLoading: false,
-        _lsRefreshTimer: null
+        _lsRefreshTimer: null,
+        _lsFilterScrollHandler: null
       };
     },
     mounted() {
@@ -230,6 +232,9 @@
           Store.submitForApproval()
             .then(() => {
               this.$message.success('已提交审批，Draft快照已生成');
+              if (this.activeTab === 'luckysheet') {
+                this.$nextTick(function () { this.refreshLuckysheet(); }.bind(this));
+              }
               this.$router.push('/approval');
             })
             .catch(e => { this.$message.error('提交失败：' + (e.message || e)); })
@@ -640,7 +645,15 @@
           return self.lsApplyCellLock(cell, true);
         };
 
-        // 行0：大类（分区名，合并单元格由 config.merge 定义）
+        // 行0–1：小计 / 合计（置于大分类之上，不参与筛选）
+        this.buildLuckysheetTotalRowCells(lay.subtotal, '小计 Subtotal', 'subtotal').forEach(function (item) {
+          push(item.r, item.c, item.v);
+        });
+        this.buildLuckysheetTotalRowCells(lay.sum, '合计 Total', 'sum').forEach(function (item) {
+          push(item.r, item.c, item.v);
+        });
+
+        // 行2：大类（分区名，合并单元格由 config.merge 定义）
         const sections = FieldConfig.getSections(fields);
         sections.forEach(function (sec) {
           if (!sec.fields.length) return;
@@ -652,7 +665,7 @@
           }));
         });
 
-        // 行1：字段标题
+        // 行3：字段标题
         for (var j = 0; j < fields.length; j++) {
           var f = fields[j];
           var hl = f.name_cn;
@@ -665,14 +678,6 @@
             tb: '2', ht: '1', vt: '0'
           }));
         }
-
-        // 小计 Subtotal（SUBTOTAL）/ 合计 Total（SUM）
-        this.buildLuckysheetTotalRowCells(lay.subtotal, '小计 Subtotal', 'subtotal').forEach(function (item) {
-          push(item.r, item.c, item.v);
-        });
-        this.buildLuckysheetTotalRowCells(lay.sum, '合计 Total', 'sum').forEach(function (item) {
-          push(item.r, item.c, item.v);
-        });
 
         // 数据行
         for (var i = 0; i < projs.length; i++) {
@@ -710,11 +715,175 @@
 
       buildLuckysheetRowlen() {
         return {
-          0: 28,
-          1: 40,
-          2: 26,
-          3: 26
+          0: 26,
+          1: 26,
+          2: 28,
+          3: 40
         };
+      },
+
+      /** 默认筛选：字段标题行 + 全部项目数据行（不含小计/合计/大分类） */
+      buildLuckysheetFilterSelect() {
+        const lay = this.lsLayout();
+        const lastCol = Math.max(0, this.tableFields.length - 1);
+        const filterEndRow = lay.dataEnd >= lay.dataStart ? lay.dataEnd : LS_ROW_HEADER;
+        return {
+          row: [LS_ROW_HEADER, filterEndRow],
+          column: [0, lastCol]
+        };
+      },
+
+      lsRowHeaderWidth() {
+        return 46;
+      },
+
+      lsColLeftPx(file, colIndex) {
+        let left = this.lsRowHeaderWidth();
+        const columnlen = (file.config && file.config.columnlen) || {};
+        const defaultW = file.defaultColWidth || 73;
+        for (let c = 0; c < colIndex; c++) {
+          left += columnlen[c] != null ? columnlen[c] : defaultW;
+        }
+        return left;
+      },
+
+      lsColWidth(file, colIndex) {
+        const columnlen = (file.config && file.config.columnlen) || {};
+        return columnlen[colIndex] != null ? columnlen[colIndex] : (file.defaultColWidth || 73);
+      },
+
+      /** 冻结区右边界（首列可滚动列左缘，像素） */
+      lsFreezeRightPx(file) {
+        return this.lsColLeftPx(file, LS_FROZEN_COL + 1);
+      },
+
+      lsGetActiveLuckysheetFile() {
+        if (typeof luckysheet === 'undefined' || !luckysheet || typeof luckysheet.getLuckysheetfile !== 'function') {
+          return null;
+        }
+        const files = luckysheet.getLuckysheetfile() || [];
+        for (let i = 0; i < files.length; i++) {
+          if (files[i].status === 1) return files[i];
+        }
+        return files[0] || null;
+      },
+
+      lsShowFilterOption($e) {
+        $e.css('display', 'block');
+      },
+
+      lsHideFilterOption($e) {
+        $e.css('display', 'none');
+      },
+
+      /** 筛选按钮在 scrollLeft=0 时的基准 left（相对 #luckysheet-cell-main 内容区） */
+      lsEnsureFilterBaseLeft($e, file, colIndex) {
+        let base = $e.data('lsFilterLeftBase');
+        if (base != null) return base;
+        const parsed = parseFloat($e.css('left'));
+        base = !isNaN(parsed) && parsed > 0
+          ? parsed
+          : (this.lsColLeftPx(file, colIndex) + this.lsColWidth(file, colIndex) - 22);
+        $e.data('lsFilterLeftBase', base);
+        return base;
+      },
+
+      lsResolveFilterColIndex($e, i, c1) {
+        let colIndex = $e.data('cindex');
+        if (colIndex == null || colIndex === '') colIndex = c1 + i;
+        return Number(colIndex);
+      },
+
+      /**
+       * 横向滚动：冻结列筛选按钮补偿 scrollLeft 保持固定；可滚动列隐藏滚入冻结区下方的按钮
+       */
+      syncLuckysheetFilterWithFreeze() {
+        const $ = window.jQuery;
+        if (!$) return;
+        const file = this.lsGetActiveLuckysheetFile();
+        if (!file || !file.filter_select) return;
+        const cellMain = document.querySelector('#luckysheet-mount #luckysheet-cell-main');
+        if (!cellMain) return;
+        const $opts = $('#luckysheet-filter-options-sheet' + file.index + ' .luckysheet-filter-options');
+        if (!$opts.length) return;
+
+        const scrollLeft = cellMain.scrollLeft;
+        const c1 = file.filter_select.column[0];
+        const freezeRight = this.lsFreezeRightPx(file);
+        const hideBefore = scrollLeft + freezeRight;
+
+        $opts.each(function (i, el) {
+          const $e = $(el);
+          const colIndex = this.lsResolveFilterColIndex($e, i, c1);
+          const baseLeft = this.lsEnsureFilterBaseLeft($e, file, colIndex);
+
+          if (colIndex <= LS_FROZEN_COL) {
+            this.lsShowFilterOption($e);
+            $e.css('left', scrollLeft > 2 ? baseLeft + scrollLeft : baseLeft);
+            return;
+          }
+
+          if (scrollLeft <= 2) {
+            $e.css('left', baseLeft);
+            this.lsShowFilterOption($e);
+            return;
+          }
+
+          const colLeft = this.lsColLeftPx(file, colIndex);
+          if (colLeft < hideBefore) {
+            this.lsHideFilterOption($e);
+          } else {
+            this.lsShowFilterOption($e);
+            $e.css('left', baseLeft);
+          }
+        }.bind(this));
+      },
+
+      bindLuckysheetFilterFreezeSync() {
+        this.unbindLuckysheetFilterFreezeSync();
+        const $ = window.jQuery;
+        if (!$) return;
+        const cellMain = $('#luckysheet-mount').find('#luckysheet-cell-main');
+        if (!cellMain.length) return;
+        const self = this;
+        const handler = function () { self.syncLuckysheetFilterWithFreeze(); };
+        this._lsFilterScrollHandler = handler;
+        cellMain.on('scroll.lsFilterFreeze', handler);
+      },
+
+      unbindLuckysheetFilterFreezeSync() {
+        const $ = window.jQuery;
+        if ($) {
+          $('#luckysheet-mount').find('#luckysheet-cell-main').off('scroll.lsFilterFreeze');
+        }
+        this._lsFilterScrollHandler = null;
+      },
+
+      applyLuckysheetDefaultFilter() {
+        const self = this;
+        setTimeout(function () {
+          try {
+            if (typeof luckysheet === 'undefined' || !luckysheet) return;
+            const fs = self.buildLuckysheetFilterSelect();
+            if (typeof luckysheet.setRangeFilter === 'function') {
+              luckysheet.setRangeFilter('open', { range: fs });
+            }
+            self.bindLuckysheetFilterFreezeSync();
+            setTimeout(function () {
+              const file = self.lsGetActiveLuckysheetFile();
+              if (!file) return;
+              const c1 = file.filter_select.column[0];
+              $('#luckysheet-filter-options-sheet' + file.index + ' .luckysheet-filter-options')
+                .each(function (i, el) {
+                  const $e = $(el);
+                  const colIndex = self.lsResolveFilterColIndex($e, i, c1);
+                  self.lsEnsureFilterBaseLeft($e, file, colIndex);
+                  self.lsShowFilterOption($e);
+                });
+              self.syncLuckysheetFilterWithFreeze();
+            }, 60);
+          } catch (e) { /* ignore */ }
+        }, 120);
       },
 
       /**
@@ -762,6 +931,7 @@
       },
 
       destroyLuckysheet() {
+        this.unbindLuckysheetFilterFreezeSync();
         try {
           if (typeof luckysheet !== 'undefined' && luckysheet && typeof luckysheet.destroy === 'function') {
             luckysheet.destroy();
@@ -805,6 +975,8 @@
             celldata: celldata,
             calcChain: calcChain,
             dataVerification: this.buildLuckysheetDataVerification(),
+            filter_select: this.buildLuckysheetFilterSelect(),
+            filter: null,
             frozen: {
               type: 'rangeBoth',
               range: { row_focus: LS_FROZEN_ROW, column_focus: LS_FROZEN_COL }
@@ -821,6 +993,7 @@
             workbookCreateAfter: function () {
               self._lsLoading = false;
               self.recalcLuckysheetFormulas();
+              self.applyLuckysheetDefaultFilter();
             },
             cellEditBefore: function (range) {
               if (self._lsLoading) return false;
@@ -908,14 +1081,15 @@
           >导出 Excel</el-button>
 
           <el-button
-            v-if="canSubmit"
+            v-if="canShowSubmitButton"
             size="small"
             type="primary"
             icon="el-icon-s-promotion"
             style="background:#007069;border-color:#007069;"
             :loading="submitLoading"
+            :disabled="!canSubmit"
             @click="handleSubmit"
-          >提交审批</el-button>
+          >{{ submitButtonLabel }}</el-button>
         </div>
 
         <!-- 图例说明 -->
@@ -1064,7 +1238,10 @@
           <span>共 {{ filteredProjects.length }} 条记录</span>
           <span>报告月份：{{ store.reportingMonth }}</span>
           <span>当前角色：{{ user.name || '—' }}</span>
-          <span v-if="lockStatus !== 'open'" style="color:#ef4444;font-weight:500;">
+          <span v-if="reportingSubmitted" style="color:#ef4444;font-weight:500;">
+            <i class="el-icon-lock"></i> 已提交审批，填报数据已锁定
+          </span>
+          <span v-else-if="lockStatus !== 'open'" style="color:#ef4444;font-weight:500;">
             <i class="el-icon-lock"></i> 编辑受限
           </span>
         </div>
@@ -1075,12 +1252,24 @@
       store()   { return window.Store; },
       user()    { return Store.currentUser || {}; },
       lockStatus() { return Store.lockStatus; },
+      reportingSubmitted() { return !!Store.reportingSubmitted; },
       monthIdx()   { return Store.getMonthIdx(); },
-      canSubmit() {
+      canShowSubmitButton() {
         const r = this.user.role;
-        return (r === 'pm' || r === 'sector_admin') && this.lockStatus === 'open';
+        return r === 'pm' || r === 'sector_admin';
       },
-      canEdit() { return this.lockStatus !== 'locked' || this.user.role === 'system_admin'; },
+      canSubmit() {
+        return this.canShowSubmitButton
+          && this.lockStatus === 'open'
+          && !this.reportingSubmitted;
+      },
+      submitButtonLabel() {
+        return this.reportingSubmitted ? '已提交审批' : '提交审批';
+      },
+      canEdit() {
+        if (this.reportingSubmitted) return this.user.role === 'system_admin';
+        return this.lockStatus !== 'locked' || this.user.role === 'system_admin';
+      },
       filteredProjects() {
         const p = this.tableProjects;
         if (this.viewMode === 'new_only')     return p.filter(x => x._added_this_month);
@@ -1088,9 +1277,13 @@
         return p;
       },
       lockBannerClass() {
+        if (this.reportingSubmitted) return 'locked';
         return { open:'open', finance_only:'finance-only', locked:'locked' }[this.lockStatus] || 'open';
       },
       lockBannerText() {
+        if (this.reportingSubmitted) {
+          return '本月填报已提交审批 — 数据已锁定，待审批或驳回后可再编辑';
+        }
         return {
           open:         '填报窗口开放中 — 可正常填报',
           finance_only: '财务专属期（1-3日）— 仅财务审核可编辑开票/回款',

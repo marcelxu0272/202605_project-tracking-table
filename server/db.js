@@ -95,6 +95,12 @@ function getBootstrapState(db) {
   const lockOverride = getMeta(db, 'lockStatus', null);
   const lockStatus = lockOverride != null ? lockOverride : _calcLockStatus(periodConfig);
 
+  const snapRowsEarly = db.prepare('SELECT version FROM snapshots').all();
+  const hasDraftSnapshot = snapRowsEarly.some(r => r.version === 'Draft');
+  const reportingSubmittedMeta = getMeta(db, 'reportingSubmitted', null);
+  const reportingSubmitted = reportingSubmittedMeta === true
+    || (reportingSubmittedMeta !== false && hasDraftSnapshot);
+
   const projectRows = db.prepare('SELECT payload FROM projects ORDER BY project_no ASC').all();
   const projects = projectRows.map(r => JSON.parse(r.payload));
 
@@ -116,7 +122,8 @@ function getBootstrapState(db) {
     periodConfig,
     reportingMonth,
     approvalStatus,
-    lockStatus
+    lockStatus,
+    reportingSubmitted
   };
 }
 

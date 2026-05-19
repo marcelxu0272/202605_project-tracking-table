@@ -65,6 +65,8 @@
     periodConfig: Object.assign({}, DEFAULT_CONFIG),
     lockStatus: calcLockStatus(DEFAULT_CONFIG),
     approvalStatus: 'draft',
+    /** 本月填报已提交审批（Draft 快照已生成），填报页只读直至驳回或管理员重置 */
+    reportingSubmitted: false,
     snapshots: {},
     auditLog: [],
     sidebarCollapsed: false,
@@ -83,6 +85,8 @@
     Store.reportingMonth = d.reportingMonth || Store.periodConfig.reportingMonth;
     Store.approvalStatus = d.approvalStatus || 'draft';
     Store.lockStatus = d.lockStatus || calcLockStatus(Store.periodConfig);
+    Store.reportingSubmitted = d.reportingSubmitted === true
+      || !!(d.snapshots && d.snapshots.Draft);
     Store._hydrated = true;
   }
 
@@ -171,7 +175,11 @@
   Store.rejectApproval = async function () {
     const prev = Store.approvalStatus;
     Store.approvalStatus = 'draft';
-    await apiFetch('/meta', { method: 'PATCH', body: { approvalStatus: 'draft' } });
+    Store.reportingSubmitted = false;
+    await apiFetch('/meta', {
+      method: 'PATCH',
+      body: { approvalStatus: 'draft', reportingSubmitted: false }
+    });
     await Store.addAuditLog({
       projectNo: '—',
       projectName: '全局',
@@ -187,7 +195,11 @@
   Store.submitForApproval = async function () {
     await Store.createSnapshot('Draft');
     Store.approvalStatus = 'draft';
-    await apiFetch('/meta', { method: 'PATCH', body: { approvalStatus: 'draft' } });
+    Store.reportingSubmitted = true;
+    await apiFetch('/meta', {
+      method: 'PATCH',
+      body: { approvalStatus: 'draft', reportingSubmitted: true }
+    });
     await Store.addAuditLog({
       projectNo: '—',
       projectName: '全局',
