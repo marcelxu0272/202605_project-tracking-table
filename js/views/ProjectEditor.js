@@ -111,14 +111,20 @@
       canEditField(field) {
         return FieldConfig.canEdit(field, this.user.role, this.lockStatus);
       },
+      isFieldChanged(project, field) {
+        const cols = project._changed_fields;
+        if (!cols || !cols.length) return false;
+        if (cols.indexOf(field.col) >= 0) return true;
+        if (cols.indexOf(field.col.toLowerCase()) >= 0) return true;
+        if (cols.indexOf('mc_' + (field.colIdx - 47)) >= 0) return true;
+        return false;
+      },
+
       cellClass(project, field) {
         const cls = [];
         if (!this.canEditField(field)) cls.push('readonly-cell');
         if (project._added_this_month) cls.push('new-project-cell');
-        if (project._changed_fields && project._changed_fields.includes(field.col.toLowerCase()) ||
-            (project._changed_fields && project._changed_fields.includes('mc_' + (field.colIdx - 47)))) {
-          cls.push('changed-cell');
-        }
+        if (this.isFieldChanged(project, field)) cls.push('changed-cell');
         return cls.join(' ');
       },
       getCellValue(project, field) {
@@ -302,11 +308,32 @@
       },
 
       luckysheetCellBg(project, field, readonly) {
-        if (readonly) return '#f8fafc';
-        if (project._added_this_month) return '#e6f2f1';
-        if (project._changed_fields && project._changed_fields.indexOf(field.col) >= 0) return '#fff7ed';
-        if (field.source_type !== 'manual_input') return '#f8fafc';
+        if (this.isFieldChanged(project, field)) return '#fff7ed';
+        if (project._added_this_month) {
+          return readonly ? 'rgba(0,112,105,0.07)' : 'rgba(0,112,105,0.05)';
+        }
+        if (readonly || field.source_type !== 'manual_input') return '#f8fafc';
         return '#ffffff';
+      },
+
+      /** 与 HTML 表一致：变更列橙字 + 左边框色条（Luckysheet 用 bd） */
+      applyLuckysheetHighlight(cell, project, field) {
+        if (!this.isFieldChanged(project, field)) return cell;
+        cell.fc = '#b45309';
+        cell.bd = {
+          borderType: 'border-left',
+          style: '1',
+          color: '#f59e0b'
+        };
+        return cell;
+      },
+
+      makeLuckysheetDataCell(project, field) {
+        const ro = !this.canEditField(field) || !this.canEdit;
+        const val = this.getCellValue(project, field);
+        const bg = this.luckysheetCellBg(project, field, ro);
+        const cell = this.makeLuckysheetCell(val, field, ro, bg);
+        return this.applyLuckysheetHighlight(cell, project, field);
       },
 
       buildLuckysheetMerge() {
@@ -330,19 +357,20 @@
       buildLuckysheetTotalRowCells(r, label) {
         const cells = [];
         const projs = this.filteredProjects;
-        const labelC = this.lsFieldColIndex('F');
+        const labelC = this.lsFieldColIndex('G');
         const labelCol = labelC >= 0 ? labelC : 1;
+        const rowBase = { bg: '#e2e8f0', bl: 1 };
 
         cells.push({
           r: r, c: 0,
-          v: { v: label, m: label, bg: '#e2e8f0', bl: 1, ht: '0', ct: { fa: 'General', t: 'g' } }
+          v: Object.assign({ v: '', m: '', ct: { fa: 'General', t: 'g' }, ht: '0' }, rowBase)
         });
         for (var j = 0; j < this.tableFields.length; j++) {
           var fld = this.tableFields[j];
           var c = j + 1;
-          var base = {
-            bg: '#e2e8f0', bl: 1, ht: fld.data_type === '金额' || fld.data_type === '比率' ? '2' : '0'
-          };
+          var base = Object.assign({
+            ht: fld.data_type === '金额' || fld.data_type === '比率' ? '2' : '0'
+          }, rowBase);
           if (c === labelCol) {
             cells.push({
               r: r, c: c,
@@ -418,14 +446,12 @@
           var row = lay.dataStart + i;
           push(row, 0, {
             v: i + 1, m: String(i + 1), ct: { fa: 'General', t: 'g' },
-            bg: '#f1f5f9', ht: '0'
+            bg: p._added_this_month ? 'rgba(0,112,105,0.07)' : '#f1f5f9',
+            ht: '0'
           });
           for (var k = 0; k < fields.length; k++) {
             var fld = fields[k];
-            var ro = !this.canEditField(fld) || !this.canEdit;
-            var bg = this.luckysheetCellBg(p, fld, ro);
-            var val = this.getCellValue(p, fld);
-            push(row, k + 1, this.makeLuckysheetCell(val, fld, ro, bg));
+            push(row, k + 1, this.makeLuckysheetDataCell(p, fld));
           }
         }
 
@@ -737,12 +763,12 @@
                     overflow: field.data_type === '文本' ? 'hidden' : 'visible',
                     textOverflow: field.data_type === '文本' ? 'ellipsis' : 'clip',
                     fontVariantNumeric: field.data_type === '金额' ? 'tabular-nums' : 'normal',
-                    color: (project._changed_fields||[]).includes(field.col) ? '#b45309' : 'inherit'
+                    color: isFieldChanged(project, field) ? '#b45309' : 'inherit'
                   }"
                 >
                   <!-- 变更标记条 -->
                   <span
-                    v-if="(project._changed_fields||[]).includes(field.col)"
+                    v-if="isFieldChanged(project, field)"
                     style="position:absolute;top:0;left:0;width:3px;height:100%;background:#f59e0b;"
                   ></span>
                   <!-- 可编辑字段 + 枚举下拉 -->
