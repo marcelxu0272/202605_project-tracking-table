@@ -34,20 +34,52 @@
   const SECTOR_ADMIN_EDITABLE_COLS = new Set([...PM_EDITABLE_COLS]);
   const FINANCE_EDITABLE_SET = new Set(FINANCE_EDITABLE_COLS);
 
+  const MC_COLS = ['AV', 'AW', 'AX', 'AY', 'AZ', 'BA', 'BB', 'BC', 'BD', 'BE', 'BF', 'BG'];
+  const MI_COLS = ['BH', 'BJ', 'BL', 'BN', 'BP', 'BR', 'BT', 'BV', 'BX', 'BZ', 'CB', 'CD'];
+  const MP_COLS = ['BI', 'BK', 'BM', 'BO', 'BQ', 'BS', 'BU', 'BW', 'BY', 'CA', 'CC', 'CE'];
+
+  /**
+   * 月度完成/开票/回款列 → 0-based 月份索引（0=1月 … 11=12月），非月度列返回 -1
+   */
+  function getMonthlyMonthIndex(col) {
+    var i = MC_COLS.indexOf(col);
+    if (i >= 0) return i;
+    i = MI_COLS.indexOf(col);
+    if (i >= 0) return i;
+    i = MP_COLS.indexOf(col);
+    if (i >= 0) return i;
+    return -1;
+  }
+
+  /**
+   * 报告月之前的月度列只读（例：报告月 2026-05 → 1–4 月 AV–AY、BH/BI–… 锁定）
+   * @param {number} reportingMonthIdx 0–11，与 FormulaEngine / Store.getMonthIdx 一致
+   */
+  function isPastReportingMonthField(field, reportingMonthIdx) {
+    if (reportingMonthIdx == null || reportingMonthIdx < 0) return false;
+    var m = getMonthlyMonthIndex(field.col);
+    return m >= 0 && m < reportingMonthIdx;
+  }
+
   /**
    * 判断某字段在当前角色和锁定状态下是否可编辑
    * @param {Object} field  - field config 对象（含 source_type, col）
    * @param {string} role   - 当前用户角色
    * @param {string} lockStatus - 'open' | 'finance_only' | 'locked'
+   * @param {number} [reportingMonthIdx] 报告月份 0–11
    * @returns {boolean}
    */
-  function canEdit(field, role, lockStatus) {
+  function canEdit(field, role, lockStatus, reportingMonthIdx) {
     // 系统同步/自动计算 — 永远只读
     if (field.source_type === 'system_sync' || field.source_type === 'auto_calc') {
       return false;
     }
-    // 系统管理员任何时候都可以编辑手工字段
+    // 系统管理员可编辑（含历史月份临时修正）
     if (role === 'system_admin') return true;
+    // 动态时间窗：报告月之前的完成额/开票/回款只读
+    if (isPastReportingMonthField(field, reportingMonthIdx)) {
+      return false;
+    }
     // 锁定期间（除管理员外）全员只读
     if (lockStatus === 'locked') return false;
     // 审批者角色（总监、群主）不可编辑
@@ -183,6 +215,11 @@
     COL_TO_KEY,
     flatToArrays,
     arraysToFlat,
-    FINANCE_EDITABLE_SET
+    FINANCE_EDITABLE_SET,
+    MC_COLS,
+    MI_COLS,
+    MP_COLS,
+    getMonthlyMonthIndex,
+    isPastReportingMonthField
   };
 })(window);

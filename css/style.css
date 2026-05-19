@@ -8,6 +8,9 @@
   --color-brand-dark:   #005c56;
   --color-brand-light:  rgba(0, 112, 105, 0.1);
   --color-brand-border: rgba(0, 112, 105, 0.3);
+  --color-editable-header-bg:     #fef9c3;
+  --color-editable-header-text:   #92400e;
+  --color-editable-header-sub:    #b45309;
   --color-warning:      #f59e0b;
   --color-warning-bg:   rgba(245, 158, 11, 0.1);
   --color-danger:       #ef4444;
@@ -283,6 +286,18 @@ body {
 #luckysheet-container {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
+}
+
+/* ── 可编辑列表头（HTML 表格） ─────────────────────────── */
+.editor-table th.editor-th-editable {
+  background: var(--color-editable-header-bg) !important;
+  color: var(--color-editable-header-text) !important;
+}
+
+/* ── 历史月份锁定（报告月之前的月度完成/开票/回款） ─────── */
+.month-locked-cell {
+  background: #eef2f6 !important;
+  color: #64748b;
 }
 
 /* ── Diff 高亮 ─────────────────────────────────────────── */
