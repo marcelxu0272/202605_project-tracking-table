@@ -1,41 +1,125 @@
 /**
  * change-meta.js — 单元格变更元数据（批注 / 审计联动）
+ * _field_change_log[col] 为变更记录数组，同一流程内多角色多次修改均保留
  */
 (function (window) {
   'use strict';
 
-  /** 与 style.css :root 中 --color-changed-field-* 保持一致 */
   var CHANGED_FIELD_STYLE = {
     bg: '#fff7ed',
     text: '#b45309',
     border: '#f59e0b'
   };
 
-  function formatChangeTime(iso) {
-    if (!iso) return '—';
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return '—';
-    return d.toLocaleDateString('zh-CN') + ' ' +
-      d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  var EDITABLE_FIELD_STYLE = {
+    bg: '#fefce8'
+  };
+
+  var ROLE_LABELS = {
+    pm: 'PM',
+    sector_admin: '板块管理员',
+    sector_director: '板块总监',
+    group_leader: '群主',
+    finance: '财务',
+    system_admin: '系统管理员'
+  };
+
+  function roleLabel(user) {
+    if (!user) return '—';
+    if (user.roleLabel) return user.roleLabel;
+    return ROLE_LABELS[user.role] || user.name || user.role || '—';
+  }
+
+  function roleLabelFromUserId(userId) {
+    return ROLE_LABELS[userId] || userId || '—';
+  }
+
+  function normalizeLogEntry(entry) {
+    if (!entry || typeof entry !== 'object') return null;
+    return {
+      oldVal: entry.oldVal,
+      newVal: entry.newVal,
+      roleLabel: entry.roleLabel || roleLabelFromUserId(entry.userId) || entry.userName || '—',
+      userName: entry.userName,
+      userId: entry.userId,
+      at: entry.at
+    };
+  }
+
+  function changeLogEntryKey(entry) {
+    if (!entry) return '';
+    return [
+      entry.roleLabel || entry.userId || '',
+      entry.oldVal != null ? String(entry.oldVal) : '',
+      entry.newVal != null ? String(entry.newVal) : ''
+    ].join('\x1e');
+  }
+
+  function isSameChangeEntry(a, b) {
+    if (!a || !b) return false;
+    return changeLogEntryKey(a) === changeLogEntryKey(b);
+  }
+
+  function dedupeChangeLogList(list) {
+    if (!list || !list.length) return [];
+    const out = [];
+    const seen = {};
+    list.forEach(function (raw) {
+      const n = normalizeLogEntry(raw);
+      if (!n) return;
+      const key = changeLogEntryKey(n);
+      if (seen[key]) return;
+      seen[key] = true;
+      out.push(n);
+    });
+    return out;
+  }
+
+  function getFieldChangeEntries(project, field, auditLog) {
+    if (!project || !field) return [];
+    const out = [];
+    const log = project._field_change_log || {};
+    const raw = log[field.col];
+    if (Array.isArray(raw)) {
+      raw.forEach(function (e) {
+        const n = normalizeLogEntry(e);
+        if (n) out.push(n);
+      });
+    } else if (raw && typeof raw === 'object' && (raw.oldVal !== undefined || raw.newVal !== undefined)) {
+      const n = normalizeLogEntry(raw);
+      if (n) out.push(n);
+    }
+    return dedupeChangeLogList(out);
   }
 
   function recordFieldChangeLog(project, field, oldVal, newVal, user) {
     if (!project || !field) return;
     if (!project._field_change_log) project._field_change_log = {};
-    project._field_change_log[field.col] = {
-      fieldCN: field.name_cn,
+    const col = field.col;
+    let list = project._field_change_log[col];
+    if (!list) {
+      list = [];
+    } else if (!Array.isArray(list)) {
+      list = [normalizeLogEntry(list)].filter(Boolean);
+    } else {
+      list = dedupeChangeLogList(list);
+    }
+    const entry = {
       oldVal: Formatters.formatByType(oldVal, field.data_type),
       newVal: Formatters.formatByType(newVal, field.data_type),
+      roleLabel: roleLabel(user),
       userName: (user && user.name) || '—',
       userId: (user && user.role) || '—',
       at: new Date().toISOString()
     };
+    if (list.length && isSameChangeEntry(list[list.length - 1], entry)) return;
+    list.push(entry);
+    project._field_change_log[col] = list;
   }
 
   function resolveFieldChangeMeta(project, field, auditLog) {
-    if (!project || !field) return null;
-    const log = project._field_change_log || {};
-    if (log[field.col]) return log[field.col];
+    const entries = getFieldChangeEntries(project, field, auditLog);
+    if (entries.length) return entries[entries.length - 1];
     const list = auditLog || [];
     for (let i = 0; i < list.length; i++) {
       const e = list[i];
@@ -46,6 +130,7 @@
           newVal: e.newVal,
           userName: e.userName,
           userId: e.userId,
+          roleLabel: roleLabelFromUserId(e.userId),
           at: e.timestamp
         };
       }
@@ -53,50 +138,71 @@
     return null;
   }
 
-  function formatChangeComment(meta, field) {
-    if (!meta) return '';
-    const name = meta.fieldCN || (field && field.name_cn) || '字段';
-    return [
-      '【' + name + '】',
-      '修改前值：' + (meta.oldVal != null && meta.oldVal !== '' ? meta.oldVal : '—'),
-      '修改后值：' + (meta.newVal != null && meta.newVal !== '' ? meta.newVal : '—'),
-      '修改人：' + (meta.userName || '—'),
-      '修改时间：' + formatChangeTime(meta.at)
-    ].join('\n');
+  function formatChangeComment(project, field, auditLog) {
+    const entries = getFieldChangeEntries(project, field, auditLog);
+    if (!entries.length) return '';
+    return entries.map(function (e) {
+      const label = e.roleLabel || '—';
+      const ov = e.oldVal != null && e.oldVal !== '' ? e.oldVal : '—';
+      const nv = e.newVal != null && e.newVal !== '' ? e.newVal : '—';
+      return '【' + label + '】' + ov + ' → ' + nv;
+    }).join('\n');
   }
 
   function buildLuckysheetCommentPs(text) {
-    const lines = (text || '').split('\n').length;
+    const lines = Math.max(1, (text || '').split('\n').length);
     return {
       left: 92,
       top: 10,
-      width: 220,
-      height: Math.max(88, lines * 18 + 12),
+      width: 240,
+      height: Math.max(44, lines * 20 + 12),
       value: text,
       isshow: false
     };
   }
 
-  /** 合并变更列标记与批注日志（多来源取并集，避免二次保存丢历史） */
-  function mergeChangeTracking() {
-    const logs = [];
+  function mergeColChangeLogs() {
+    const merged = {};
     const colSet = {};
     for (let i = 0; i < arguments.length; i++) {
       const src = arguments[i];
       if (!src) continue;
-      logs.push(src._field_change_log || {});
+      const log = src._field_change_log || {};
+      Object.keys(log).forEach(function (col) {
+        if (!merged[col]) merged[col] = { list: [], seen: {} };
+        const bucket = merged[col];
+        const v = log[col];
+        function appendUnique(raw) {
+          const n = normalizeLogEntry(raw);
+          if (!n) return;
+          const key = changeLogEntryKey(n);
+          if (bucket.seen[key]) return;
+          bucket.seen[key] = true;
+          bucket.list.push(n);
+        }
+        if (Array.isArray(v)) {
+          v.forEach(appendUnique);
+        } else if (v && typeof v === 'object') {
+          appendUnique(v);
+        }
+        colSet[col] = true;
+      });
       (src._changed_fields || []).forEach(function (col) {
         colSet[col] = true;
       });
     }
-    const mergedLog = Object.assign.apply(null, [{}].concat(logs));
-    Object.keys(mergedLog).forEach(function (col) {
-      colSet[col] = true;
+    const logOut = {};
+    Object.keys(merged).forEach(function (col) {
+      logOut[col] = merged[col].list;
     });
     return {
-      _field_change_log: mergedLog,
+      _field_change_log: logOut,
       _changed_fields: Object.keys(colSet)
     };
+  }
+
+  function mergeChangeTracking() {
+    return mergeColChangeLogs.apply(null, arguments);
   }
 
   function attachChangeTracking(computed, metaSource) {
@@ -110,8 +216,7 @@
 
   function hasFieldChangeMarkup(project, field) {
     if (!project || !field) return false;
-    const log = project._field_change_log || {};
-    if (log[field.col]) return true;
+    if (getFieldChangeEntries(project, field).length > 0) return true;
     const cols = project._changed_fields;
     if (!cols || !cols.length) return false;
     if (cols.indexOf(field.col) >= 0) return true;
@@ -134,14 +239,20 @@
 
   window.ChangeMeta = {
     CHANGED_FIELD_STYLE: CHANGED_FIELD_STYLE,
-    recordFieldChangeLog,
-    resolveFieldChangeMeta,
-    formatChangeComment,
-    formatChangeTime,
-    buildLuckysheetCommentPs,
-    mergeChangeTracking,
-    attachChangeTracking,
-    hasFieldChangeMarkup,
-    applyLuckysheetChangedStyle
+    EDITABLE_FIELD_STYLE: EDITABLE_FIELD_STYLE,
+    ROLE_LABELS: ROLE_LABELS,
+    roleLabel: roleLabel,
+    changeLogEntryKey: changeLogEntryKey,
+    isSameChangeEntry: isSameChangeEntry,
+    dedupeChangeLogList: dedupeChangeLogList,
+    getFieldChangeEntries: getFieldChangeEntries,
+    recordFieldChangeLog: recordFieldChangeLog,
+    resolveFieldChangeMeta: resolveFieldChangeMeta,
+    formatChangeComment: formatChangeComment,
+    buildLuckysheetCommentPs: buildLuckysheetCommentPs,
+    mergeChangeTracking: mergeChangeTracking,
+    attachChangeTracking: attachChangeTracking,
+    hasFieldChangeMarkup: hasFieldChangeMarkup,
+    applyLuckysheetChangedStyle: applyLuckysheetChangedStyle
   };
 })(window);

@@ -6,7 +6,9 @@ const express = require('express');
 const { loadBrowserScripts } = require('./load-modules');
 const { projectsFromXlsxBuffer } = require('./xlsx-seed');
 const { seedPriorMonthSnapshot } = require('./prior-month-snapshot');
+const { seedDevEnvironment, normalizeProjects } = require('./dev-reset-seed');
 const dbm = require('./db');
+const sw = require('./sector-workflow');
 
 const ROOT = path.join(__dirname, '..');
 const PORT = Number(process.env.PTRACK_PORT) || 3000;
@@ -45,8 +47,16 @@ function seedFromXlsxIfEmpty(db) {
     return { seeded: false, count: 0 };
   }
   dbm.replaceAllProjects(db, projects);
+  let devSeed = null;
+  try {
+    devSeed = seedDevEnvironment(db, modules, { reportingMonth, repickDemoNew: true });
+    console.log('[ptrack] 已生成上月对比快照', devSeed.priorSnapshot.version,
+      '| 五月新增演示', devSeed.demoNewProjectNos.join(', '));
+  } catch (e) {
+    console.warn('[ptrack] 演示快照生成失败:', e.message);
+  }
   console.log('[ptrack] 已从', xlsxPath, '初始化', projects.length, '条项目');
-  return { seeded: true, count: projects.length, file: xlsxPath };
+  return { seeded: true, count: projects.length, file: xlsxPath, devSeed };
 }
 
 const db = dbm.openDb();
@@ -139,10 +149,27 @@ app.patch('/api/meta', (req, res) => {
   }
 });
 
-function getPmProjectsFromDb(db, pmName) {
-  return db.prepare('SELECT payload FROM projects').all()
-    .map(r => JSON.parse(r.payload))
-    .filter(p => p.pm_name === pmName);
+function getAllProjectsFromDb(database) {
+  return database.prepare('SELECT payload FROM projects').all()
+    .map(r => JSON.parse(r.payload));
+}
+
+function getPmProjectsFromDb(database, pmName) {
+  return getAllProjectsFromDb(database).filter(p => p.pm_name === pmName);
+}
+
+function writeSectorSnapshot(database, versionKey, sectorCode, projects, user, role) {
+  const subset = sw.filterProjectsBySector(projects, sectorCode);
+  const snap = {
+    version: versionKey,
+    time: new Date().toISOString(),
+    user: user || '系统',
+    role: role || 'system',
+    sector: sectorCode,
+    projects: subset
+  };
+  dbm.putSnapshot(database, versionKey, snap);
+  return snap;
 }
 
 /** 为 PM 创建填报基准快照（本轮编辑开始时的数据）；projectsOverride 由前端在首次打开填报页时传入 */
@@ -208,10 +235,11 @@ app.post('/api/pm-submissions/submit', (req, res) => {
       return;
     }
 
-    // 校验：板块未正式提交
-    const reportingSubmitted = dbm.getMeta(db, 'reportingSubmitted', false);
-    if (reportingSubmitted === true) {
-      res.status(409).json({ error: '板块已正式提交审批，PM 无法再次提交' });
+    const sectorFlows = dbm.getMeta(db, 'sectorFlows', {});
+    const pmSector = sw.resolvePmSector(db, pmName, getAllProjectsFromDb);
+    const sectorFlow = sw.getSectorFlow(sectorFlows, pmSector);
+    if (sectorFlow.reportingSubmitted === true) {
+      res.status(409).json({ error: '所属板块已正式提交审批，PM 无法再次提交' });
       return;
     }
 
@@ -288,6 +316,166 @@ app.get('/api/snapshots/:version', (req, res) => {
   }
 });
 
+app.post('/api/sectors/:code/submit-approval', (req, res) => {
+  try {
+    const sectorCode = req.params.code;
+    const { userName, role } = req.body || {};
+    const allProjects = getAllProjectsFromDb(db);
+    const sectorFlows = dbm.getMeta(db, 'sectorFlows', {});
+    const flow = sw.getSectorFlow(sectorFlows, sectorCode);
+    if (flow.reportingSubmitted) {
+      res.status(409).json({ error: '该板块已提交审批' });
+      return;
+    }
+    const versionKey = sw.sectorSnapshotKey('Draft', sectorCode);
+    const snap = writeSectorSnapshot(
+      db, versionKey, sectorCode, allProjects, userName, role || 'sector_admin'
+    );
+    sw.setSectorFlow(db, dbm.setMeta, dbm.getMeta, sectorCode, {
+      approvalStatus: 'draft',
+      reportingSubmitted: true
+    });
+    const registry = sw.getSectorRegistry(db, dbm.getMeta, allProjects);
+    const updatedFlows = dbm.getMeta(db, 'sectorFlows', {});
+    const companyFlow = sw.getCompanyFlow(dbm.getMeta, db);
+    sw.syncLegacyMetaFromFlows(db, dbm.getMeta, dbm.setMeta, updatedFlows, companyFlow, registry);
+    dbm.pushAudit(db, {
+      id: Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      timestamp: new Date().toISOString(),
+      projectNo: '—',
+      projectName: sectorCode,
+      fieldName: 'sector_submit',
+      fieldCN: '板块提交审批',
+      oldVal: '',
+      newVal: versionKey,
+      userId: role || 'sector_admin',
+      userName: userName || '板块管理员'
+    });
+    res.json({ ok: true, version: versionKey, snapshot: snap, state: dbm.getBootstrapState(db) });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message) });
+  }
+});
+
+app.post('/api/sectors/:code/advance-approval', (req, res) => {
+  try {
+    const sectorCode = req.params.code;
+    const { userName, role } = req.body || {};
+    const sectorFlows = dbm.getMeta(db, 'sectorFlows', {});
+    const flow = sw.getSectorFlow(sectorFlows, sectorCode);
+    const allProjects = getAllProjectsFromDb(db);
+    let nextStatus;
+    let snapLabel;
+    if (flow.approvalStatus === 'draft' && flow.reportingSubmitted) {
+      nextStatus = 'approve1';
+      snapLabel = 'Approve1';
+    } else if (flow.approvalStatus === 'approve1') {
+      nextStatus = 'approve2';
+      snapLabel = 'Approve2';
+    } else {
+      res.status(409).json({ error: '当前板块状态不可推进审批' });
+      return;
+    }
+    const versionKey = sw.sectorSnapshotKey(snapLabel, sectorCode);
+    const snap = writeSectorSnapshot(
+      db, versionKey, sectorCode, allProjects, userName, role
+    );
+    sw.setSectorFlow(db, dbm.setMeta, dbm.getMeta, sectorCode, { approvalStatus: nextStatus });
+    const updatedFlows = dbm.getMeta(db, 'sectorFlows', {});
+    const registry = sw.getSectorRegistry(db, dbm.getMeta, allProjects);
+    const companyFlow = sw.getCompanyFlow(dbm.getMeta, db);
+    sw.syncLegacyMetaFromFlows(db, dbm.getMeta, dbm.setMeta, updatedFlows, companyFlow, registry);
+    dbm.pushAudit(db, {
+      id: Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      timestamp: new Date().toISOString(),
+      projectNo: '—',
+      projectName: sectorCode,
+      fieldName: 'approvalStatus',
+      fieldCN: '板块审批',
+      oldVal: flow.approvalStatus,
+      newVal: nextStatus,
+      userId: role,
+      userName: userName
+    });
+    res.json({ ok: true, version: versionKey, snapshot: snap, state: dbm.getBootstrapState(db) });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message) });
+  }
+});
+
+app.post('/api/sectors/:code/reject-approval', (req, res) => {
+  try {
+    const sectorCode = req.params.code;
+    const { userName, role, reason } = req.body || {};
+    const flow = sw.getSectorFlow(dbm.getMeta(db, 'sectorFlows', {}), sectorCode);
+    sw.setSectorFlow(db, dbm.setMeta, dbm.getMeta, sectorCode, {
+      approvalStatus: 'draft',
+      reportingSubmitted: false
+    });
+    const allProjects = getAllProjectsFromDb(db);
+    const updatedFlows = dbm.getMeta(db, 'sectorFlows', {});
+    const registry = sw.getSectorRegistry(db, dbm.getMeta, allProjects);
+    const companyFlow = sw.getCompanyFlow(dbm.getMeta, db);
+    sw.syncLegacyMetaFromFlows(db, dbm.getMeta, dbm.setMeta, updatedFlows, companyFlow, registry);
+    dbm.pushAudit(db, {
+      id: Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      timestamp: new Date().toISOString(),
+      projectNo: '—',
+      projectName: sectorCode,
+      fieldName: 'reject_reason',
+      fieldCN: '驳回',
+      oldVal: flow.approvalStatus,
+      newVal: reason || '已驳回至板块管理员',
+      userId: role,
+      userName: userName
+    });
+    res.json({ ok: true, state: dbm.getBootstrapState(db) });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message) });
+  }
+});
+
+app.post('/api/company/archive', (req, res) => {
+  try {
+    const { userName, role } = req.body || {};
+    const allProjects = getAllProjectsFromDb(db);
+    const companyFlow = sw.getCompanyFlow(dbm.getMeta, db);
+    if (companyFlow.archiveStatus === 'final') {
+      res.status(409).json({ error: '已完成公司归档' });
+      return;
+    }
+    const snap = {
+      version: 'J版',
+      time: new Date().toISOString(),
+      user: userName || '系统管理员',
+      role: role || 'system_admin',
+      scope: 'company',
+      projects: JSON.parse(JSON.stringify(allProjects))
+    };
+    dbm.putSnapshot(db, 'J版', snap);
+    dbm.setMeta(db, 'companyFlow', {
+      archiveStatus: 'final',
+      archivedAt: new Date().toISOString()
+    });
+    dbm.setMeta(db, 'approvalStatus', 'final');
+    dbm.pushAudit(db, {
+      id: Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      timestamp: new Date().toISOString(),
+      projectNo: '—',
+      projectName: '全公司',
+      fieldName: 'archive',
+      fieldCN: '公司归档',
+      oldVal: 'pending_archive',
+      newVal: 'J版',
+      userId: role || 'system_admin',
+      userName: userName || '系统管理员'
+    });
+    res.json({ ok: true, snapshot: snap, state: dbm.getBootstrapState(db) });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message) });
+  }
+});
+
 app.post('/api/pm-submissions/receive', (req, res) => {
   try {
     const { pmName, reportingMonth, userName } = req.body || {};
@@ -356,8 +544,15 @@ function importProjectsFromInitXlsx(reportingMonth) {
     err.status = 400;
     throw err;
   }
-  dbm.replaceAllProjects(db, projects);
+  dbm.replaceAllProjects(db, normalizeProjects(projects));
   return { count: projects.length, file: path.basename(xlsxPath) };
+}
+
+function applyDevSeedAfterImport(reportingMonth) {
+  return seedDevEnvironment(db, modules, {
+    reportingMonth,
+    repickDemoNew: true
+  });
 }
 
 /** 基于当前库生成上一报告月对比快照（剔除部分项目，用于「新增项目」演示） */
@@ -371,6 +566,7 @@ app.post('/api/admin/seed-prior-month-snapshot', (req, res) => {
     const result = seedPriorMonthSnapshot(db, modules, {
       reportingMonth,
       removeCount,
+      removeProjectNos: body.removeProjectNos,
       user: body.userName || '系统',
       role: body.role || 'system_admin'
     });
@@ -392,7 +588,14 @@ app.post('/api/admin/reseed', (_req, res) => {
     dbm.setMeta(db, 'approvalStatus', 'draft');
     dbm.setMeta(db, 'reportingSubmitted', false);
     dbm.setMeta(db, 'pmSubmissions', {});
-    res.json({ ok: true, count, file });
+    dbm.setMeta(db, 'companyFlow', { archiveStatus: 'pending', archivedAt: null });
+    const registry = sw.DEFAULT_SECTOR_REGISTRY.slice();
+    const flows = {};
+    registry.forEach(code => { flows[code] = sw.defaultSectorFlowEntry(); });
+    dbm.setMeta(db, 'sectorFlows', flows);
+    dbm.setMeta(db, 'sectorRegistry', registry);
+    const devSeed = applyDevSeedAfterImport(reportingMonth);
+    res.json({ ok: true, count, file, devSeed });
   } catch (e) {
     res.status(e.status || 500).json({ error: String(e.message) });
   }
@@ -404,10 +607,12 @@ app.post('/api/admin/reset-dev', (_req, res) => {
     dbm.resetDevMeta(db);
     const reportingMonth = dbm.DEFAULT_PERIOD_CONFIG.reportingMonth;
     const { count, file } = importProjectsFromInitXlsx(reportingMonth);
+    const devSeed = applyDevSeedAfterImport(reportingMonth);
     res.json({
       ok: true,
       count,
       file,
+      devSeed,
       state: dbm.getBootstrapState(db)
     });
   } catch (e) {

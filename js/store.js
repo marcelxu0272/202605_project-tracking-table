@@ -26,6 +26,19 @@
     systemYear: 2026
   };
 
+  function isFinanceReviewReminder(config) {
+    const now = new Date();
+    const day = now.getDate();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const [ry, rm] = (config.reportingMonth || '2026-05').split('-').map(Number);
+    return (
+      (month === 1 ? year - 1 : year) === ry &&
+      (month === 1 ? 12 : month - 1) === rm &&
+      day <= 3
+    );
+  }
+
   function calcLockStatus(config) {
     const now = new Date();
     const day = now.getDate();
@@ -33,14 +46,14 @@
     const month = now.getMonth() + 1;
     const [ry, rm] = (config.reportingMonth || '2026-05').split('-').map(Number);
     const isCurrentMonth = (year === ry && month === rm);
-    const isPrevMonthFirst3 = (
-      (month === 1 ? year - 1 : year) === ry &&
-      (month === 1 ? 12 : month - 1) === rm &&
-      day <= 3
-    );
-    if (isPrevMonthFirst3) return 'finance_only';
     if (isCurrentMonth && day >= config.lockDay) return 'locked';
     return 'open';
+  }
+
+  function normalizeLockStatus(status, config) {
+    if (status === 'finance_only') return 'open';
+    if (status === 'open' || status === 'locked') return status;
+    return calcLockStatus(config || DEFAULT_CONFIG);
   }
 
   async function apiFetch(path, { method = 'GET', body } = {}) {
@@ -80,9 +93,14 @@
     reportingMonth: DEFAULT_CONFIG.reportingMonth,
     periodConfig: Object.assign({}, DEFAULT_CONFIG),
     lockStatus: calcLockStatus(DEFAULT_CONFIG),
+    financeReviewReminder: isFinanceReviewReminder(DEFAULT_CONFIG),
     approvalStatus: 'draft',
-    /** 本月板块已正式提交审批（Draft 快照已生成），填报页只读直至驳回或管理员重置 */
+    /** 公司归档段：pending | final（见 companyFlow） */
     reportingSubmitted: false,
+    sectorFlows: {},
+    sectorRegistry: [],
+    sectorNames: {},
+    companyFlow: { archiveStatus: 'pending', archivedAt: null },
     /** PM 提交状态 { '2026-05': { '何孝刚': { status, submittedAt, snapshotVersion, projectNos } } } */
     pmSubmissions: {},
     snapshots: {},
@@ -104,13 +122,53 @@
     Object.assign(Store.periodConfig, d.periodConfig || {});
     Store.reportingMonth = d.reportingMonth || Store.periodConfig.reportingMonth;
     Store.approvalStatus = d.approvalStatus || 'draft';
-    Store.lockStatus = d.lockStatus || calcLockStatus(Store.periodConfig);
-    Store.reportingSubmitted = d.reportingSubmitted === true
-      || !!(d.snapshots && d.snapshots.Draft);
+    Store.lockStatus = normalizeLockStatus(d.lockStatus, Store.periodConfig);
+    Store.financeReviewReminder = d.financeReviewReminder === true
+      || isFinanceReviewReminder(Store.periodConfig);
+    Store.sectorFlows = d.sectorFlows || {};
+    Store.sectorRegistry = d.sectorRegistry || [];
+    Store.sectorNames = d.sectorNames || {};
+    Store.companyFlow = d.companyFlow || { archiveStatus: 'pending', archivedAt: null };
+    Store.reportingSubmitted = d.reportingSubmitted === true;
     Store.pmSubmissions = d.pmSubmissions || {};
+    Store.sectorFlows = d.sectorFlows || {};
+    Store.sectorRegistry = d.sectorRegistry || [];
+    Store.sectorNames = d.sectorNames || Store.sectorNames || {};
+    Store.companyFlow = d.companyFlow || { archiveStatus: 'pending', archivedAt: null };
     Store.priorMonthSnapshotVersion = d.priorMonthSnapshotVersion || null;
     Store._hydrated = true;
   }
+
+  function applyStateFromApi(d) {
+    if (!d) return;
+    if (d.state) applyBootstrap(d.state);
+    else applyBootstrap(d);
+  }
+
+  Store.getSectorFlow = function (code) {
+    return SectorWorkflow.getSectorFlow(Store.sectorFlows, code || 'SAS520');
+  };
+
+  Store.listSectors = function () {
+    return SectorWorkflow.listSectors(Store);
+  };
+
+  Store.isSectorReportingSubmitted = function (code) {
+    return !!Store.getSectorFlow(code).reportingSubmitted;
+  };
+
+  Store.resolvePmSector = function (pmName) {
+    const hit = Store.projects.find(function (p) { return p.pm_name === pmName; });
+    return SectorWorkflow.projectSector(hit);
+  };
+
+  Store.allSectorsReadyForArchive = function () {
+    return SectorWorkflow.allSectorsReadyForArchive(Store.sectorFlows, Store.listSectors());
+  };
+
+  Store.isCompanyArchived = function () {
+    return Store.companyFlow && Store.companyFlow.archiveStatus === 'final';
+  };
 
   Store.init = async function () {
     const d = await apiFetch('/bootstrap');
@@ -188,17 +246,21 @@
     if (Store.auditLog.length > 500) Store.auditLog.splice(500);
   };
 
-  Store.createSnapshot = async function (versionName) {
+  Store.createSnapshot = async function (versionName, projectsOverride, extra) {
     const user = Store.currentUser || { name: '系统', role: 'system_admin' };
-    const snap = {
+    const projects = projectsOverride != null
+      ? projectsOverride
+      : JSON.parse(JSON.stringify(Store.projects));
+    const snap = Object.assign({
       version: versionName,
       time: new Date().toISOString(),
       user: user.name,
       role: user.role,
-      projects: JSON.parse(JSON.stringify(Store.projects))
-    };
+      projects: projects
+    }, extra || {});
     await apiFetch('/snapshots/' + encodeURIComponent(versionName), { method: 'PUT', body: snap });
     Vue.set(Store.snapshots, versionName, snap);
+    return snap;
   };
 
   /** 板块管理员：同步 PM 提交状态与 PM 快照（进入填报页时调用） */
@@ -206,9 +268,16 @@
     const d = await apiFetch('/bootstrap');
     if (!d) return;
     Store.pmSubmissions = d.pmSubmissions || {};
+    Store.sectorFlows = d.sectorFlows || Store.sectorFlows;
+    Store.sectorRegistry = d.sectorRegistry || Store.sectorRegistry;
+    Store.companyFlow = d.companyFlow || Store.companyFlow;
+    Store.approvalStatus = d.approvalStatus || Store.approvalStatus;
+    Store.reportingSubmitted = d.reportingSubmitted === true;
     const snaps = d.snapshots || {};
     Object.keys(snaps).forEach(function (k) {
-      if (k.indexOf('PM:') === 0) Vue.set(Store.snapshots, k, snaps[k]);
+      if (k.indexOf('PM:') === 0 || k.indexOf(':') > 0 || k === 'J版') {
+        Vue.set(Store.snapshots, k, snaps[k]);
+      }
     });
   };
 
@@ -225,49 +294,51 @@
     }
   };
 
-  Store.advanceApproval = async function () {
-    const flow = ['draft', 'approve1', 'approve2', 'final'];
-    const idx = flow.indexOf(Store.approvalStatus);
-    if (idx >= flow.length - 1) return;
-    const next = flow[idx + 1];
-    const versionMap = {
-      approve1: 'Approve1',
-      approve2: 'Approve2',
-      final:    'J版'
-    };
-    Store.approvalStatus = next;
-    await apiFetch('/meta', { method: 'PATCH', body: { approvalStatus: next } });
-    if (versionMap[next]) await Store.createSnapshot(versionMap[next]);
-    await Store.addAuditLog({
-      projectNo: '—',
-      projectName: '全局',
-      fieldName: 'approvalStatus',
-      fieldCN: '审批状态',
-      oldVal: flow[idx],
-      newVal: next,
-      userId: Store.currentUser && Store.currentUser.role,
-      userName: Store.currentUser && Store.currentUser.name
+  /** 板块总监/群主：推进本板块审批 */
+  Store.advanceSectorApproval = async function (sectorCode) {
+    const user = Store.currentUser || {};
+    const code = sectorCode || user.sector || 'S520';
+    const d = await apiFetch('/sectors/' + encodeURIComponent(code) + '/advance-approval', {
+      method: 'POST',
+      body: { userName: user.name, role: user.role }
     });
+    applyStateFromApi(d);
+    return d;
   };
 
-  Store.rejectApproval = async function () {
-    const prev = Store.approvalStatus;
-    Store.approvalStatus = 'draft';
-    Store.reportingSubmitted = false;
-    await apiFetch('/meta', {
-      method: 'PATCH',
-      body: { approvalStatus: 'draft', reportingSubmitted: false }
+  Store.rejectSectorApproval = async function (sectorCode, reason) {
+    const user = Store.currentUser || {};
+    const code = sectorCode || user.sector || 'S520';
+    const d = await apiFetch('/sectors/' + encodeURIComponent(code) + '/reject-approval', {
+      method: 'POST',
+      body: { userName: user.name, role: user.role, reason: reason || '' }
     });
-    await Store.addAuditLog({
-      projectNo: '—',
-      projectName: '全局',
-      fieldName: 'approvalStatus',
-      fieldCN: '审批状态',
-      oldVal: prev,
-      newVal: 'draft（已驳回至板块管理员）',
-      userId: Store.currentUser && Store.currentUser.role,
-      userName: Store.currentUser && Store.currentUser.name
+    applyStateFromApi(d);
+    return d;
+  };
+
+  /** 系统管理员：全公司归档（J版） */
+  Store.archiveCompany = async function () {
+    const user = Store.currentUser || {};
+    const d = await apiFetch('/company/archive', {
+      method: 'POST',
+      body: { userName: user.name, role: user.role }
     });
+    applyStateFromApi(d);
+    return d;
+  };
+
+  /** 兼容旧调用：按角色路由 */
+  Store.advanceApproval = async function (sectorCode) {
+    const user = Store.currentUser || {};
+    if (user.role === 'system_admin') {
+      return Store.archiveCompany();
+    }
+    return Store.advanceSectorApproval(sectorCode || user.sector);
+  };
+
+  Store.rejectApproval = async function (sectorCode) {
+    return Store.rejectSectorApproval(sectorCode);
   };
 
   /** 获取当前报告月某 PM 的提交记录 */
@@ -284,7 +355,8 @@
 
   /** 该 PM 是否可提交（板块未正式提交 且 自身不处于锁定中） */
   Store.canPmSubmit = function (pmName) {
-    if (Store.reportingSubmitted) return false;
+    const sector = Store.resolvePmSector(pmName);
+    if (Store.isSectorReportingSubmitted(sector)) return false;
     return !Store.isPmLocked(pmName);
   };
 
@@ -392,30 +464,27 @@
     }
   };
 
-  /** 板块管理员/系统管理员：正式提交审批，生成全局 Draft 快照 */
+  /** 板块管理员：提交本板块审批，生成 Draft:{sector} */
   Store.submitForApproval = async function () {
-    await Store.createSnapshot('Draft');
-    Store.approvalStatus = 'draft';
-    Store.reportingSubmitted = true;
-    await apiFetch('/meta', {
-      method: 'PATCH',
-      body: { approvalStatus: 'draft', reportingSubmitted: true }
+    const user = Store.currentUser || {};
+    const code = user.sector || 'S520';
+    const d = await apiFetch('/sectors/' + encodeURIComponent(code) + '/submit-approval', {
+      method: 'POST',
+      body: { userName: user.name, role: user.role }
     });
-    await Store.addAuditLog({
-      projectNo: '—',
-      projectName: '全局',
-      fieldName: 'submit',
-      fieldCN: '提交审批',
-      oldVal: '',
-      newVal: '已提交，生成Draft快照',
-      userId: Store.currentUser && Store.currentUser.role,
-      userName: Store.currentUser && Store.currentUser.name
-    });
+    applyStateFromApi(d);
+    return d;
   };
 
   Store.setLockStatus = async function (status) {
-    Store.lockStatus = status;
-    await apiFetch('/meta', { method: 'PATCH', body: { lockStatus: status } });
+    const normalized = normalizeLockStatus(status, Store.periodConfig);
+    Store.lockStatus = normalized;
+    Store.financeReviewReminder = isFinanceReviewReminder(Store.periodConfig);
+    await apiFetch('/meta', { method: 'PATCH', body: { lockStatus: normalized } });
+  };
+
+  Store.refreshFinanceReviewReminder = function () {
+    Store.financeReviewReminder = isFinanceReviewReminder(Store.periodConfig);
   };
 
   Store.savePeriodConfig = async function (cfg) {

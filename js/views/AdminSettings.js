@@ -40,8 +40,8 @@
       user()          { return Store.currentUser || {}; },
       isAdmin()       { return this.user.role === 'system_admin'; },
       lockStatus()    { return Store.lockStatus; },
-      lockLabel()     { return { open: '填报中', finance_only: '财务专属期', locked: '已锁定' }[this.lockStatus] || '—'; },
-      lockTagType()   { return { open: 'success', finance_only: 'warning', locked: 'danger' }[this.lockStatus] || 'info'; },
+      lockLabel()     { return { open: '填报中', locked: '已锁定' }[this.lockStatus] || '—'; },
+      lockTagType()   { return { open: 'success', locked: 'danger' }[this.lockStatus] || 'info'; },
       projectCount()  { return Store.projects.length; },
       auditCount()    { return Store.auditLog.length; }
     },
@@ -182,11 +182,6 @@
             .finally(function () { self.priorMonthSeedLoading = false; });
         }).catch(function () {});
       },
-      setFinanceOnlyPeriod() {
-        Store.setLockStatus('finance_only')
-          .then(() => { this.$message.info('已切换为财务专属期'); })
-          .catch(e => { this.$message.error('操作失败：' + (e.message || e)); });
-      },
       roleLabel(role) { return ROLE_LABELS[role] || role; }
     },
     template: `
@@ -262,16 +257,12 @@
                   :disabled="!isAdmin || lockStatus === 'open'"
                   @click="handleUnlock"
                 >解除锁定</el-button>
-                <el-button
-                  size="small"
-                  icon="el-icon-warning"
-                  :disabled="!isAdmin || lockStatus === 'finance_only'"
-                  @click="setFinanceOnlyPeriod"
-                >财务专属期</el-button>
+              </div>
+              <div v-if="store.financeReviewReminder" style="margin-top:10px;font-size:12px;color:#b45309;line-height:1.6;">
+                当前处于<strong>财务核查提醒期</strong>（报告月次月 1–3 日）：提醒财务核对开票/回款等数据；填报窗口仍按「填报中/已锁定」规则开放，财务角色始终只读。
               </div>
               <div style="margin-top:12px;font-size:12px;color:#94a3b8;line-height:1.8;">
-                锁定后除管理员外所有人无法编辑，操作全程留痕。<br>
-                财务专属期：仅财务审核角色可编辑开票/回款列。
+                锁定后除管理员外所有人无法编辑，操作全程留痕。
               </div>
             </div>
           </div>

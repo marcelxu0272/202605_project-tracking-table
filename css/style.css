@@ -12,6 +12,8 @@
   --color-editable-header-bg:     #fef9c3;
   --color-editable-header-text:   #92400e;
   --color-editable-header-sub:    #b45309;
+  /* 可编辑列数据格（浅黄，与变更浅橙区分） */
+  --color-editable-cell-bg:       #fefce8;
   --color-warning:      #f59e0b;
   --color-warning-bg:   rgba(245, 158, 11, 0.1);
   /* 本月有变更字段（与 Luckysheet 单元格高亮一致） */
@@ -424,10 +426,18 @@ body {
   top: 0; left: 0; right: 0; bottom: 0;
 }
 
-/* ── 可编辑列表头（HTML 表格） ─────────────────────────── */
+/* ── 可编辑列（HTML 表格：表头 + 数据格整列） ───────────── */
 .editor-table th.editor-th-editable {
   background: var(--color-editable-header-bg) !important;
   color: var(--color-editable-header-text) !important;
+}
+.editor-table td.field-editable {
+  background: var(--color-editable-cell-bg) !important;
+}
+/* 可编辑列底色高于新增行绿底；变更格仍最高 */
+.editor-table td.new-project-cell.field-editable:not(.field-changed),
+.editor-table tr.row-new-project td.field-editable:not(.field-changed) {
+  background: var(--color-editable-cell-bg) !important;
 }
 
 /* ── 历史月份锁定（报告月之前的月度完成/开票/回款） ─────── */
@@ -438,8 +448,8 @@ body {
 
 /* ── Diff 高亮 ─────────────────────────────────────────── */
 .diff-new-row,
-.editor-table tr.row-new-project td,
-.editor-table td.new-project-cell {
+.editor-table tr.row-new-project td:not(.field-editable):not(.field-changed),
+.editor-table td.new-project-cell:not(.field-editable):not(.field-changed) {
   background: var(--color-new-project-bg) !important;
 }
 .diff-changed-cell,
@@ -504,10 +514,11 @@ body {
   border: 1px solid var(--color-border);
 }
 .editor-legend-swatch--editable {
-  width: 12px;
-  height: 12px;
-  background: var(--color-editable-header-bg);
+  width: 28px;
+  height: 18px;
+  background: var(--color-editable-cell-bg);
   border: 1px solid #fde68a;
+  box-sizing: border-box;
 }
 
 /* ── 填报工具栏 ────────────────────────────────────────── */
@@ -695,6 +706,21 @@ body {
   display: flex;
   flex-direction: column;
 }
+.approval-review-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: var(--color-card);
+  border-bottom: 1px solid var(--color-border);
+}
+.approval-review-toolbar-hint {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-left: auto;
+}
 .approval-review-sheet .editor-diff-hint {
   flex-shrink: 0;
 }
@@ -828,3 +854,179 @@ body {
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
   .charts-grid { grid-template-columns: 1fr; }
 }
+
+/* ── 系统管理员：各板块进度底栏（对齐板块管理员待接收 PM 样式） ── */
+.system-admin-sector-dock {
+  padding: 10px 16px;
+  background: #fffbeb;
+  border-top: 2px solid #f59e0b;
+  flex-shrink: 0;
+}
+.system-admin-sector-dock.is-collapsed {
+  padding-bottom: 6px;
+}
+.system-admin-sector-dock-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.system-admin-sector-dock.is-collapsed .system-admin-sector-dock-head {
+  margin-bottom: 0;
+}
+.system-admin-sector-dock-toggle {
+  margin-left: auto;
+  padding: 0 6px !important;
+  color: #92400e !important;
+  font-size: 12px;
+}
+.system-admin-sector-dock-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #92400e;
+}
+.system-admin-sector-dock-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+.system-admin-sector-card {
+  background: #fff;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 8px 12px;
+  min-width: 220px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.system-admin-sector-card.is-selected {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25);
+}
+.system-admin-sector-card-code {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+  flex-shrink: 0;
+  min-width: 52px;
+  white-space: nowrap;
+}
+.system-admin-sector-card-stats {
+  flex: 1;
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.4;
+}
+.system-admin-sector-card-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* ── 系统管理员：审批页十二板块并行流程 ── */
+.sysadmin-approval-layout {
+  display: block;
+  padding: 20px;
+}
+.sysadmin-approval-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.sysadmin-company-card {
+  margin-bottom: 0;
+}
+.sysadmin-company-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.sysadmin-company-desc {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+.sysadmin-company-actions {
+  padding-top: 4px;
+}
+.sysadmin-sector-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.sysadmin-sector-flow-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.sysadmin-sector-flow-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.sysadmin-sector-flow-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.35;
+}
+.sysadmin-sector-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sysadmin-sector-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.sysadmin-sector-step-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+  background: #f1f5f9;
+  color: #94a3b8;
+}
+.sysadmin-sector-step-dot.done {
+  background: #d1fae5;
+  color: #059669;
+}
+.sysadmin-sector-step-dot.current {
+  background: #fef3c7;
+  color: #d97706;
+}
+.sysadmin-sector-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.sysadmin-sector-step-name {
+  color: #334155;
+  font-weight: 500;
+}
+.sysadmin-sector-step-status {
+  font-size: 11px;
+  color: #94a3b8;
+}
+.sysadmin-sector-step-status.is-done { color: #059669; }
+.sysadmin-sector-step-status.is-current { color: #d97706; }

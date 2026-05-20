@@ -1,7 +1,7 @@
 /**
  * Approval.js — 审批流程页
- * 板块总监 / 项目群群主：时间轴 + 只读 Luckysheet（新增与变更项目）
- * 其他角色：时间轴 + 版本快照 + 差异对比
+ * 板块总监 / 项目群群主：时间轴 + Luckysheet（本板块全部项目、筛选、待办节点内可编辑）
+ * 其他角色：时间轴 + 版本快照；系统管理员无版本差异对比与各板块进度卡片
  */
 (function (window) {
   'use strict';
@@ -38,7 +38,7 @@
       key: 'final',
       label: 'J版',
       title: '管理员确认归档',
-      desc: '系统管理员最终核对确认，生成 J 版（正式归档版）快照',
+      desc: '全部板块 Approve2 后，系统管理员执行公司归档 -> 生成全局 J版 快照（含全部项目）',
       role: ['system_admin'],
       action: '归档确认',
       icon: '4'
@@ -52,7 +52,8 @@
   window.ApprovalView = {
     name: 'Approval',
     components: {
-      ApprovalReviewSheet: window.ApprovalReviewSheet
+      ApprovalReviewSheet: window.ApprovalReviewSheet,
+      SystemAdminApprovalBoard: window.SystemAdminApprovalBoard
     },
     data() {
       return {
@@ -71,43 +72,75 @@
       isApprovalReviewer() {
         return APPROVAL_REVIEW_ROLES.indexOf(this.user.role) >= 0;
       },
-      currentStatus()  { return Store.approvalStatus; },
-      currentIdx()     { return FLOW_IDX[this.currentStatus] || 0; },
+      isSystemAdmin() { return this.user.role === 'system_admin'; },
+      reviewSector() { return this.user.sector || 'S520'; },
+      sectorFlow() { return Store.getSectorFlow(this.reviewSector); },
+      currentStatus() {
+        if (this.isSystemAdmin) {
+          return Store.isCompanyArchived() ? 'final' : 'pending_archive';
+        }
+        return this.sectorFlow.approvalStatus || 'draft';
+      },
+      sectorReportingSubmitted() { return !!this.sectorFlow.reportingSubmitted; },
+      currentIdx() {
+        if (this.isSystemAdmin) return Store.isCompanyArchived() ? 3 : 2;
+        return FLOW_IDX[this.currentStatus] || 0;
+      },
       snapshots()      { return Store.snapshots; },
       snapshotList()   {
         return Object.values(this.snapshots)
           .sort((a, b) => new Date(b.time) - new Date(a.time));
       },
       canApprove() {
-        const next = FLOW[this.currentIdx + 1];
-        if (!next) return false;
-        if (this.currentStatus === 'draft' && !Store.reportingSubmitted) return false;
-        return next.role.includes(this.user.role) || this.user.role === 'system_admin';
+        const role = this.user.role;
+        if (role === 'system_admin') {
+          return !Store.isCompanyArchived();
+        }
+        const sf = this.sectorFlow;
+        if (role === 'sector_director') {
+          return sf.approvalStatus === 'draft' && sf.reportingSubmitted;
+        }
+        if (role === 'group_leader') {
+          return sf.approvalStatus === 'approve1';
+        }
+        return false;
       },
       canReject() {
-        return this.canApprove;
+        const role = this.user.role;
+        const sf = this.sectorFlow;
+        if (role === 'sector_director') {
+          return sf.reportingSubmitted && sf.approvalStatus === 'draft';
+        }
+        if (role === 'group_leader') return sf.approvalStatus === 'approve1';
+        return false;
       },
       nextActionLabel() {
-        const next = FLOW[this.currentIdx + 1];
-        return next ? next.action : '';
+        if (this.user.role === 'system_admin') return '归档确认';
+        if (this.user.role === 'sector_director') return '初审通过';
+        if (this.user.role === 'group_leader') return '复审通过';
+        return '';
       },
       versionOptions() {
         return Object.keys(this.snapshots).map(k => ({ label: k, value: k }));
       },
-      /** 当前进行中的流程节点下标（approvalStatus 表示上一节点已完成） */
       activeFlowIdx() {
+        if (this.isSystemAdmin) {
+          if (Store.isCompanyArchived()) return -1;
+          return 3;
+        }
         const s = this.currentStatus;
-        if (s === 'final') return -1;
-        if (s === 'draft') return Store.reportingSubmitted ? 1 : 0;
+        if (s === 'approve2') return -1;
         if (s === 'approve1') return 2;
-        if (s === 'approve2') return 3;
+        if (s === 'draft') return this.sectorReportingSubmitted ? 1 : 0;
         return 0;
       }
     },
     methods: {
       nodeStatus(idx) {
-        if (this.currentStatus === 'final') return 'done';
+        if (this.isSystemAdmin && idx === 3 && Store.isCompanyArchived()) return 'done';
+        if (!this.isSystemAdmin && this.currentStatus === 'approve2' && idx <= 2) return 'done';
         const active = this.activeFlowIdx;
+        if (active < 0) return 'done';
         if (idx < active) return 'done';
         if (idx === active) return 'current';
         return 'pending';
@@ -135,8 +168,10 @@
           '审批确认', { confirmButtonText: '确认', cancelButtonText: '取消', type: 'warning' }
         ).then(() => {
           this.approveLoading = true;
-          Store.advanceApproval()
-            .then(() => {
+          const p = this.user.role === 'system_admin'
+            ? Store.archiveCompany()
+            : Store.advanceSectorApproval(this.reviewSector);
+          p.then(() => {
               this.$message.success('审批操作已完成');
             })
             .catch(e => { this.$message.error('操作失败：' + (e.message || e)); })
@@ -150,7 +185,7 @@
           inputPlaceholder: '请输入驳回原因，板块管理员可修改后重新提交…'
         }).then(({ value }) => {
           this.rejectLoading = true;
-          Store.rejectApproval()
+          Store.rejectSectorApproval(this.reviewSector, value)
             .then(() => {
               if (value) {
                 return Store.addAuditLog({
@@ -188,40 +223,12 @@
         const left  = (this.snapshots[this.diffLeftVersion]  || {}).projects || [];
         const right = (this.snapshots[this.diffRightVersion] || {}).projects || [];
         const fields = FieldConfig.buildFieldConfig();
-        const results = [];
-
-        right.forEach(rp => {
-          const lp = left.find(p => p.project_no === rp.project_no);
-          const rowDiffs = [];
-          if (!lp) {
-            rowDiffs.push({ type: 'add', field: '项目', leftVal: '—', rightVal: rp.project_name });
-          } else {
-            const lFlat = FieldConfig.arraysToFlat(lp);
-            const rFlat = FieldConfig.arraysToFlat(rp);
-            fields.slice(0, 40).forEach(f => {
-              const key = FieldConfig.COL_TO_KEY[f.col];
-              const lv = lFlat[key];
-              const rv = rFlat[key];
-              if (String(lv) !== String(rv)) {
-                rowDiffs.push({
-                  type: 'change',
-                  field: f.name_cn,
-                  leftVal:  Formatters.formatByType(lv, f.data_type),
-                  rightVal: Formatters.formatByType(rv, f.data_type)
-                });
-              }
-            });
-          }
-          if (rowDiffs.length > 0) {
-            results.push({ projectNo: rp.project_no, projectName: rp.project_name, diffs: rowDiffs });
-          }
-        });
-        this.diffResults = results;
+        this.diffResults = DiffUtils.diffProjectSets(left, right, fields.slice(0, 40));
       }
     },
     template: `
       <div :class="isApprovalReviewer ? 'approval-reviewer-page' : ''" style="height:100%;">
-        <!-- 板块总监 / 项目群群主：精简审批 + 只读 Luckysheet -->
+        <!-- 板块总监 / 项目群群主：流程进度 + 本板块 Luckysheet -->
         <template v-if="isApprovalReviewer">
           <div class="approval-layout approval-reviewer-layout">
             <div>
@@ -268,11 +275,11 @@
                   <i class="el-icon-close"></i> 驳回
                 </el-button>
                 <div v-if="!canApprove && !canReject" style="font-size:12px;color:#94a3b8;padding:4px 0;">
-                  <template v-if="currentStatus === 'draft' && !store.reportingSubmitted">
-                    等待板块管理员提交审批
+                  <template v-if="currentStatus === 'draft' && !sectorReportingSubmitted">
+                    等待本板块管理员提交审批
                   </template>
-                  <template v-else-if="currentStatus === 'final'">
-                    审批已归档
+                  <template v-else-if="currentStatus === 'approve2'">
+                    本板块已完成审批
                   </template>
                   <template v-else>
                     当前无待您处理的审批节点
@@ -283,6 +290,11 @@
             </div>
             <approval-review-sheet></approval-review-sheet>
           </div>
+        </template>
+
+        <!-- 系统管理员：十二板块并行审批 -->
+        <template v-else-if="isSystemAdmin">
+          <system-admin-approval-board></system-admin-approval-board>
         </template>
 
         <!-- 其他角色：原时间轴 + 快照列表 + 版本对比 -->
@@ -308,9 +320,9 @@
                       <el-tag size="mini" :type="nodeStatusTagType(idx)">{{ nodeStatusLabel(idx) }}</el-tag>
                     </div>
                     <div class="timeline-sub">{{ node.desc }}</div>
-                    <div v-if="snapshots[node.label]" style="margin-top:6px;">
+                    <div v-if="node.key === 'final' && snapshots['J版']" style="margin-top:6px;">
                       <el-tag size="mini" type="success">
-                        {{ snapshots[node.label].user }} · {{ formatTime(snapshots[node.label].time) }}
+                        {{ snapshots['J版'].user }} · {{ formatTime(snapshots['J版'].time) }}
                       </el-tag>
                     </div>
                   </div>
@@ -328,7 +340,7 @@
                     <i class="el-icon-check"></i> {{ nextActionLabel }}
                   </el-button>
                   <el-button
-                    v-if="canReject"
+                    v-if="canReject && !isSystemAdmin"
                     type="danger"
                     size="small"
                     plain
@@ -338,13 +350,18 @@
                     <i class="el-icon-close"></i> 驳回
                   </el-button>
                   <div v-if="!canApprove && !canReject" style="font-size:12px;color:#94a3b8;padding:6px 0;">
-                    当前角色无审批权限
+                    <template v-if="isSystemAdmin && Store.isCompanyArchived()">
+                      已完成公司归档
+                    </template>
+                    <template v-else>
+                      当前角色无审批权限
+                    </template>
                   </div>
                 </div>
               </div>
 
               <el-button
-                v-if="snapshotList.length >= 2"
+                v-if="snapshotList.length >= 2 && !isSystemAdmin"
                 style="margin-top:12px;width:100%;"
                 size="small"
                 icon="el-icon-view"

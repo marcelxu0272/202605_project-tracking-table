@@ -62,12 +62,18 @@
 
   window.ProjectEditorView = {
     name: 'ProjectEditor',
+    components: (function () {
+      var c = {};
+      if (window.SystemAdminSectorDock) c.SystemAdminSectorDock = window.SystemAdminSectorDock;
+      return c;
+    })(),
     data() {
       return {
         luckysheetReady: false,
         viewMode: 'all',       // 'all' | 'new_only' | 'changed_only'
         submitLoading: false,
         saveLoading: false,
+        archiveLoading: false,
         importLoading: false,
         exportLoading: false,
         showDiffHint: true,
@@ -92,7 +98,7 @@
         pmDiffColRight: '提交值',
         _pmBaselineCaptured: false,
         _pmBaselinePromise: null,
-        _cellSaveChain: null
+        _cellSaveChain: null,
       };
     },
     mounted() {
@@ -126,6 +132,8 @@
       };
       if (Store.currentUser && Store.currentUser.role === 'sector_admin') {
         Store.syncPmWorkflow().then(afterData).catch(afterData);
+      } else if (Store.currentUser && Store.currentUser.role === 'system_admin') {
+        Store.init().then(afterData).catch(afterData);
       } else {
         afterData();
       }
@@ -240,10 +248,29 @@
         return cell;
       },
 
+      /** 金额列：Luckysheet 数字类型 + 右对齐 */
+      applyLuckysheetAmountColumnStyle(cell, field) {
+        if (!cell || !field || field.data_type !== '金额') return cell;
+        cell.ht = field.luckysheetHt || '2';
+        cell.ct = field.luckysheetCt || { fa: '#,##0.00', t: 'n' };
+        if (cell.v != null && cell.v !== '') {
+          const n = Number(String(cell.v).replace(/,/g, ''));
+          if (!isNaN(n)) cell.v = n;
+        }
+        return cell;
+      },
+
+      isLuckysheetAmountInputValid(raw) {
+        if (raw == null || raw === '') return true;
+        const s = String(raw).trim().replace(/,/g, '');
+        if (s === '' || s === '-' || s === '.') return false;
+        return !isNaN(Number(s));
+      },
+
       buildLuckysheetAuthority() {
         return {
           sheet: 1,
-          hintText: '该单元格不可编辑（只读列、历史月份或当前无权限）',
+          hintText: '该单元格不可编辑（只读列、历史/当月开票回款或当前无权限）',
           selectLockedCells: 1,
           selectunLockedCells: 1,
           formatCells: 0,
@@ -270,6 +297,13 @@
         return false;
       },
 
+      isEditableDataCell(project, field) {
+        if (!this.canEditField(field) || !this.canEdit) return false;
+        if (window.ChangeMeta && ChangeMeta.hasFieldChangeMarkup(project, field)) return false;
+        if (this.isFieldChanged(project, field)) return false;
+        return true;
+      },
+
       cellClass(project, field) {
         const cls = [];
         if (!this.canEditField(field)) cls.push('readonly-cell');
@@ -281,14 +315,37 @@
           ? ChangeMeta.hasFieldChangeMarkup(project, field)
           : this.isFieldChanged(project, field)) {
           cls.push('field-changed');
+        } else if (this.isEditableDataCell(project, field)) {
+          cls.push('field-editable');
         }
         return cls.join(' ');
       },
 
+      cellTdStyle(project, field) {
+        const base = {
+          padding: '4px 8px',
+          border: '1px solid #e2e8f0',
+          textAlign: field.data_type === '金额' || field.data_type === '比率' ? 'right' : 'left',
+          minWidth: field.colWidth + 'px',
+          position: 'relative',
+          whiteSpace: field.data_type === '文本' ? 'normal' : 'nowrap',
+          maxWidth: field.data_type === '文本' ? '200px' : 'none',
+          overflow: field.data_type === '文本' ? 'hidden' : 'visible',
+          textOverflow: field.data_type === '文本' ? 'ellipsis' : 'clip',
+          fontVariantNumeric: field.data_type === '金额' ? 'tabular-nums' : 'normal'
+        };
+        if (this.isEditableDataCell(project, field)) {
+          return base;
+        }
+        if (field.source_type !== 'manual_input') {
+          base.background = '#f8fafc';
+        }
+        return base;
+      },
+
       cellChangeTitle(project, field) {
         if (!window.ChangeMeta || !ChangeMeta.hasFieldChangeMarkup(project, field)) return '';
-        const meta = ChangeMeta.resolveFieldChangeMeta(project, field, Store.auditLog);
-        return ChangeMeta.formatChangeComment(meta, field);
+        return ChangeMeta.formatChangeComment(project, field, Store.auditLog);
       },
       getCellValue(project, field) {
         const flat = FieldConfig.arraysToFlat(project);
@@ -333,6 +390,7 @@
           if (!row) continue;
           const project = this.filteredProjects[i];
           if (!project) continue;
+          const storeProject = this.getStoreProject(project.project_no) || project;
           for (let c = 0; c < this.tableFields.length; c++) {
             const field = this.tableFields[c];
             if (!field || !this.canEditField(field) || !this.canEdit) continue;
@@ -340,7 +398,7 @@
             const cell = row[c];
             const newVal = this.coerceFieldValue(this.extractLuckysheetInput(cell), field);
             const key = FieldConfig.COL_TO_KEY[field.col];
-            const oldFlat = FieldConfig.arraysToFlat(project);
+            const oldFlat = FieldConfig.arraysToFlat(storeProject);
             const oldVal = oldFlat[key];
             if (newVal === oldVal || String(newVal) === String(oldVal)) continue;
             await this.handleCellEdit(project, field, newVal, {
@@ -371,6 +429,31 @@
         } finally {
           this.saveLoading = false;
         }
+      },
+
+      handleSubmitArchive() {
+        if (!this.canShowArchiveButton) return;
+        if (Store.isCompanyArchived()) {
+          this.$message.info('已完成公司归档');
+          return;
+        }
+        const self = this;
+        this.$confirm(
+          '确认全公司归档？将生成 J版 快照（含全部项目）。',
+          '提交归档',
+          { confirmButtonText: '确认归档', cancelButtonText: '取消', type: 'warning' }
+        ).then(function () {
+          self.archiveLoading = true;
+          return Store.archiveCompany();
+        }).then(function () {
+          self.$message.success('已生成 J版 全公司归档快照');
+        }).catch(function (e) {
+          if (e !== 'cancel' && e !== 'close') {
+            self.$message.error('归档失败：' + (e && e.message ? e.message : e));
+          }
+        }).finally(function () {
+          self.archiveLoading = false;
+        });
       },
 
       onImportFileChange(e) {
@@ -574,13 +657,16 @@
           flat[key] = newVal;
           const updated = FieldConfig.flatToArrays(flat);
           const tracking = window.ChangeMeta
-            ? ChangeMeta.mergeChangeTracking(storeProj, project, updated)
+            ? ChangeMeta.mergeChangeTracking(storeProj)
             : { _field_change_log: {}, _changed_fields: [] };
           const changeLog = tracking._field_change_log;
           if (window.ChangeMeta) {
             ChangeMeta.recordFieldChangeLog(
               { _field_change_log: changeLog }, field, oldVal, newVal, self.user
             );
+            Object.keys(changeLog).forEach(function (col) {
+              changeLog[col] = ChangeMeta.dedupeChangeLogList(changeLog[col]);
+            });
           }
           const recomputed = FormulaEngine.compute(updated, self.monthIdx);
           recomputed._field_change_log = changeLog;
@@ -677,40 +763,11 @@
       },
 
       diffProjectSets(leftProjects, rightProjects, compareFields) {
-        const results = [];
-        const rightList = rightProjects || [];
-        const leftList = leftProjects || [];
-        rightList.forEach(function (rp) {
-          const lp = leftList.find(function (p) { return p.project_no === rp.project_no; });
-          const rowDiffs = [];
-          if (!lp) {
-            rowDiffs.push({ field: '项目', leftVal: '—', rightVal: rp.project_name || '—' });
-          } else {
-            const lFlat = FieldConfig.arraysToFlat(lp);
-            const rFlat = FieldConfig.arraysToFlat(rp);
-            compareFields.forEach(function (f) {
-              const key = FieldConfig.COL_TO_KEY[f.col];
-              if (!key) return;
-              const lv = lFlat[key];
-              const rv = rFlat[key];
-              if (this.fieldValuesDiffer(lv, rv, f.data_type)) {
-                rowDiffs.push({
-                  field: f.name_cn,
-                  leftVal: Formatters.formatByType(lv, f.data_type),
-                  rightVal: Formatters.formatByType(rv, f.data_type)
-                });
-              }
-            }.bind(this));
-          }
-          if (rowDiffs.length > 0) {
-            results.push({
-              projectNo: rp.project_no,
-              projectName: rp.project_name,
-              diffs: rowDiffs
-            });
-          }
-        }.bind(this));
-        return results;
+        return DiffUtils.diffProjectSets(leftProjects, rightProjects, compareFields);
+      },
+      onCompanyArchived() {
+        this.viewingVersion = 'J版';
+        this.handleViewingVersionChange('J版');
       },
 
       // 板块管理员：查看某 PM 本轮填报变更
@@ -975,8 +1032,47 @@
        * Luckysheet 公式链：先数据行公式，再小计 SUBTOTAL / 合计 SUM（官方要求否则公式不生效）
        * https://dream-num.github.io/LuckysheetDocs/zh/guide/sheet.html#calcchain
        */
-      /** celldata → 二维 data，避免 Luckysheet mergeCalculation 访问 data[r] 为 undefined */
-      buildLuckysheetDataMatrix(celldata, rowCount, colCount) {
+      /** 清除 Luckysheet gridKey 本地缓存，避免旧表结构与 merge 配置触发 mergeCalculation 报错 */
+      clearLuckysheetLocalCache(gridKey) {
+        try {
+          if (!gridKey || !window.localStorage) return;
+          const keys = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.indexOf(gridKey) >= 0) keys.push(k);
+          }
+          keys.forEach(function (k) { localStorage.removeItem(k); });
+        } catch (e) { /* ignore */ }
+      },
+
+      /** 为合并区域从属格写入 mc，供 mergeCalculation 读取 */
+      applyLuckysheetMergeMc(data, merge) {
+        if (!data || !merge) return;
+        Object.keys(merge).forEach(function (key) {
+          const m = merge[key];
+          if (!m || m.r == null || m.c == null) return;
+          const r0 = m.r;
+          const c0 = m.c;
+          const rs = m.rs || 1;
+          const cs = m.cs || 1;
+          for (let dr = 0; dr < rs; dr++) {
+            for (let dc = 0; dc < cs; dc++) {
+              const r = r0 + dr;
+              const c = c0 + dc;
+              if (r < 0 || r >= data.length || c < 0) continue;
+              if (!data[r]) data[r] = [];
+              if (dr === 0 && dc === 0) {
+                if (!data[r][c]) data[r][c] = {};
+                continue;
+              }
+              data[r][c] = { mc: { r: r0, c: c0 } };
+            }
+          }
+        });
+      },
+
+      /** celldata → 二维 data，避免 Luckysheet mergeCalculation 访问 data[r][c] 为 undefined */
+      buildLuckysheetDataMatrix(celldata, rowCount, colCount, merge) {
         const data = [];
         for (let r = 0; r < rowCount; r++) {
           const row = [];
@@ -990,6 +1086,7 @@
             data[item.r][item.c] = item.v;
           }
         });
+        this.applyLuckysheetMergeMc(data, merge);
         return data;
       },
 
@@ -1005,7 +1102,7 @@
           const entry = {
             r: item.r,
             c: item.c,
-            index: String(sheetIdx),
+            index: sheetIdx,
             func: [true, v.v != null && v.v !== '' ? v.v : 0, v.f],
             color: 'w',
             parent: null,
@@ -1108,6 +1205,9 @@
           cell.v = val != null && val !== '' ? val : '';
           cell.m = cell.v !== '' ? String(cell.v) : '';
         }
+        if (field.data_type === '金额') {
+          this.applyLuckysheetAmountColumnStyle(cell, field);
+        }
         if (readonly) {
           cell.bg = bgTint || '#f8fafc';
         } else if (bgTint) {
@@ -1124,6 +1224,11 @@
           return ChangeMeta.CHANGED_FIELD_STYLE.bg;
         }
         if (this.isFieldChanged(project, field)) return '#fff7ed';
+        if (!readonly && this.canEditField(field) && this.canEdit) {
+          return (window.ChangeMeta && ChangeMeta.EDITABLE_FIELD_STYLE)
+            ? ChangeMeta.EDITABLE_FIELD_STYLE.bg
+            : '#fefce8';
+        }
         if (project._added_this_month) {
           return (window.ProjectMonthDiff && ProjectMonthDiff.NEW_PROJECT_BG) || '#d9e7d8';
         }
@@ -1152,7 +1257,13 @@
           cell.m = cell.v !== '' ? String(cell.v) : '';
         }
         cell.bg = bg || '#f8fafc';
-        cell.ht = field.data_type === '金额' || field.data_type === '比率' ? '2' : '0';
+        if (field.data_type === '金额') {
+          this.applyLuckysheetAmountColumnStyle(cell, field);
+        } else if (field.data_type === '比率') {
+          cell.ht = '2';
+        } else {
+          cell.ht = '0';
+        }
         return this.lsApplyCellLock(cell, true);
       },
 
@@ -1170,8 +1281,7 @@
 
       applyLuckysheetChangeComment(cell, project, field) {
         if (!window.ChangeMeta || !ChangeMeta.hasFieldChangeMarkup(project, field)) return cell;
-        const meta = ChangeMeta.resolveFieldChangeMeta(project, field, Store.auditLog);
-        const text = ChangeMeta.formatChangeComment(meta, field);
+        const text = ChangeMeta.formatChangeComment(project, field, Store.auditLog);
         if (text) cell.ps = ChangeMeta.buildLuckysheetCommentPs(text);
         return cell;
       },
@@ -1193,6 +1303,9 @@
           if (window.ChangeMeta && ChangeMeta.hasFieldChangeMarkup(project, field)) {
             this.applyLuckysheetHighlight(cell, project, field);
             this.applyLuckysheetChangeComment(cell, project, field);
+          }
+          if (field.data_type === '金额') {
+            this.applyLuckysheetAmountColumnStyle(cell, field);
           }
         }
       },
@@ -1346,7 +1459,7 @@
             bg: hdrEdit ? '#78716a' : '#8f96a0',
             fc: hdrEdit ? '#fef08a' : '#ffffff',
             bl: 1,
-            tb: '2', ht: '1', vt: '0'
+            tb: '2', ht: f.data_type === '金额' ? '2' : '1', vt: '0'
           }));
         }
 
@@ -1570,8 +1683,27 @@
           var p = projs[i];
           for (var k = 0; k < fields.length; k++) {
             var fld = fields[k];
-            if (!fld.enum_values || !fld.enum_values.length) continue;
             var ro = !this.canEditField(fld) || !this.canEdit;
+            if (fld.data_type === '金额') {
+              var layAmt = this.lsLayout();
+              var rAmt = layAmt.dataStart + i;
+              var cAmt = k;
+              if (!ro) {
+                dv[String(rAmt) + '_' + String(cAmt)] = {
+                  type: 'number',
+                  type2: false,
+                  value1: '',
+                  value2: '',
+                  prohibitInput: true,
+                  hintShow: true,
+                  hintText: '仅限数字',
+                  remote: false,
+                  checked: false
+                };
+              }
+              continue;
+            }
+            if (!fld.enum_values || !fld.enum_values.length) continue;
             if (ro) continue;
             var hasCommaInOption = false;
             for (var e = 0; e < fld.enum_values.length; e++) {
@@ -1618,15 +1750,17 @@
         }
         if (document.getElementById(this.lsMountId) == null) return;
 
+        this.clearLuckysheetLocalCache(this.lsGridKey);
         this.destroyLuckysheet();
         this._lsLoading = true;
 
         var lay = this.lsLayout();
-        var rows = Math.max(48, lay.dataEnd + 12);
+        var rows = Math.max(48, lay.dataStart + Math.max(this.filteredProjects.length, 1) + 12);
         var cols = Math.max(64, this.tableFields.length + 4);
         var celldata = this.buildLuckysheetCelldata();
         var sheetIndex = 0;
-        var dataMatrix = this.buildLuckysheetDataMatrix(celldata, rows, cols);
+        var merge = this.buildLuckysheetMerge();
+        var dataMatrix = this.buildLuckysheetDataMatrix(celldata, rows, cols, merge);
         var calcChain = this.buildLuckysheetCalcChain(celldata, sheetIndex, lay);
 
         luckysheet.create({
@@ -1661,7 +1795,7 @@
             },
             config: {
               columnlen: this.buildLuckysheetColumnlen(),
-              merge: this.buildLuckysheetMerge(),
+              merge: merge,
               customWidth: this.buildLuckysheetCustomWidth(),
               rowlen: this.buildLuckysheetRowlen(),
               authority: this.buildLuckysheetAuthority()
@@ -1683,7 +1817,14 @@
             },
             cellUpdateBefore: function (r, c, value, isRefresh) {
               if (self._lsLoading) return false;
-              return self.canEditLuckysheetCell(r, c);
+              if (!self.canEditLuckysheetCell(r, c)) return false;
+              var fld = self.tableFields[c];
+              if (fld && fld.data_type === '金额' && value != null && value !== '') {
+                if (!self.isLuckysheetAmountInputValid(self.extractLuckysheetInput(value))) {
+                  return false;
+                }
+              }
+              return true;
             },
             cellUpdated: function (r, c, oldValue, newValue, isRefresh) {
               if (self._lsLoading || isRefresh) return;
@@ -1694,7 +1835,8 @@
               if (!field || !self.canEditLuckysheetCell(r, c)) return;
               var project = projs[r - layout.dataStart];
               var newVal = self.coerceFieldValue(self.extractLuckysheetInput(newValue), field);
-              var oldFlat = FieldConfig.arraysToFlat(project);
+              var storeProject = self.getStoreProject(project.project_no) || project;
+              var oldFlat = FieldConfig.arraysToFlat(storeProject);
               var key = FieldConfig.COL_TO_KEY[field.col];
               var oldVal = oldFlat[key];
               if (newVal === oldVal) return;
@@ -1754,9 +1896,13 @@
           >
             当前正在查看快照 · {{ snapshotViewMeta.label }}
           </span>
-          <span v-else class="period-banner" :class="lockBannerClass">
+          <span v-else-if="!isSystemAdmin" class="period-banner" :class="lockBannerClass">
             <span class="period-dot"></span>
             {{ lockBannerText }}
+          </span>
+          <span v-else class="period-banner open">
+            <span class="period-dot"></span>
+            系统管理员 — 可编辑全部项目数据
           </span>
 
           <div class="editor-toolbar-spacer"></div>
@@ -1798,7 +1944,7 @@
             </template>
           </div>
 
-          <template v-if="canEdit || canShowSubmitButton">
+          <template v-if="canEdit || canShowSubmitButton || canShowArchiveButton">
             <el-divider direction="vertical"></el-divider>
             <div class="editor-toolbar-group">
               <el-button
@@ -1808,6 +1954,15 @@
                 :loading="saveLoading"
                 @click="handleSave"
               >保存</el-button>
+              <el-button
+                v-if="canShowArchiveButton"
+                size="small"
+                type="warning"
+                icon="el-icon-s-check"
+                :loading="archiveLoading"
+                :disabled="!canSubmitArchive"
+                @click="handleSubmitArchive"
+              >提交归档</el-button>
               <el-button
                 v-if="canShowSubmitButton"
                 size="small"
@@ -1828,7 +1983,7 @@
             <span class="editor-legend-swatch editor-legend-swatch--new"></span>本月新增项目
           </span>
           <span class="editor-legend-item">
-            <span class="editor-legend-swatch editor-legend-swatch--editable"></span>可编辑列（表头黄字）
+            <span class="editor-legend-swatch editor-legend-swatch--editable"></span>可编辑列
           </span>
           <span class="editor-legend-item">
             <span class="editor-legend-swatch editor-legend-swatch--changed" aria-hidden="true">Aa</span>本月有变更字段
@@ -1897,19 +2052,7 @@
                   :key="'c-'+field.col"
                   :class="cellClass(project, field)"
                   :title="cellChangeTitle(project, field)"
-                  :style="{
-                    padding: '4px 8px',
-                    border: '1px solid #e2e8f0',
-                    background: field.source_type !== 'manual_input' ? '#f8fafc' : '#fff',
-                    textAlign: field.data_type === '金额' || field.data_type === '比率' ? 'right' : 'left',
-                    minWidth: field.colWidth + 'px',
-                    position: 'relative',
-                    whiteSpace: field.data_type === '文本' ? 'normal' : 'nowrap',
-                    maxWidth: field.data_type === '文本' ? '200px' : 'none',
-                    overflow: field.data_type === '文本' ? 'hidden' : 'visible',
-                    textOverflow: field.data_type === '文本' ? 'ellipsis' : 'clip',
-                    fontVariantNumeric: field.data_type === '金额' ? 'tabular-nums' : 'normal'
-                  }"
+                  :style="cellTdStyle(project, field)"
                 >
                   <!-- 可编辑字段 + 枚举下拉 -->
                   <template v-if="canEditField(field) && canEdit">
@@ -1957,6 +2100,12 @@
           </div>
         </div>
 
+        <system-admin-sector-dock
+          v-if="isSystemAdmin"
+          :table-projects="tableProjects"
+          @archived="onCompanyArchived"
+        ></system-admin-sector-dock>
+
         <!-- 板块管理员：待接收 PM 提交面板 -->
         <div v-if="isSectorAdmin && pendingPmSubmissions.length > 0"
           style="padding:10px 16px;background:#fffbeb;border-top:2px solid #f59e0b;flex-shrink:0;">
@@ -1990,10 +2139,10 @@
           <span v-if="isPm && pmLocked" style="color:#f59e0b;font-weight:500;">
             <i class="el-icon-lock"></i> 已提交，待板块接收
           </span>
-          <span v-else-if="reportingSubmitted" style="color:#ef4444;font-weight:500;">
+          <span v-else-if="!isSystemAdmin && reportingSubmitted" style="color:#ef4444;font-weight:500;">
             <i class="el-icon-lock"></i> 板块已提交审批，填报数据已锁定
           </span>
-          <span v-else-if="lockStatus !== 'open'" style="color:#ef4444;font-weight:500;">
+          <span v-else-if="!isSystemAdmin && lockStatus !== 'open'" style="color:#ef4444;font-weight:500;">
             <i class="el-icon-lock"></i> 编辑受限
           </span>
         </div>
@@ -2037,13 +2186,19 @@
       store()   { return window.Store; },
       user()    { return Store.currentUser || {}; },
       lockStatus() { return Store.lockStatus; },
-      reportingSubmitted() { return !!Store.reportingSubmitted; },
+      reportingSubmitted() {
+        if (this.isSectorAdmin) {
+          return Store.isSectorReportingSubmitted(this.user.sector || 'S520');
+        }
+        return !!Store.reportingSubmitted;
+      },
+      isSystemAdmin() { return this.user.role === 'system_admin'; },
       monthIdx()   { return Store.getMonthIdx(); },
       isPm()    { return this.user.role === 'pm'; },
       isSectorAdmin() { return this.user.role === 'sector_admin'; },
       lsMountId() { return 'luckysheet-mount'; },
       lsShowToolbar() { return true; },
-      lsGridKey() { return 'ptrack_editor'; },
+      lsGridKey() { return 'ptrack_editor_v2'; },
 
       // PM 专属：当前 PM 是否处于「已提交待接收」锁定
       pmName()  { return this.user.pmName || this.user.name || ''; },
@@ -2074,10 +2229,17 @@
         if (this.isViewingSnapshot) return false;
         return this.isPm || this.isSectorAdmin;
       },
+      canShowArchiveButton() {
+        return this.isSystemAdmin && !this.isViewingSnapshot;
+      },
+      canSubmitArchive() {
+        return !Store.isCompanyArchived();
+      },
       // 板块管理员提交审批是否可用
       canSubmit() {
         if (this.isViewingSnapshot) return false;
         if (this.isPm) return this.canPmSubmitNow;
+        if (this.isSystemAdmin) return false;
         return this.isSectorAdmin
           && this.lockStatus === 'open'
           && !this.reportingSubmitted;
@@ -2097,7 +2259,7 @@
         const role = this.user.role;
         if (role === 'sector_director' || role === 'group_leader') return false;
         if (!this.canEdit) return false;
-        return ['system_admin', 'sector_admin', 'pm', 'finance'].indexOf(role) >= 0;
+        return ['system_admin', 'sector_admin', 'pm'].indexOf(role) >= 0;
       },
       editorSnapshotOptions() {
         const self = this;
@@ -2142,9 +2304,11 @@
           label: this.formatSnapshotOptionLabel(this.viewingVersion, snap)
         };
       },
+      isFinance() { return this.user.role === 'finance'; },
       canEdit() {
         if (this.isViewingSnapshot) return false;
         const role = this.user.role;
+        if (role === 'finance') return false;
         if (role === 'system_admin') return true;
         // PM：个人锁定或板块正式提交后均不可编辑
         if (this.isPm) {
@@ -2168,17 +2332,28 @@
         return list;
       },
       filteredProjects() {
-        const p = this.scopedProjects;
+        let p = this.scopedProjects;
         if (this.viewMode === 'new_only')     return p.filter(x => x._added_this_month);
         if (this.viewMode === 'changed_only') return p.filter(x => x._changed_fields && x._changed_fields.length > 0);
         return p;
       },
       lockBannerClass() {
+        if (this.isSystemAdmin) return 'open';
+        if (this.isFinance && Store.financeReviewReminder) return 'finance-only';
+        if (this.isFinance) return 'open';
         if (this.isPm && this.pmLocked) return 'locked';
         if (this.reportingSubmitted) return 'locked';
-        return { open:'open', finance_only:'finance-only', locked:'locked' }[this.lockStatus] || 'open';
+        if (Store.financeReviewReminder) return 'finance-only';
+        return { open: 'open', locked: 'locked' }[this.lockStatus] || 'open';
       },
       lockBannerText() {
+        if (this.isSystemAdmin) return '系统管理员 — 可编辑全部项目数据';
+        if (this.isFinance) {
+          if (Store.financeReviewReminder) {
+            return '财务核查提醒期（每月1-3日）— 请核对开票/回款等数据，表格为只读查看';
+          }
+          return '财务审核 — 全公司数据只读查看（无期限限制）';
+        }
         if (this.isPm && this.pmLocked) {
           return '您已提交本月填报，等待板块管理员接收后可再次编辑';
         }
@@ -2186,11 +2361,13 @@
           if (this.isPm) return '板块已正式提交审批，本月填报已锁定';
           return '本月填报已提交审批 — 数据已锁定，待审批或驳回后可再编辑';
         }
-        return {
-          open:         '填报窗口开放中 — 可正常填报',
-          finance_only: '财务专属期（1-3日）— 仅财务审核可编辑开票/回款',
-          locked:       '数据已锁定（每月25日）— 仅管理员可临时解锁编辑'
-        }[this.lockStatus] || '';
+        if (Store.financeReviewReminder) {
+          return '财务核查提醒期（1-3日）— 请财务完成上月数据核对，其他角色填报照常开放';
+        }
+        if (this.lockStatus === 'locked') {
+          return '数据已锁定（每月25日）— 仅管理员可临时解锁编辑';
+        }
+        return '填报窗口开放中 — 可正常填报';
       },
       tableSections() {
         return FieldConfig.getSections(this.tableFields);

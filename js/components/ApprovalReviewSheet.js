@@ -1,5 +1,5 @@
 /**
- * ApprovalReviewSheet.js
+ * ApprovalReviewSheet.js — 板块总监 / 群主：本板块当月全部项目 + 筛选 + 可编辑列
  */
 (function (window) {
   'use strict';
@@ -17,24 +17,78 @@
       };
     },
     computed: {
-      canEdit() { return false; },
+      reviewSector() {
+        return (this.user && this.user.sector) || 'S520';
+      },
+      sectorFlow() {
+        return Store.getSectorFlow(this.reviewSector);
+      },
+      reviewerEditActive() {
+        const role = this.user.role;
+        const sf = this.sectorFlow;
+        if (role === 'sector_director') {
+          return sf.reportingSubmitted && sf.approvalStatus === 'draft';
+        }
+        if (role === 'group_leader') {
+          return sf.approvalStatus === 'approve1';
+        }
+        return false;
+      },
+      canEdit() {
+        if (!this.reviewerEditActive) return false;
+        if (this.lockStatus === 'locked') return false;
+        return true;
+      },
       isPm() { return false; },
       isSectorAdmin() { return false; },
       lsMountId() { return 'approval-luckysheet-mount'; },
       lsShowToolbar() { return false; },
       lsGridKey() { return 'ptrack_approval_review'; },
-      reviewProjectCount() { return this.filteredProjects.length; },
       scopedProjects() {
-        const sector = this.user.sector || 'S520';
+        const sector = this.reviewSector;
         return this.tableProjects.filter(function (p) {
           return (p.unit_code || 'S520') === sector;
         });
       },
       filteredProjects() {
+        let p = this.scopedProjects;
+        if (this.viewMode === 'new_only') {
+          return p.filter(function (x) { return x._added_this_month; });
+        }
+        if (this.viewMode === 'changed_only') {
+          return p.filter(function (x) {
+            if (x._changed_fields && x._changed_fields.length) return true;
+            return Object.keys(x._field_change_log || {}).length > 0;
+          });
+        }
+        return p;
+      },
+      reviewProjectCount() { return this.filteredProjects.length; },
+      newProjectCount() {
+        return this.scopedProjects.filter(function (p) { return p._added_this_month; }).length;
+      },
+      changedProjectCount() {
         return this.scopedProjects.filter(function (p) {
-          if (p._added_this_month) return true;
-          return p._changed_fields && p._changed_fields.length > 0;
-        });
+          if (p._changed_fields && p._changed_fields.length) return true;
+          return Object.keys(p._field_change_log || {}).length > 0;
+        }).length;
+      },
+      reviewEmptyText() {
+        if (this.scopedProjects.length === 0) return '本板块暂无项目数据';
+        if (this.filteredProjects.length === 0) return '当前筛选条件下无项目';
+        return '';
+      },
+      reviewHintText() {
+        const base = '本板块 ' + this.scopedProjects.length + ' 条 · 当前显示 ' + this.reviewProjectCount + ' 条';
+        if (this.reviewerEditActive) return base + ' · 可编辑列可修改（变更将记入批注）';
+        return base + ' · 只读';
+      }
+    },
+    watch: {
+      viewMode: function () {
+        const self = this;
+        this.buildTableData();
+        this.$nextTick(function () { self.refreshLuckysheet(); });
       }
     },
     mounted() {
@@ -77,30 +131,34 @@
       this.destroyLuckysheet();
     },
     template: [
-      '<div class="approval-review-sheet">',
-      '  <div v-if="showDiffHint" class="editor-diff-hint">',
-      '    <span class="editor-legend-item">',
-      '      <span class="editor-legend-swatch editor-legend-swatch--new"></span>',
-      '      <span>\u672c\u6708\u65b0\u589e\u9879\u76ee</span>',
-      '    </span>',
-      '    <span class="editor-legend-item">',
-      '      <span class="editor-legend-swatch editor-legend-swatch--changed" aria-hidden="true">Aa</span>',
-      '      <span>\u672c\u6708\u6709\u53d8\u66f4\u5b57\u6bb5</span>',
-      '    </span>',
-      '    <span style="font-size:12px;color:#64748b;margin-left:8px;">',
-      '      \u5171 {{ reviewProjectCount }} \u6761\uff08\u4ec5\u5c55\u793a\u65b0\u589e\u6216\u6709\u53d8\u66f4\u7684\u9879\u76ee\uff0c\u53ea\u8bfb\uff09',
-      '    </span>',
-      '    <span style="flex:1;"></span>',
-      '    <span style="cursor:pointer;" @click="showDiffHint=false"><i class="el-icon-close"></i></span>',
-      '  </div>',
-      '  <div v-if="reviewProjectCount === 0" class="approval-review-sheet-empty empty-state">',
-      '    <i class="el-icon-document" style="font-size:32px;color:#94a3b8;"></i>',
-      '    <div style="margin-top:8px;font-size:13px;color:#64748b;">\u6682\u65e0\u65b0\u589e\u6216\u53d8\u66f4\u9879\u76ee</div>',
-      '  </div>',
-      '  <div v-else class="luckysheet-editor-wrap">',
-      '    <div :id="lsMountId"></div>',
-      '  </div>',
-      '</div>'
-    ].join('\n')
+      '<motion-placeholder class="approval-review-sheet">',
+      '<motion-placeholder class="approval-review-toolbar">',
+      '<el-radio-group v-model="viewMode" size="small" class="view-toggle">',
+      '<el-radio-button label="all">全部（{{ scopedProjects.length }}）</el-radio-button>',
+      '<el-radio-button label="new_only">新增项目（{{ newProjectCount }}）</el-radio-button>',
+      '<el-radio-button label="changed_only">有变更（{{ changedProjectCount }}）</el-radio-button>',
+      '</el-radio-group>',
+      '<span class="approval-review-toolbar-hint">{{ reviewHintText }}</span>',
+      '</motion-placeholder>',
+      '<motion-placeholder v-if="showDiffHint" class="editor-diff-hint">',
+      '<span class="editor-legend-item"><span class="editor-legend-swatch editor-legend-swatch--new"></span>本月新增项目</span>',
+      '<span class="editor-legend-item"><span class="editor-legend-swatch editor-legend-swatch--editable"></span>可编辑列</span>',
+      '<span class="editor-legend-item"><span class="editor-legend-swatch editor-legend-swatch--changed" aria-hidden="true">Aa</span>本月有变更字段</span>',
+      '<span style="flex:1;"></span>',
+      '<span style="cursor:pointer;" @click="showDiffHint=false"><i class="el-icon-close"></i></span>',
+      '</motion-placeholder>',
+      '<motion-placeholder v-if="reviewEmptyText" class="approval-review-sheet-empty empty-state">',
+      '<i class="el-icon-document" style="font-size:32px;color:#94a3b8;"></i>',
+      '<p style="margin-top:8px;font-size:13px;color:#64748b;">{{ reviewEmptyText }}</p>',
+      '</motion-placeholder>',
+      '<motion-placeholder v-else class="luckysheet-editor-wrap">',
+      '<motion-placeholder :id="lsMountId"></motion-placeholder>',
+      '</motion-placeholder>',
+      '</motion-placeholder>'
+    ].join('')
   };
+
+  window.ApprovalReviewSheet.template = window.ApprovalReviewSheet.template
+    .replace(/<motion-placeholder/g, '<div')
+    .replace(/<\/motion-placeholder>/g, '</div>');
 })(window);

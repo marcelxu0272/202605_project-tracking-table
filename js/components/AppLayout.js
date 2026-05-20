@@ -17,16 +17,15 @@
 
   const NAV_ITEMS = [
     { path: '/dashboard', icon: 'el-icon-s-home',        label: '数据看板'  },
-    { path: '/editor',    icon: 'el-icon-s-grid',        label: '填报表格', hideForRoles: ['pm'].concat(APPROVAL_ONLY_ROLES) },
+    { path: '/editor',    icon: 'el-icon-s-grid',        label: '填报表格', hideForRoles: APPROVAL_ONLY_ROLES },
     { path: '/approval',  icon: 'el-icon-s-check',       label: '审批流程', hideForRoles: ['pm'] },
     { path: '/audit',     icon: 'el-icon-document',      label: '审计日志', hideForRoles: ['pm'].concat(APPROVAL_ONLY_ROLES) },
     { path: '/admin',     icon: 'el-icon-setting',       label: '管理设置', adminOnly: true }
   ];
 
   const LOCK_INFO = {
-    open:         { text: '填报中',     type: 'open',         tip: '填报窗口已开放，可正常填报' },
-    finance_only: { text: '财务专属期', type: 'finance-only', tip: '每月1-3日财务审核专属期' },
-    locked:       { text: '已锁定',     type: 'locked',       tip: '数据已冻结，仅管理员可修改' }
+    open:   { text: '填报中', type: 'open',   tip: '填报窗口已开放，可正常填报' },
+    locked: { text: '已锁定', type: 'locked', tip: '数据已冻结，仅管理员可修改' }
   };
 
   window.AppLayoutComponent = {
@@ -50,6 +49,23 @@
         return APPROVAL_ONLY_ROLES.indexOf(this.user.role) >= 0;
       },
       lockInfo()  { return LOCK_INFO[Store.lockStatus] || LOCK_INFO.open; },
+      periodBannerInfo() {
+        if (Store.financeReviewReminder) {
+          if (this.user.role === 'finance') {
+            return {
+              text: '核查提醒',
+              type: 'finance-only',
+              tip: '每月1-3日请核对开票/回款等数据（表格只读）'
+            };
+          }
+          return {
+            text: '财务核查期',
+            type: 'finance-only',
+            tip: '每月1-3日为财务核查提醒，填报窗口仍开放'
+          };
+        }
+        return this.lockInfo;
+      },
       activePath(){ return this.$route ? this.$route.path : '/dashboard'; },
       pageTitle() {
         const item = NAV_ITEMS.find(n => this.activePath === n.path);
@@ -75,7 +91,8 @@
           '· 从「初始数据.xlsx」重新导入全部项目\n' +
           '· 审批状态恢复为「草稿」，清除已提交标记\n' +
           '· 清空审计日志与全部版本快照\n' +
-          '· 填报周期配置恢复默认值（含报告月份）\n' +
+          '· 填报周期配置恢复默认值（报告月 2026-05）\n' +
+          '· 自动生成上月归档快照 Month:2026-04，并固定 5 条「五月新增」演示项目\n' +
           '· 锁定状态恢复为按日期自动计算\n\n' +
           '仅用于开发测试，确认继续？',
           '重置为初始状态',
@@ -88,9 +105,12 @@
           this.resetDevLoading = true;
           return Store.resetDevEnvironment();
         }).then((r) => {
-          this.$message.success(
-            '已恢复初始状态' + (r && r.count ? '（' + r.count + ' 条项目）' : '')
-          );
+          let msg = '已恢复初始状态' + (r && r.count ? '（' + r.count + ' 条项目）' : '');
+          if (r && r.devSeed && r.devSeed.demoNewProjectNos) {
+            msg += '；已生成 ' + (r.devSeed.priorSnapshot && r.devSeed.priorSnapshot.version || '上月快照');
+            msg += '，五月新增演示 ' + r.devSeed.demoNewProjectNos.length + ' 条';
+          }
+          this.$message.success(msg);
           window.location.reload();
         }).catch((e) => {
           if (e === 'cancel' || e === 'close') return;
@@ -134,11 +154,11 @@
                 <div class="sidebar-footer-month">填报月份：{{ reportingMonth }}</div>
                 <span
                   class="period-banner sidebar-footer-period"
-                  :class="lockInfo.type"
-                  :title="lockInfo.tip"
+                  :class="periodBannerInfo.type"
+                  :title="periodBannerInfo.tip"
                 >
                   <span class="period-dot"></span>
-                  {{ lockInfo.text }}
+                  {{ periodBannerInfo.text }}
                 </span>
               </div>
               <button

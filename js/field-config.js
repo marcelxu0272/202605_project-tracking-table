@@ -7,15 +7,15 @@
  * 权限规则：
  *  - system_sync / auto_calc：所有人只读
  *  - manual_input：
- *      open 期：pm、sector_admin 可写
- *      finance_only 期：finance 额外可写开票/回款列
- *      locked 期：仅 system_admin 可写
- *      任何时候：system_admin 可写
+ *      月度完成（AV–BG）：报告月当月及之后可写（含系统管理员）
+ *      月度开票/回款（BH–CE）：仅报告月**之后**可写（当月为财务系统实际值，只读）
+ *      其他手工列：按角色 + lockStatus；system_admin 在 locked 期仍可写
+ *      finance：始终只读
  */
 (function (window) {
   'use strict';
 
-  // 开票相关列（finance 在 finance_only 期间可额外编辑）
+  // 开票/回款相关列（财务关注，只读）
   const FINANCE_EDITABLE_COLS = [
     'BH','BJ','BL','BN','BP','BR','BT','BV','BX','BZ','CB','CD',  // 月度开票
     'BI','BK','BM','BO','BQ','BS','BU','BW','BY','CA','CC','CE'   // 月度回款
@@ -52,20 +52,34 @@
   }
 
   /**
-   * 报告月之前的月度列只读（例：报告月 2026-05 → 1–4 月 AV–AY、BH/BI–… 锁定）
+   * 月度列是否落在当前角色/报告月允许编辑的时间窗内（所有角色含 system_admin 均适用）
+   * - 完成额：报告月当月及之后（m >= reportingMonthIdx）
+   * - 开票/回款：仅报告月之后（m > reportingMonthIdx），当月为系统同步实际值
+   */
+  function isMonthlyFieldEditable(field, reportingMonthIdx) {
+    if (reportingMonthIdx == null || reportingMonthIdx < 0) return true;
+    var col = field.col;
+    var m = getMonthlyMonthIndex(col);
+    if (m < 0) return true;
+    if (MC_COLS.indexOf(col) >= 0) return m >= reportingMonthIdx;
+    if (MI_COLS.indexOf(col) >= 0 || MP_COLS.indexOf(col) >= 0) return m > reportingMonthIdx;
+    return true;
+  }
+
+  /**
+   * 报告月之前的月度列只读；开票/回款在报告月当月亦只读（与 isMonthlyFieldEditable 一致，供样式用）
    * @param {number} reportingMonthIdx 0–11，与 FormulaEngine / Store.getMonthIdx 一致
    */
   function isPastReportingMonthField(field, reportingMonthIdx) {
-    if (reportingMonthIdx == null || reportingMonthIdx < 0) return false;
-    var m = getMonthlyMonthIndex(field.col);
-    return m >= 0 && m < reportingMonthIdx;
+    if (getMonthlyMonthIndex(field.col) < 0) return false;
+    return !isMonthlyFieldEditable(field, reportingMonthIdx);
   }
 
   /**
    * 判断某字段在当前角色和锁定状态下是否可编辑
    * @param {Object} field  - field config 对象（含 source_type, col）
    * @param {string} role   - 当前用户角色
-   * @param {string} lockStatus - 'open' | 'finance_only' | 'locked'
+   * @param {string} lockStatus - 'open' | 'locked'（历史 finance_only 在 Store 层归一为 open）
    * @param {number} [reportingMonthIdx] 报告月份 0–11
    * @returns {boolean}
    */
@@ -74,25 +88,19 @@
     if (field.source_type === 'system_sync' || field.source_type === 'auto_calc') {
       return false;
     }
-    // 系统管理员可编辑（含历史月份临时修正）
-    if (role === 'system_admin') return true;
-    // 动态时间窗：报告月之前的完成额/开票/回款只读
-    if (isPastReportingMonthField(field, reportingMonthIdx)) {
+    if (role === 'finance') return false;
+    // 月度完成/开票/回款的时间窗（含 system_admin）
+    if (!isMonthlyFieldEditable(field, reportingMonthIdx)) {
       return false;
     }
-    // 锁定期间（除管理员外）全员只读
+    if (role === 'system_admin') return true;
     if (lockStatus === 'locked') return false;
-    // 审批者角色（总监、群主）不可编辑
-    if (role === 'sector_director' || role === 'group_leader') return false;
-    // finance_only 期间：finance 可编辑开票/回款列，其他人不可编辑
-    if (lockStatus === 'finance_only') {
-      return role === 'finance' && FINANCE_EDITABLE_SET.has(field.col);
+    if (role === 'sector_director' || role === 'group_leader') {
+      return SECTOR_ADMIN_EDITABLE_COLS.has(field.col);
     }
-    // open 期间
     if (lockStatus === 'open') {
       if (role === 'pm') return PM_EDITABLE_COLS.has(field.col);
       if (role === 'sector_admin') return SECTOR_ADMIN_EDITABLE_COLS.has(field.col);
-      if (role === 'finance') return FINANCE_EDITABLE_SET.has(field.col);
     }
     return false;
   }
@@ -115,6 +123,7 @@
         luckysheetCt: isAmount
           ? { fa: '#,##0.00', t: 'n' }
           : (f.data_type === '比率' ? { fa: '0%', t: 'n' } : { fa: '@', t: 's' }),
+        luckysheetHt: isAmount ? '2' : (f.data_type === '比率' ? '2' : '0'),
         colWidth: isAmount ? 110 :
                   (f.data_type === '文本' || f.name_cn.length > 6 ? 160 : 90)
       });
@@ -220,6 +229,7 @@
     MI_COLS,
     MP_COLS,
     getMonthlyMonthIndex,
+    isMonthlyFieldEditable,
     isPastReportingMonthField
   };
 })(window);

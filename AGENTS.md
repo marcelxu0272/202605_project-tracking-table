@@ -31,7 +31,7 @@
 | `js/formatters.js` | 🔧 格式化工具 | ~4KB | 金额、日期、百分比等。 |
 | `js/formula-engine.js` | ⚙️ 公式引擎 | ~8KB | 83 字段 `auto_calc` 逻辑与汇总。 |
 | `js/field-config.js` | 🔐 字段权限 | ~7KB | 角色 × 锁定期字段可写矩阵。 |
-| `js/change-meta.js` | 📝 变更批注 | ~3KB | `_field_change_log`、Luckysheet `ps` 批注、变更高亮色 `CHANGED_FIELD_STYLE`。 |
+| `js/change-meta.js` | 📝 变更批注 | ~7KB | `_field_change_log` 按列追加数组；批注 `【角色】旧→新` 多行；`CHANGED_FIELD_STYLE` / `EDITABLE_FIELD_STYLE`。 |
 | `js/project-month-diff.js` | 🆕 新增项目 | ~1KB | 对比 `Month:YYYY-MM` 快照，设置 `_added_this_month`。 |
 | `js/import-merge.js` | 📥 导入合并 | ~2KB | 填报页按 `project_no` 合并可编辑字段。 |
 | `js/mock-data.js` | 📦 备用示例 | ~31KB | 20 条示例；**不默认引入**。 |
@@ -40,7 +40,7 @@
 | `js/router.js` | 🔀 路由配置 | ~2KB | Hash 路由 + 登录/管理员守卫。 |
 | `js/app.js` | 🚀 应用初始化 | ~2KB | `Store.init()` 后挂载 Vue。 |
 | `js/components/AppLayout.js` | 🖼️ 主布局 | ~7KB | 侧栏（底部折叠/展开）+ 顶栏 + 路由出口；板块总监/群主仅看板+审批导航。 |
-| `js/components/ApprovalReviewSheet.js` | 📋 审批表格 | ~3KB | 总监/群主审批页只读 Luckysheet（新增+变更项目，无工具栏）。 |
+| `js/components/ApprovalReviewSheet.js` | 📋 审批表格 | ~5KB | 总监/群主审批页：本板块当月全部项目 + 全部/新增/有变更筛选；待办节点内可编辑列；无 Luckysheet 工具栏。 |
 | `js/views/Login.js` | 🔑 登录页 | ~6KB | 6 角色卡片登录。 |
 | `js/views/Dashboard.js` | 📊 数据看板 | ~12KB | KPI + 图表 + WIP 预警。 |
 | `js/views/ProjectEditor.js` | 📝 填报表格 | ~22KB | Luckysheet 默认；保存/导入/历史版本；变更批注；新增项目高亮。 |

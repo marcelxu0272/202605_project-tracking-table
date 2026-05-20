@@ -103,8 +103,9 @@ function projectsFromXlsxBuffer(buf, modules, reportingMonth) {
       merged.sign_year = parseInt(String(merged.start_date).slice(0, 4)) || 2026;
     }
     merged.crb_status = merged.signed === '已签署' ? '已确认' : '';
-    if (!merged._added_this_month) merged._added_this_month = false;
-    if (!merged._changed_fields) merged._changed_fields = [];
+    delete merged._field_change_log;
+    merged._added_this_month = false;
+    merged._changed_fields = [];
 
     if (!merged.project_no) continue;
 

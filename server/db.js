@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
+const sw = require('./sector-workflow');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const DB_PATH = path.join(DATA_DIR, 'ptrack.sqlite');
@@ -57,6 +58,19 @@ function setMeta(db, key, val) {
   db.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)').run(key, s);
 }
 
+function _isFinanceReviewReminder(periodConfig) {
+  const now = new Date();
+  const day = now.getDate();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const [ry, rm] = (periodConfig.reportingMonth || '2026-05').split('-').map(Number);
+  return (
+    (month === 1 ? year - 1 : year) === ry &&
+    (month === 1 ? 12 : month - 1) === rm &&
+    day <= 3
+  );
+}
+
 function _calcLockStatus(periodConfig) {
   const now = new Date();
   const day = now.getDate();
@@ -64,14 +78,14 @@ function _calcLockStatus(periodConfig) {
   const month = now.getMonth() + 1;
   const [ry, rm] = (periodConfig.reportingMonth || '2026-05').split('-').map(Number);
   const isCurrentMonth = (year === ry && month === rm);
-  const isPrevMonthFirst3 = (
-    (month === 1 ? year - 1 : year) === ry &&
-    (month === 1 ? 12 : month - 1) === rm &&
-    day <= 3
-  );
-  if (isPrevMonthFirst3) return 'finance_only';
   if (isCurrentMonth && day >= periodConfig.lockDay) return 'locked';
   return 'open';
+}
+
+function _normalizeLockStatus(status, periodConfig) {
+  if (status === 'finance_only') return 'open';
+  if (status === 'open' || status === 'locked') return status;
+  return _calcLockStatus(periodConfig);
 }
 
 function ensureDefaultMeta(db) {
@@ -99,15 +113,14 @@ function getBootstrapState(db) {
   ensureDefaultMeta(db);
   const periodConfig = Object.assign({}, DEFAULT_PERIOD_CONFIG, getMeta(db, 'periodConfig') || {});
   const reportingMonth = getMeta(db, 'reportingMonth') || periodConfig.reportingMonth;
-  const approvalStatus = getMeta(db, 'approvalStatus') || 'draft';
   const lockOverride = getMeta(db, 'lockStatus', null);
-  const lockStatus = lockOverride != null ? lockOverride : _calcLockStatus(periodConfig);
-
-  const snapRowsEarly = db.prepare('SELECT version FROM snapshots').all();
-  const hasDraftSnapshot = snapRowsEarly.some(r => r.version === 'Draft');
-  const reportingSubmittedMeta = getMeta(db, 'reportingSubmitted', null);
-  const reportingSubmitted = reportingSubmittedMeta === true
-    || (reportingSubmittedMeta !== false && hasDraftSnapshot);
+  const lockStatus = lockOverride != null
+    ? _normalizeLockStatus(lockOverride, periodConfig)
+    : _calcLockStatus(periodConfig);
+  if (lockOverride === 'finance_only') {
+    setMeta(db, 'lockStatus', 'open');
+  }
+  const financeReviewReminder = _isFinanceReviewReminder(periodConfig);
 
   const pmSubmissions = getPmSubmissions(db);
 
@@ -127,6 +140,21 @@ function getBootstrapState(db) {
 
   const priorMonthSnapshotVersion = getMeta(db, 'priorMonthSnapshotVersion', null);
 
+  const migrated = sw.migrateSectorFlows(db, getMeta, setMeta, projects, snapshots);
+  let sectorFlows = migrated.flows;
+  const sectorRegistry = migrated.registry;
+  Object.keys(migrated.newSnapshots || {}).forEach(ver => {
+    if (!snapshots[ver]) snapshots[ver] = migrated.newSnapshots[ver];
+    if (!db.prepare('SELECT 1 FROM snapshots WHERE version = ?').get(ver)) {
+      putSnapshot(db, ver, snapshots[ver]);
+    }
+  });
+
+  const companyFlow = sw.getCompanyFlow(getMeta, db);
+  sw.syncLegacyMetaFromFlows(db, getMeta, setMeta, sectorFlows, companyFlow, sectorRegistry);
+  const approvalStatus = getMeta(db, 'approvalStatus') || 'draft';
+  const reportingSubmitted = getMeta(db, 'reportingSubmitted') === true;
+
   return {
     projects,
     auditLog,
@@ -135,9 +163,14 @@ function getBootstrapState(db) {
     reportingMonth,
     approvalStatus,
     lockStatus,
+    financeReviewReminder,
     reportingSubmitted,
     pmSubmissions,
-    priorMonthSnapshotVersion
+    priorMonthSnapshotVersion,
+    sectorFlows,
+    sectorRegistry,
+    sectorNames: sw.getSectorNames(getMeta, db),
+    companyFlow
   };
 }
 
@@ -191,6 +224,12 @@ function resetDevMeta(db) {
   setMeta(db, 'approvalStatus', 'draft');
   setMeta(db, 'reportingSubmitted', false);
   setMeta(db, 'pmSubmissions', {});
+  setMeta(db, 'companyFlow', { archiveStatus: 'pending', archivedAt: null });
+  const registry = sw.DEFAULT_SECTOR_REGISTRY.slice();
+  const flows = {};
+  registry.forEach(code => { flows[code] = sw.defaultSectorFlowEntry(); });
+  setMeta(db, 'sectorFlows', flows);
+  setMeta(db, 'sectorRegistry', registry);
 }
 
 module.exports = {

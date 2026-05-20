@@ -51,8 +51,9 @@ function zeroMonthsAfterIdx(p, monthIdx) {
  * @param {{ FormulaEngine: object }} modules
  * @param {string} reportingMonth 如 2026-05
  * @param {number} removeCount 从当前集中剔除的项目数（不出现在上月快照中 → 本月视为新增）
+ * @param {string[]} [removeProjectNos] 指定剔除的项目号（优先于 removeCount 自动抽样）
  */
-function buildPriorMonthSnapshotProjects(projects, modules, reportingMonth, removeCount) {
+function buildPriorMonthSnapshotProjects(projects, modules, reportingMonth, removeCount, removeProjectNos) {
   const { FormulaEngine } = modules;
   const priorMonth = priorReportingMonth(reportingMonth);
   const priorMonthIdx = FormulaEngine.getMonthIdx(priorMonth);
@@ -61,10 +62,16 @@ function buildPriorMonthSnapshotProjects(projects, modules, reportingMonth, remo
     return String(a.project_no).localeCompare(String(b.project_no), 'zh-CN');
   });
 
+  const removed = new Set();
+  if (Array.isArray(removeProjectNos) && removeProjectNos.length) {
+    removeProjectNos.forEach(function (no) {
+      if (no) removed.add(String(no).trim());
+    });
+  }
+
   const removeN = Math.max(0, Math.min(removeCount || 0, sorted.length - 1));
   const step = removeN > 0 ? Math.max(1, Math.floor(sorted.length / removeN)) : sorted.length + 1;
-  const removed = new Set();
-  if (removeN > 0) {
+  if (removed.size === 0 && removeN > 0) {
     let picked = 0;
     for (let i = 0; i < sorted.length && picked < removeN; i += step) {
       removed.add(sorted[i].project_no);
@@ -104,6 +111,7 @@ function seedPriorMonthSnapshot(db, modules, options) {
     || dbm.getMeta(db, 'reportingMonth')
     || '2026-05';
   const removeCount = options.removeCount != null ? options.removeCount : 5;
+  const removeProjectNos = options.removeProjectNos || null;
 
   const rows = db.prepare('SELECT payload FROM projects ORDER BY project_no ASC').all();
   const projects = rows.map(function (r) { return JSON.parse(r.payload); });
@@ -112,7 +120,7 @@ function seedPriorMonthSnapshot(db, modules, options) {
   }
 
   const built = buildPriorMonthSnapshotProjects(
-    projects, modules, reportingMonth, removeCount
+    projects, modules, reportingMonth, removeCount, removeProjectNos
   );
 
   const snap = {
@@ -141,6 +149,7 @@ function seedPriorMonthSnapshot(db, modules, options) {
 module.exports = {
   priorMonthSnapshotVersion,
   priorReportingMonth,
+  stripEphemeralMeta,
   buildPriorMonthSnapshotProjects,
   seedPriorMonthSnapshot
 };
