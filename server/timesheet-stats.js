@@ -11,12 +11,31 @@ function monthIndexFromDate(workDate) {
   return m - 1;
 }
 
+function buildTotalRow(rows) {
+  const totalRow = {
+    key: '总计',
+    isTotal: true,
+    months: emptyMonths(),
+    totalHours: 0,
+    totalCost: 0
+  };
+  rows.forEach(function (row) {
+    row.months.forEach(function (cell, mi) {
+      totalRow.months[mi].hours += cell.hours;
+      totalRow.months[mi].cost += cell.cost;
+    });
+    totalRow.totalHours += row.totalHours;
+    totalRow.totalCost += row.totalCost;
+  });
+  return totalRow;
+}
+
 function aggregateByKey(entries, keyField) {
   const map = new Map();
   for (const e of entries) {
     const key = e[keyField] || '（未分类）';
     if (!map.has(key)) {
-      map.set(key, { key, months: emptyMonths(), totalHours: 0, totalCost: 0 });
+      map.set(key, { key, isTotal: false, months: emptyMonths(), totalHours: 0, totalCost: 0 });
     }
     const row = map.get(key);
     const mi = monthIndexFromDate(e.workDate);
@@ -30,7 +49,8 @@ function aggregateByKey(entries, keyField) {
   }
   const rows = Array.from(map.values());
   rows.sort((a, b) => b.totalHours - a.totalHours || a.key.localeCompare(b.key, 'zh-CN'));
-  return { rows };
+  if (!rows.length) return { rows: [] };
+  return { rows: [buildTotalRow(rows)].concat(rows) };
 }
 
 /**

@@ -12,6 +12,8 @@ const sw = require('./sector-workflow');
 const platformSync = require('./platform-sync');
 const timesheetImport = require('./timesheet-import');
 const timesheetStats = require('./timesheet-stats');
+const costImport = require('./cost-import');
+const costStats = require('./cost-stats');
 
 const ROOT = path.join(__dirname, '..');
 const PORT = Number(process.env.PTRACK_PORT) || 3000;
@@ -68,6 +70,7 @@ const db = dbm.openDb();
 dbm.ensureDefaultMeta(db);
 seedFromXlsxIfEmpty(db);
 timesheetImport.seedTimesheetsIfEmpty(db, dbm);
+costImport.seedCostIfEmpty(db, dbm);
 
 const app = express();
 app.use(express.json({ limit: '80mb' }));
@@ -118,6 +121,21 @@ app.get('/api/projects/:projectNo/timesheet', (req, res) => {
     const stats = timesheetStats.buildTimesheetStats(entries, year);
     stats.projectNo = projectNo;
     stats.importedAt = dbm.getMeta(db, 'timesheetImportedAt', null);
+    res.json(stats);
+  } catch (e) {
+    res.status(500).json({ error: String(e.message) });
+  }
+});
+
+app.get('/api/projects/:projectNo/cost-center', (req, res) => {
+  try {
+    const projectNo = req.params.projectNo;
+    let year = req.query.year != null ? Number(req.query.year) : dbm.resolveSystemYear(db);
+    if (!year || isNaN(year)) year = dbm.resolveSystemYear(db);
+    const entries = dbm.getCostEntries(db, projectNo, year);
+    const stats = costStats.buildCostCenterStats(entries, year);
+    stats.projectNo = projectNo;
+    stats.importedAt = dbm.getMeta(db, 'costImportedAt', null);
     res.json(stats);
   } catch (e) {
     res.status(500).json({ error: String(e.message) });
@@ -637,6 +655,37 @@ app.post('/api/admin/timesheet-import', (req, res) => {
         projectName: '全局',
         fieldName: 'timesheet_import',
         fieldCN: '工时数据导入',
+        oldVal: '',
+        newVal: JSON.stringify(result.stats),
+        userId: actor && actor.id ? actor.id : 'system_admin',
+        userName: actor && actor.name ? actor.name : '系统管理员'
+      });
+    }
+    res.json({
+      ok: true,
+      ...result,
+      state: dbm.getBootstrapState(db)
+    });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: String(e.message) });
+  }
+});
+
+/** 从 docs/参考数据 重新导入成本中心 xlsx */
+app.post('/api/admin/cost-import', (req, res) => {
+  try {
+    const body = req.body || {};
+    const result = costImport.importCostFromDir(db, dbm, { force: true });
+    if (result.imported) {
+      const actor = body.user || body.actor || null;
+      dbm.pushAudit(db, {
+        id: Date.now() + '_costimport_' + Math.random().toString(36).slice(2, 6),
+        timestamp: new Date().toISOString(),
+        operation_type: 'cost_import',
+        projectNo: '—',
+        projectName: '全局',
+        fieldName: 'cost_import',
+        fieldCN: '成本中心数据导入',
         oldVal: '',
         newVal: JSON.stringify(result.stats),
         userId: actor && actor.id ? actor.id : 'system_admin',

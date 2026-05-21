@@ -46,6 +46,14 @@ function openDb() {
       raw_payload TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_ts_project_date ON timesheet_entries(project_no, work_date);
+    CREATE TABLE IF NOT EXISTS cost_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_no TEXT NOT NULL,
+      cost_month TEXT NOT NULL,
+      category TEXT NOT NULL,
+      amount REAL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_cost_project_month ON cost_entries(project_no, cost_month);
   `);
 
   return db;
@@ -322,6 +330,45 @@ function clearAllTimesheetEntries(db) {
   db.prepare('DELETE FROM timesheet_entries').run();
 }
 
+function countCostEntries(db) {
+  return db.prepare('SELECT COUNT(*) AS c FROM cost_entries').get().c;
+}
+
+function replaceProjectCostEntries(db, projectNo, rows) {
+  const del = db.prepare('DELETE FROM cost_entries WHERE project_no = ?');
+  const ins = db.prepare(`
+    INSERT INTO cost_entries (project_no, cost_month, category, amount)
+    VALUES (?, ?, ?, ?)
+  `);
+  const tx = db.transaction((no, list) => {
+    del.run(no);
+    for (const r of list) {
+      ins.run(no, r.cost_month, r.category, r.amount || 0);
+    }
+  });
+  tx(projectNo, rows);
+}
+
+function getCostEntries(db, projectNo, year) {
+  const y = String(year);
+  const rows = db.prepare(`
+    SELECT project_no, cost_month, category, amount
+    FROM cost_entries
+    WHERE project_no = ? AND substr(cost_month, 1, 4) = ?
+    ORDER BY cost_month ASC, category ASC
+  `).all(projectNo, y);
+  return rows.map(r => ({
+    projectNo: r.project_no,
+    costMonth: r.cost_month,
+    category: r.category || '',
+    amount: r.amount || 0
+  }));
+}
+
+function clearAllCostEntries(db) {
+  db.prepare('DELETE FROM cost_entries').run();
+}
+
 function resolveSystemYear(db) {
   ensureDefaultMeta(db);
   const periodConfig = Object.assign({}, DEFAULT_PERIOD_CONFIG, getMeta(db, 'periodConfig') || {});
@@ -354,5 +401,9 @@ module.exports = {
   replaceProjectTimesheet,
   getTimesheetEntries,
   clearAllTimesheetEntries,
+  countCostEntries,
+  replaceProjectCostEntries,
+  getCostEntries,
+  clearAllCostEntries,
   resolveSystemYear
 };

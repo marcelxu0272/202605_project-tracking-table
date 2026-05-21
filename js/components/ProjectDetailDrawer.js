@@ -23,6 +23,7 @@
     components: (function () {
       var c = {};
       if (window.ProjectTimesheetAux) c.ProjectTimesheetAux = window.ProjectTimesheetAux;
+      if (window.ProjectCostAux) c.ProjectCostAux = window.ProjectCostAux;
       return c;
     })(),
     props: {
@@ -557,8 +558,12 @@
                 ></project-timesheet-aux>
               </div>
               <div class="drawer-aux-panel drawer-aux-panel--cost">
-                <div class="drawer-aux-panel-title drawer-aux-panel-title--muted">成本数据</div>
-                <div class="drawer-aux-placeholder-text">成本法相关指标预留位，当前阶段仅展示占位说明。</div>
+                <div class="drawer-aux-panel-title">成本数据</div>
+                <project-cost-aux
+                  v-if="projectTitle"
+                  :project-no="projectTitle"
+                  :year="systemYear"
+                ></project-cost-aux>
               </div>
             </div>
           </section>

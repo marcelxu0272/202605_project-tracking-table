@@ -2408,7 +2408,7 @@
             <span class="editor-legend-swatch editor-legend-swatch--changed" aria-hidden="true">Aa</span>本月有变更字段
           </span>
           <span class="editor-legend-item">
-            <span class="editor-legend-swatch editor-legend-swatch--warning"></span>存量预警（R/S 为负）
+            <span class="editor-legend-swatch editor-legend-swatch--warning"></span>预警
           </span>
 
 

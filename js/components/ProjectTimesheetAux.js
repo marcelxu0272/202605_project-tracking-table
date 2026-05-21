@@ -51,6 +51,9 @@
       metricLabel: function () {
         return this.metric === 'cost' ? '已审工时成本' : '已审工时';
       },
+      metricUnitLabel: function () {
+        return this.metric === 'cost' ? '金额单位：元' : '工时单位：小时';
+      },
       monthColumnWidth: function () {
         return this.metric === 'cost' ? 84 : 52;
       },
@@ -68,7 +71,7 @@
         if (!this.stats || this.stats.empty) {
           return this.year + ' 年暂无工时数据';
         }
-        return this.year + ' 年 · ' + this.metricLabel + ' · 共 ' + (this.stats.detailCount || 0) + ' 条明细';
+        return this.year + ' 年 · ' + this.metricLabel + ' · 共 ' + (this.stats.detailCount || 0) + ' 条明细 · ' + this.metricUnitLabel;
       },
       filteredDetails: function () {
         if (!this.stats || !this.stats.details) return [];
@@ -145,10 +148,14 @@
         return formatHours(row.totalHours);
       },
       cellHasValue: function (row, mi) {
+        if (row && row.isTotal) return false;
         if (!row || !row.months || !row.months[mi]) return false;
         var cell = row.months[mi];
         if (this.metric === 'cost') return Math.abs(cell.cost || 0) >= 1e-9;
         return Math.abs(cell.hours || 0) >= 1e-9;
+      },
+      rowClassName: function (obj) {
+        return obj.row && obj.row.isTotal ? 'drawer-ts-row--total' : '';
       },
       openDetail: function (filter) {
         this.detailFilter = filter || null;
@@ -216,6 +223,7 @@
             border
             max-height="280"
             :class="['drawer-timesheet-table', tableMetricClass]"
+            :row-class-name="rowClassName"
             :header-cell-style="{ background: '#f8fafc', fontWeight: '600', fontSize: '11px', padding: '4px 0' }"
             :cell-style="{ padding: '2px 6px', fontSize: '11px', whiteSpace: 'nowrap' }"
           >
@@ -225,7 +233,11 @@
               fixed
               min-width="140"
               show-overflow-tooltip
-            ></el-table-column>
+            >
+              <template slot-scope="{ row }">
+                <span :class="{ 'drawer-ts-item--total': row.isTotal }">{{ row.key }}</span>
+              </template>
+            </el-table-column>
             <el-table-column
               v-for="(ml, mi) in monthLabels"
               :key="'m-' + mi"
