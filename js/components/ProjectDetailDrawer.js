@@ -20,6 +20,11 @@
 
   window.ProjectDetailDrawer = {
     name: 'ProjectDetailDrawer',
+    components: (function () {
+      var c = {};
+      if (window.ProjectTimesheetAux) c.ProjectTimesheetAux = window.ProjectTimesheetAux;
+      return c;
+    })(),
     props: {
       visible: { type: Boolean, default: false },
       project: { type: Object, default: null },
@@ -123,6 +128,16 @@
         set: function (v) {
           if (!v) this.$emit('close');
         }
+      },
+      systemYear: function () {
+        var store = window.Store;
+        if (store && store.periodConfig && store.periodConfig.systemYear) {
+          return Number(store.periodConfig.systemYear);
+        }
+        if (store && store.reportingMonth) {
+          return Number(String(store.reportingMonth).slice(0, 4)) || new Date().getFullYear();
+        }
+        return new Date().getFullYear();
       }
     },
     watch: {
@@ -529,16 +544,20 @@
             </el-collapse>
           </section>
 
-          <!-- 辅助区占位 -->
+          <!-- 辅助区 -->
           <section class="project-drawer-section project-drawer-aux">
-            <div class="project-drawer-section-label">辅助数据（待接入）</div>
-            <div class="drawer-aux-grid">
-              <div class="drawer-aux-placeholder">
-                <div class="drawer-aux-placeholder-title">⏱ 工时数据</div>
-                <div class="drawer-aux-placeholder-text">中台工时接口就绪后，在此展示当月 / 累计工时供产值填报参考。</div>
+            <div class="project-drawer-section-label">辅助数据</div>
+            <div class="drawer-aux-rows">
+              <div class="drawer-aux-panel drawer-aux-panel--timesheet">
+                <div class="drawer-aux-panel-title">工时数据</div>
+                <project-timesheet-aux
+                  v-if="projectTitle"
+                  :project-no="projectTitle"
+                  :year="systemYear"
+                ></project-timesheet-aux>
               </div>
-              <div class="drawer-aux-placeholder">
-                <div class="drawer-aux-placeholder-title">💰 成本数据</div>
+              <div class="drawer-aux-panel drawer-aux-panel--cost">
+                <div class="drawer-aux-panel-title drawer-aux-panel-title--muted">成本数据</div>
                 <div class="drawer-aux-placeholder-text">成本法相关指标预留位，当前阶段仅展示占位说明。</div>
               </div>
             </div>

@@ -10,6 +10,8 @@ const { seedDevEnvironment, normalizeProjects } = require('./dev-reset-seed');
 const dbm = require('./db');
 const sw = require('./sector-workflow');
 const platformSync = require('./platform-sync');
+const timesheetImport = require('./timesheet-import');
+const timesheetStats = require('./timesheet-stats');
 
 const ROOT = path.join(__dirname, '..');
 const PORT = Number(process.env.PTRACK_PORT) || 3000;
@@ -65,6 +67,7 @@ function seedFromXlsxIfEmpty(db) {
 const db = dbm.openDb();
 dbm.ensureDefaultMeta(db);
 seedFromXlsxIfEmpty(db);
+timesheetImport.seedTimesheetsIfEmpty(db, dbm);
 
 const app = express();
 app.use(express.json({ limit: '80mb' }));
@@ -101,6 +104,21 @@ app.put('/api/projects/:projectNo', (req, res) => {
     }
     dbm.upsertProject(db, p);
     res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message) });
+  }
+});
+
+app.get('/api/projects/:projectNo/timesheet', (req, res) => {
+  try {
+    const projectNo = req.params.projectNo;
+    let year = req.query.year != null ? Number(req.query.year) : dbm.resolveSystemYear(db);
+    if (!year || isNaN(year)) year = dbm.resolveSystemYear(db);
+    const entries = dbm.getTimesheetEntries(db, projectNo, year);
+    const stats = timesheetStats.buildTimesheetStats(entries, year);
+    stats.projectNo = projectNo;
+    stats.importedAt = dbm.getMeta(db, 'timesheetImportedAt', null);
+    res.json(stats);
   } catch (e) {
     res.status(500).json({ error: String(e.message) });
   }
@@ -599,6 +617,37 @@ app.post('/api/admin/reseed', (_req, res) => {
     dbm.setMeta(db, 'sectorRegistry', registry);
     const devSeed = applyDevSeedAfterImport(reportingMonth);
     res.json({ ok: true, count, file, devSeed });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: String(e.message) });
+  }
+});
+
+/** 从 docs/参考数据 重新导入工时明细 xlsx */
+app.post('/api/admin/timesheet-import', (req, res) => {
+  try {
+    const body = req.body || {};
+    const result = timesheetImport.importTimesheetsFromDir(db, dbm, { force: true });
+    if (result.imported) {
+      const actor = body.user || body.actor || null;
+      dbm.pushAudit(db, {
+        id: Date.now() + '_tsimport_' + Math.random().toString(36).slice(2, 6),
+        timestamp: new Date().toISOString(),
+        operation_type: 'timesheet_import',
+        projectNo: '—',
+        projectName: '全局',
+        fieldName: 'timesheet_import',
+        fieldCN: '工时数据导入',
+        oldVal: '',
+        newVal: JSON.stringify(result.stats),
+        userId: actor && actor.id ? actor.id : 'system_admin',
+        userName: actor && actor.name ? actor.name : '系统管理员'
+      });
+    }
+    res.json({
+      ok: true,
+      ...result,
+      state: dbm.getBootstrapState(db)
+    });
   } catch (e) {
     res.status(e.status || 500).json({ error: String(e.message) });
   }

@@ -30,6 +30,22 @@ function openDb() {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS timesheet_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_no TEXT NOT NULL,
+      work_date TEXT NOT NULL,
+      profession TEXT,
+      engineer_sector TEXT,
+      engineer TEXT,
+      unit_no TEXT,
+      unit_name TEXT,
+      approved_hours REAL DEFAULT 0,
+      approved_cost REAL DEFAULT 0,
+      rate REAL,
+      remark TEXT,
+      raw_payload TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_ts_project_date ON timesheet_entries(project_no, work_date);
   `);
 
   return db;
@@ -244,6 +260,76 @@ function getEffectiveLockStatus(db) {
     : _calcLockStatus(periodConfig);
 }
 
+function countTimesheetEntries(db) {
+  return db.prepare('SELECT COUNT(*) AS c FROM timesheet_entries').get().c;
+}
+
+function replaceProjectTimesheet(db, projectNo, rows) {
+  const del = db.prepare('DELETE FROM timesheet_entries WHERE project_no = ?');
+  const ins = db.prepare(`
+    INSERT INTO timesheet_entries (
+      project_no, work_date, profession, engineer_sector, engineer,
+      unit_no, unit_name, approved_hours, approved_cost, rate, remark, raw_payload
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const tx = db.transaction((no, list) => {
+    del.run(no);
+    for (const r of list) {
+      ins.run(
+        no,
+        r.work_date,
+        r.profession || '',
+        r.engineer_sector || '',
+        r.engineer || '',
+        r.unit_no || '',
+        r.unit_name || '',
+        r.approved_hours || 0,
+        r.approved_cost || 0,
+        r.rate != null ? r.rate : null,
+        r.remark || '',
+        r.raw_payload ? JSON.stringify(r.raw_payload) : null
+      );
+    }
+  });
+  tx(projectNo, rows);
+}
+
+function getTimesheetEntries(db, projectNo, year) {
+  const y = String(year);
+  const rows = db.prepare(`
+    SELECT project_no, work_date, profession, engineer_sector, engineer,
+           unit_no, unit_name, approved_hours, approved_cost, rate, remark
+    FROM timesheet_entries
+    WHERE project_no = ? AND substr(work_date, 1, 4) = ?
+    ORDER BY work_date ASC, id ASC
+  `).all(projectNo, y);
+  return rows.map(r => ({
+    projectNo: r.project_no,
+    workDate: r.work_date,
+    profession: r.profession || '',
+    engineerSector: r.engineer_sector || '',
+    engineer: r.engineer || '',
+    unitNo: r.unit_no || '',
+    unitName: r.unit_name || '',
+    approvedHours: r.approved_hours || 0,
+    approvedCost: r.approved_cost || 0,
+    rate: r.rate,
+    remark: r.remark || ''
+  }));
+}
+
+function clearAllTimesheetEntries(db) {
+  db.prepare('DELETE FROM timesheet_entries').run();
+}
+
+function resolveSystemYear(db) {
+  ensureDefaultMeta(db);
+  const periodConfig = Object.assign({}, DEFAULT_PERIOD_CONFIG, getMeta(db, 'periodConfig') || {});
+  if (periodConfig.systemYear) return Number(periodConfig.systemYear);
+  const reportingMonth = getMeta(db, 'reportingMonth') || periodConfig.reportingMonth || '2026-05';
+  return Number(String(reportingMonth).slice(0, 4)) || new Date().getFullYear();
+}
+
 module.exports = {
   openDb,
   DB_PATH,
@@ -263,5 +349,10 @@ module.exports = {
   resetDevMeta,
   ensureDefaultMeta,
   DEFAULT_PERIOD_CONFIG,
-  _calcLockStatus
+  _calcLockStatus,
+  countTimesheetEntries,
+  replaceProjectTimesheet,
+  getTimesheetEntries,
+  clearAllTimesheetEntries,
+  resolveSystemYear
 };
