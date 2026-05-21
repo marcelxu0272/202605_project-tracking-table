@@ -67,6 +67,7 @@
     components: (function () {
       var c = {};
       if (window.SystemAdminSectorDock) c.SystemAdminSectorDock = window.SystemAdminSectorDock;
+      if (window.ProjectDetailDrawer) c.ProjectDetailDrawer = window.ProjectDetailDrawer;
       return c;
     })(),
     data() {
@@ -103,6 +104,11 @@
         _pmBaselineCaptured: false,
         _pmBaselinePromise: null,
         _cellSaveChain: null,
+        projectDrawerVisible: false,
+        projectDrawerProject: null,
+        projectDrawerRowIndex: null,
+        projectDrawerSaving: false,
+        _lsProjectNoMouseUp: null,
       };
     },
     mounted() {
@@ -719,6 +725,62 @@
         this.buildTableData();
       },
 
+      async _applyFieldChangesToProject(storeProject, changes, user) {
+        if (!changes || !changes.length) return storeProject;
+        const self = this;
+        const flat = FieldConfig.arraysToFlat(storeProject);
+        changes.forEach(function (ch) {
+          flat[ch.key] = ch.newVal;
+        });
+        const updated = FieldConfig.flatToArrays(flat);
+        const tracking = window.ChangeMeta
+          ? ChangeMeta.mergeChangeTracking(storeProject)
+          : { _field_change_log: {}, _changed_fields: [] };
+        const changeLog = tracking._field_change_log;
+        changes.forEach(function (ch) {
+          if (window.ChangeMeta) {
+            ChangeMeta.recordFieldChangeLog(
+              { _field_change_log: changeLog }, ch.field, ch.oldVal, ch.newVal, user
+            );
+          }
+        });
+        if (window.ChangeMeta) {
+          Object.keys(changeLog).forEach(function (col) {
+            changeLog[col] = ChangeMeta.dedupeChangeLogList(changeLog[col]);
+          });
+        }
+        const recomputed = FormulaEngine.compute(updated, self.monthIdx);
+        recomputed._field_change_log = changeLog;
+        recomputed._changed_fields = tracking._changed_fields.slice();
+        changes.forEach(function (ch) {
+          if (recomputed._changed_fields.indexOf(ch.field.col) < 0) {
+            recomputed._changed_fields.push(ch.field.col);
+          }
+        });
+        Object.keys(changeLog).forEach(function (col) {
+          if (recomputed._changed_fields.indexOf(col) < 0) {
+            recomputed._changed_fields.push(col);
+          }
+        });
+
+        await Store.updateProject(recomputed);
+        for (let i = 0; i < changes.length; i++) {
+          const ch = changes[i];
+          await Store.addAuditLog({
+            projectNo:   storeProject.project_no,
+            projectName: storeProject.project_name,
+            fieldName:   ch.field.col,
+            fieldCN:     ch.field.name_cn,
+            oldVal:      Formatters.formatByType(ch.oldVal, ch.field.data_type),
+            newVal:      Formatters.formatByType(ch.newVal, ch.field.data_type),
+            userId:      user.role,
+            userName:    user.name
+          });
+        }
+        self.buildTableData();
+        return recomputed;
+      },
+
       async handleCellEdit(project, field, newVal, opts) {
         if (!this.canEditField(field)) return;
         const key = FieldConfig.COL_TO_KEY[field.col];
@@ -742,49 +804,17 @@
         const self = this;
         return this._trackCellSave((async function () {
           const storeProj = self.getStoreProject(project.project_no) || project;
-          flat[key] = newVal;
-          const updated = FieldConfig.flatToArrays(flat);
-          const tracking = window.ChangeMeta
-            ? ChangeMeta.mergeChangeTracking(storeProj)
-            : { _field_change_log: {}, _changed_fields: [] };
-          const changeLog = tracking._field_change_log;
-          if (window.ChangeMeta) {
-            ChangeMeta.recordFieldChangeLog(
-              { _field_change_log: changeLog }, field, oldVal, newVal, self.user
-            );
-            Object.keys(changeLog).forEach(function (col) {
-              changeLog[col] = ChangeMeta.dedupeChangeLogList(changeLog[col]);
-            });
-          }
-          const recomputed = FormulaEngine.compute(updated, self.monthIdx);
-          recomputed._field_change_log = changeLog;
-          recomputed._changed_fields = tracking._changed_fields.slice();
-          if (recomputed._changed_fields.indexOf(field.col) < 0) {
-            recomputed._changed_fields.push(field.col);
-          }
-          Object.keys(changeLog).forEach(function (col) {
-            if (recomputed._changed_fields.indexOf(col) < 0) {
-              recomputed._changed_fields.push(col);
-            }
-          });
-
-          await Store.updateProject(recomputed);
-          await Store.addAuditLog({
-            projectNo:   project.project_no,
-            projectName: project.project_name,
-            fieldName:   field.col,
-            fieldCN:     field.name_cn,
-            oldVal:      Formatters.formatByType(oldVal, field.data_type),
-            newVal:      Formatters.formatByType(newVal, field.data_type),
-            userId:      self.user.role,
-            userName:    self.user.name
-          });
-          self.buildTableData();
+          const recomputed = await self._applyFieldChangesToProject(storeProj, [{
+            field: field,
+            key: key,
+            oldVal: oldVal,
+            newVal: newVal
+          }], self.user);
           if (opts && opts.fromLuckysheet && self.activeTab === 'luckysheet') {
             const fresh = self.getStoreProject(project.project_no) || recomputed;
             if (opts.lsRow != null) {
               const rowIdx = opts.lsRow - self.lsLayout().dataStart;
-              self.syncLuckysheetProjectRowDecor(rowIdx, fresh);
+              self.syncLuckysheetProjectRowValues(rowIdx, fresh);
               self.recalcLuckysheetFormulas();
               setTimeout(function () {
                 self.syncLuckysheetProjectRowDecor(rowIdx, fresh);
@@ -797,6 +827,97 @@
           self.$message.error('保存失败：' + (e.message || e));
           throw e;
         }));
+      },
+
+      openProjectDrawer(projectNo, dataRowIndex) {
+        var list = this.filteredProjects;
+        var project = dataRowIndex >= 0 ? list[dataRowIndex] : null;
+        if (!project || project.project_no !== projectNo) {
+          project = list.find(function (p) { return p.project_no === projectNo; });
+          dataRowIndex = project ? list.indexOf(project) : -1;
+        }
+        if (!project) return;
+        var storeProj = this.getStoreProject(project.project_no) || project;
+        var computed = FormulaEngine.compute(Object.assign({}, storeProj), this.monthIdx);
+        this.projectDrawerProject = computed;
+        this.projectDrawerRowIndex = dataRowIndex;
+        this.projectDrawerVisible = true;
+      },
+
+      closeProjectDrawer() {
+        this.projectDrawerVisible = false;
+        this.projectDrawerProject = null;
+        this.projectDrawerRowIndex = null;
+      },
+
+      async handleProjectDrawerSave(draftFlat) {
+        if (!this.projectDrawerProject || !this.canEdit) return;
+        var project = this.projectDrawerProject;
+        var storeProj = this.getStoreProject(project.project_no) || project;
+        var originalFlat = FieldConfig.arraysToFlat(storeProj);
+        var coerced = Object.assign({}, draftFlat);
+        var self = this;
+
+        this.tableFields.forEach(function (field) {
+          if (!self.canEditField(field)) return;
+          var key = FieldConfig.COL_TO_KEY[field.col];
+          if (key != null && coerced[key] !== undefined) {
+            coerced[key] = self.coerceFieldValue(coerced[key], field);
+          }
+        });
+
+        if (!window.ProjectDrawerLayout) {
+          this.$message.error('Drawer 布局模块未加载');
+          return;
+        }
+
+        var changes = ProjectDrawerLayout.collectDrawerChanges(
+          originalFlat, coerced, this.tableFields, this.canEditField.bind(this)
+        );
+        if (!changes.length) {
+          this.$message.info('无变更');
+          return;
+        }
+
+        for (var i = 0; i < changes.length; i++) {
+          var ch = changes[i];
+          if (window.StockValidation && StockValidation.isCompletionField(ch.field)) {
+            var check = StockValidation.validateCompletionEdit(
+              storeProj, ch.field, ch.newVal, this.monthIdx
+            );
+            if (!check.ok) {
+              this.$message.warning(check.message);
+              return;
+            }
+          }
+        }
+
+        this.projectDrawerSaving = true;
+        try {
+          await this._trackCellSave((async function () {
+            var recomputed = await self._applyFieldChangesToProject(storeProj, changes, self.user);
+            var fresh = self.getStoreProject(project.project_no) || recomputed;
+            var rowIdx = self.projectDrawerRowIndex;
+            if (self.activeTab === 'luckysheet' && rowIdx != null && rowIdx >= 0) {
+              self.syncLuckysheetProjectRowValues(rowIdx, fresh);
+              self.recalcLuckysheetFormulas();
+              setTimeout(function () {
+                self.syncLuckysheetProjectRowDecor(rowIdx, fresh);
+              }, 320);
+            }
+            self.projectDrawerProject = fresh;
+            self.$message.success('已保存');
+          })());
+        } catch (e) {
+          this.$message.error('保存失败：' + (e.message || e));
+        } finally {
+          this.projectDrawerSaving = false;
+        }
+      },
+
+      drawerStockWarningField(project, field) {
+        if (!window.StockValidation) return false;
+        return StockValidation.isStockWarningCell(project, field, this.monthIdx);
       },
 
       handleSubmit() {
@@ -1450,6 +1571,25 @@
         return cell;
       },
 
+      /** 就地更新 Luckysheet 该行单元格值（不整表 refresh） */
+      syncLuckysheetProjectRowValues(dataRowIndex, project) {
+        if (!project || dataRowIndex < 0) return;
+        const file = this.lsGetActiveLuckysheetFile();
+        if (!file || !file.data) return;
+        const layout = this.lsLayout();
+        const r = layout.dataStart + dataRowIndex;
+        const row = file.data[r];
+        if (!row) return;
+        for (let c = 0; c < this.tableFields.length; c++) {
+          const field = this.tableFields[c];
+          if (!field) continue;
+          row[c] = this.makeLuckysheetDataCell(project, field, r, dataRowIndex);
+        }
+        try {
+          if (typeof luckysheet.jfrefreshgrid === 'function') luckysheet.jfrefreshgrid();
+        } catch (e) { /* ignore */ }
+      },
+
       /** 按项目变更记录，同步该行所有批注与高亮（公式重算后防丢失） */
       syncLuckysheetProjectRowDecor(dataRowIndex, project) {
         if (!project || dataRowIndex < 0) return;
@@ -1518,7 +1658,7 @@
         }
         const val = this.getCellValue(project, field);
         const cell = this.makeLuckysheetCell(val, field, ro, bg);
-        return this.applyLuckysheetChangeComment(
+        var out = this.applyLuckysheetChangeComment(
           this.applyLuckysheetStockWarning(
             this.applyLuckysheetHighlight(cell, project, field),
             project,
@@ -1527,6 +1667,11 @@
           project,
           field
         );
+        if (field.col === 'F' && dataRowIndex != null) {
+          out.fc = '#007069';
+          out.un = 1;
+        }
+        return out;
       },
 
       buildLuckysheetMerge() {
@@ -1921,11 +2066,57 @@
 
       destroyLuckysheet() {
         this.unbindLuckysheetFilterFreezeSync();
+        this.unbindProjectNoClickHandler();
         try {
           if (typeof luckysheet !== 'undefined' && luckysheet && typeof luckysheet.destroy === 'function') {
             luckysheet.destroy();
           }
         } catch (e) { /* ignore */ }
+      },
+
+      unbindProjectNoClickHandler() {
+        if (!this._lsProjectNoMouseUp) return;
+        var el = document.querySelector('#' + this.lsMountId + ' #luckysheet-cell-main');
+        if (el) el.removeEventListener('mouseup', this._lsProjectNoMouseUp);
+        this._lsProjectNoMouseUp = null;
+      },
+
+      bindProjectNoClickHandler() {
+        var self = this;
+        this.unbindProjectNoClickHandler();
+        var el = document.querySelector('#' + this.lsMountId + ' #luckysheet-cell-main');
+        if (!el) return;
+        var fColIdx = this.lsFieldColIndex('F');
+        if (fColIdx < 0) return;
+        this._lsProjectNoMouseUp = function () {
+          if (self._lsLoading) return;
+          if (typeof luckysheet === 'undefined' || !luckysheet) return;
+          var sel = null;
+          try {
+            if (typeof luckysheet.getRange === 'function') {
+              var rg = luckysheet.getRange();
+              if (rg && rg.length) sel = rg[0];
+            }
+            if (!sel && typeof luckysheet.getluckysheetfile === 'function') {
+              var files = luckysheet.getluckysheetfile();
+              if (files && files.length && files[0].luckysheet_select_save && files[0].luckysheet_select_save.length) {
+                sel = files[0].luckysheet_select_save[0];
+              }
+            }
+          } catch (e) { /* ignore */ }
+          if (!sel) return;
+          var r = sel.row_focus != null ? sel.row_focus : (sel.row ? sel.row[0] : null);
+          var c = sel.column_focus != null ? sel.column_focus : (sel.column ? sel.column[0] : null);
+          if (r == null || c == null) return;
+          var layout = self.lsLayout();
+          if (r < layout.dataStart || r > layout.dataEnd) return;
+          if (c !== fColIdx) return;
+          var rowIdx = r - layout.dataStart;
+          var project = self.filteredProjects[rowIdx];
+          if (!project) return;
+          self.openProjectDrawer(project.project_no, rowIdx);
+        };
+        el.addEventListener('mouseup', this._lsProjectNoMouseUp);
       },
 
       initLuckysheet() {
@@ -1954,7 +2145,12 @@
           lang: 'zh',
           showinfobar: false,
           showsheetbar: false,
-          showstatisticBar: false,
+          showstatisticBar: true,
+          showstatisticBarConfig: {
+            count: false,
+            view: false,
+            zoom: true
+          },
           showtoolbar: false,
           sheetFormulaBar: false,
           cellRightClickConfig: this.buildLuckysheetCellRightClickConfig(),
@@ -1998,6 +2194,7 @@
               self._lsLoading = false;
               self.recalcLuckysheetFormulas();
               self.applyLuckysheetDefaultFilter();
+              self.bindProjectNoClickHandler();
             },
             cellEditBefore: function (range) {
               if (self._lsLoading) return false;
@@ -2005,6 +2202,8 @@
               var item = range[0];
               var r = item.row_focus != null ? item.row_focus : item.row[0];
               var c = item.column_focus != null ? item.column_focus : item.column[0];
+              var fColIdx = self.lsFieldColIndex('F');
+              if (c === fColIdx) return false;
               return self.canEditLuckysheetCell(r, c);
             },
             cellUpdateBefore: function (r, c, value, isRefresh) {
@@ -2403,6 +2602,19 @@
             <el-button @click="pmDiffVisible = false">关闭</el-button>
           </span>
         </el-dialog>
+
+        <project-detail-drawer
+          :visible="projectDrawerVisible"
+          :project="projectDrawerProject"
+          :can-edit="canEdit"
+          :saving="projectDrawerSaving"
+          :month-idx="monthIdx"
+          :field-editable="drawerFieldEditableProp"
+          :format-value="drawerFormatValueProp"
+          :stock-warning-field="drawerStockWarningProp"
+          @close="closeProjectDrawer"
+          @save="handleProjectDrawerSave"
+        />
       </div>
     `,
     // 计算分区列表（用于表头分组）
@@ -2627,6 +2839,18 @@
         const pad = function (n) { return n < 10 ? '0' + n : String(n); };
         return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
           ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+      },
+      drawerFieldEditableProp() {
+        var self = this;
+        return function (field) { return self.canEditField(field); };
+      },
+      drawerFormatValueProp() {
+        var self = this;
+        return function (val, field) { return self.formatCellValue(val, field); };
+      },
+      drawerStockWarningProp() {
+        var self = this;
+        return function (project, field) { return self.drawerStockWarningField(project, field); };
       }
     }
   };
