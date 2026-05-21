@@ -850,6 +850,22 @@
         this.projectDrawerRowIndex = null;
       },
 
+      navigateProjectDrawer(delta) {
+        var list = this.filteredProjects;
+        if (!list.length || !this.projectDrawerVisible) return;
+        var idx = this.projectDrawerRowIndex;
+        if (idx == null || idx < 0) {
+          if (!this.projectDrawerProject) return;
+          idx = list.findIndex(function (p) {
+            return p.project_no === this.projectDrawerProject.project_no;
+          }.bind(this));
+        }
+        var nextIdx = idx + delta;
+        if (nextIdx < 0 || nextIdx >= list.length) return;
+        var project = list[nextIdx];
+        this.openProjectDrawer(project.project_no, nextIdx);
+      },
+
       async handleProjectDrawerSave(draftFlat) {
         if (!this.projectDrawerProject || !this.canEdit) return;
         var project = this.projectDrawerProject;
@@ -2609,11 +2625,15 @@
           :can-edit="canEdit"
           :saving="projectDrawerSaving"
           :month-idx="monthIdx"
+          :nav-index="projectDrawerNavIndex"
+          :nav-total="filteredProjects.length"
           :field-editable="drawerFieldEditableProp"
           :format-value="drawerFormatValueProp"
           :stock-warning-field="drawerStockWarningProp"
           @close="closeProjectDrawer"
           @save="handleProjectDrawerSave"
+          @nav-prev="navigateProjectDrawer(-1)"
+          @nav-next="navigateProjectDrawer(1)"
         />
       </div>
     `,
@@ -2787,6 +2807,15 @@
           return p.filter(function (x) { return StockValidation.hasStockWarning(x, monthIdx); });
         }
         return p;
+      },
+      projectDrawerNavIndex() {
+        if (this.projectDrawerRowIndex != null && this.projectDrawerRowIndex >= 0) {
+          return this.projectDrawerRowIndex;
+        }
+        if (!this.projectDrawerProject) return -1;
+        return this.filteredProjects.findIndex(function (p) {
+          return p.project_no === this.projectDrawerProject.project_no;
+        }.bind(this));
       },
       warningProjectCount() {
         if (!window.StockValidation) return 0;

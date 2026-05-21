@@ -1,0 +1,405 @@
+/**
+ * Element UI 2.x 品牌色覆盖
+ * 对齐 docs/设计文档/DESIGN.md：主色 #007069 / hover #005c56 / active #004842
+ * 须在 theme-chalk/index.css 与 style.css（:root 变量）之后加载
+ */
+
+/* ── 主按钮 ── */
+.el-button--primary {
+  background-color: var(--color-brand);
+  border-color: var(--color-brand);
+}
+.el-button--primary:hover,
+.el-button--primary:focus {
+  background-color: var(--color-brand-dark);
+  border-color: var(--color-brand-dark);
+  color: #fff;
+}
+.el-button--primary:active {
+  background-color: var(--color-brand-active);
+  border-color: var(--color-brand-active);
+  color: #fff;
+}
+.el-button--primary.is-disabled,
+.el-button--primary.is-disabled:hover,
+.el-button--primary.is-disabled:focus,
+.el-button--primary.is-disabled:active {
+  background-color: rgba(0, 112, 105, 0.45);
+  border-color: rgba(0, 112, 105, 0.45);
+  color: #fff;
+}
+.el-button--primary.is-plain {
+  color: var(--color-brand);
+  background: var(--color-brand-tint-5);
+  border-color: var(--color-brand-border);
+}
+.el-button--primary.is-plain:hover,
+.el-button--primary.is-plain:focus {
+  background: var(--color-brand);
+  border-color: var(--color-brand);
+  color: #fff;
+}
+.el-button--primary.is-plain:active {
+  background: var(--color-brand-active);
+  border-color: var(--color-brand-active);
+  color: #fff;
+}
+.el-button--text {
+  color: var(--color-brand);
+}
+.el-button--text:hover,
+.el-button--text:focus {
+  color: var(--color-brand-dark);
+}
+
+/* ── 文字链接 ── */
+.el-link.el-link--primary {
+  color: var(--color-brand);
+}
+.el-link.el-link--primary:hover {
+  color: var(--color-brand-dark);
+}
+.el-link.el-link--primary.is-underline:hover:after {
+  border-color: var(--color-brand-dark);
+}
+
+/* ── 表单控件 focus ── */
+.el-input__inner:focus,
+.el-textarea__inner:focus {
+  border-color: var(--color-brand);
+}
+.el-input.is-active .el-input__inner,
+.el-select .el-input.is-focus .el-input__inner,
+.el-cascader .el-input.is-focus .el-input__inner {
+  border-color: var(--color-brand);
+}
+.el-input-number__decrease:hover:not(.is-disabled) ~ .el-input .el-input__inner:not(.is-disabled),
+.el-input-number__increase:hover:not(.is-disabled) ~ .el-input .el-input__inner:not(.is-disabled) {
+  border-color: var(--color-brand);
+}
+.el-input-number__decrease:hover,
+.el-input-number__increase:hover {
+  color: var(--color-brand);
+}
+
+/* ── Checkbox / Radio / Switch ── */
+.el-checkbox__input.is-checked .el-checkbox__inner,
+.el-checkbox__input.is-indeterminate .el-checkbox__inner {
+  background-color: var(--color-brand);
+  border-color: var(--color-brand);
+}
+.el-checkbox__input.is-checked + .el-checkbox__label {
+  color: var(--color-brand);
+}
+.el-checkbox__inner:hover {
+  border-color: var(--color-brand);
+}
+.el-checkbox__input.is-focus .el-checkbox__inner {
+  border-color: var(--color-brand);
+}
+.el-radio__input.is-checked .el-radio__inner {
+  border-color: var(--color-brand);
+  background: var(--color-brand);
+}
+.el-radio__input.is-checked + .el-radio__label {
+  color: var(--color-brand);
+}
+.el-radio__inner:hover {
+  border-color: var(--color-brand);
+}
+.el-radio-button__orig-radio:checked + .el-radio-button__inner {
+  background-color: var(--color-brand);
+  border-color: var(--color-brand);
+  box-shadow: -1px 0 0 0 var(--color-brand);
+}
+.el-radio-button__inner:hover {
+  color: var(--color-brand);
+}
+.el-switch.is-checked .el-switch__core {
+  border-color: var(--color-brand);
+  background-color: var(--color-brand);
+}
+.el-switch__label.is-active {
+  color: var(--color-brand);
+}
+
+/* ── Select / Dropdown / Cascader ── */
+.el-select-dropdown__item.selected {
+  color: var(--color-brand);
+  font-weight: 600;
+}
+.el-select-dropdown.is-multiple .el-select-dropdown__item.selected {
+  color: var(--color-brand);
+  background-color: var(--color-brand-light);
+}
+.el-select-dropdown__item.hover,
+.el-select-dropdown__item:hover {
+  background-color: var(--color-brand-light);
+}
+.el-dropdown-menu__item:not(.is-disabled):hover,
+.el-dropdown-menu__item:focus {
+  background-color: var(--color-brand-light);
+  color: var(--color-brand);
+}
+.el-cascader-node.in-active-path,
+.el-cascader-node.is-active,
+.el-cascader-node.is-selectable.in-checked-path {
+  color: var(--color-brand);
+  font-weight: 600;
+}
+.el-cascader .el-input .el-input__inner:focus,
+.el-cascader .el-input.is-focus .el-input__inner {
+  border-color: var(--color-brand);
+}
+
+/* ── Tabs ── */
+.el-tabs__active-bar {
+  background-color: var(--color-brand);
+}
+.el-tabs__item.is-active {
+  color: var(--color-brand);
+}
+.el-tabs__item:hover {
+  color: var(--color-brand);
+}
+.el-tabs__item:focus.is-active.is-focus:not(:active) {
+  box-shadow: inset 0 0 2px 2px var(--color-brand-light);
+}
+.el-tabs--border-card > .el-tabs__header .el-tabs__item.is-active {
+  color: var(--color-brand);
+}
+.el-tabs--border-card > .el-tabs__header .el-tabs__item:not(.is-disabled):hover {
+  color: var(--color-brand);
+}
+
+/* ── Pagination ── */
+.el-pagination.is-background .el-pager li:not(.disabled).active {
+  background-color: var(--color-brand);
+  color: #fff;
+}
+.el-pagination.is-background .el-pager li:not(.disabled):hover {
+  color: var(--color-brand);
+}
+.el-pagination button:hover {
+  color: var(--color-brand);
+}
+.el-pagination__sizes .el-input .el-input__inner:hover {
+  border-color: var(--color-brand);
+}
+
+/* ── Table ── */
+.el-table th.el-table__cell {
+  background-color: var(--color-brand-light);
+  color: var(--color-brand);
+}
+.el-table .ascending .sort-caret.ascending {
+  border-bottom-color: var(--color-brand);
+}
+.el-table .descending .sort-caret.descending {
+  border-top-color: var(--color-brand);
+}
+.el-table__body tr.current-row > td.el-table__cell {
+  background-color: var(--color-brand-tint-5);
+}
+.el-table--enable-row-hover .el-table__body tr:hover > td.el-table__cell {
+  background-color: var(--color-brand-tint-3);
+}
+
+/* ── Date / Time Picker ── */
+.el-date-table td.today span {
+  color: var(--color-brand);
+  font-weight: 600;
+}
+.el-date-table td.available:hover {
+  color: var(--color-brand);
+}
+.el-date-table td.current:not(.disabled) span {
+  background-color: var(--color-brand);
+  color: #fff;
+}
+.el-date-table td.end-date span,
+.el-date-table td.start-date span {
+  background-color: var(--color-brand);
+}
+.el-date-table td.in-range div,
+.el-date-table td.in-range div:hover {
+  background-color: var(--color-brand-light);
+}
+.el-picker-panel__icon-btn:hover {
+  color: var(--color-brand);
+}
+.el-date-picker__header-label:hover,
+.el-date-picker__header-label.active {
+  color: var(--color-brand);
+}
+.el-picker-panel__shortcut:hover {
+  color: var(--color-brand);
+}
+.el-month-table td.today .cell {
+  color: var(--color-brand);
+  font-weight: 600;
+}
+.el-month-table td .cell:hover {
+  color: var(--color-brand);
+}
+.el-month-table td.current:not(.disabled) .cell {
+  color: var(--color-brand);
+}
+.el-year-table td.today .cell {
+  color: var(--color-brand);
+  font-weight: 600;
+}
+.el-year-table td .cell:hover,
+.el-year-table td.current:not(.disabled) .cell {
+  color: var(--color-brand);
+}
+.el-time-panel__btn.confirm {
+  color: var(--color-brand);
+}
+
+/* ── Steps / Timeline ── */
+.el-step__head.is-finish {
+  color: var(--color-brand);
+  border-color: var(--color-brand);
+}
+.el-step__title.is-finish {
+  color: var(--color-brand);
+}
+.el-step__head.is-process {
+  color: var(--color-brand);
+  border-color: var(--color-brand);
+}
+.el-step__title.is-process {
+  color: var(--color-brand);
+}
+.el-step__description.is-process {
+  color: var(--color-brand);
+}
+.el-timeline-item__node--primary {
+  background-color: var(--color-brand);
+}
+
+/* ── Progress / Slider ── */
+.el-progress-bar__inner {
+  background-color: var(--color-brand);
+}
+.el-progress__text {
+  color: var(--color-brand);
+}
+.el-slider__bar {
+  background-color: var(--color-brand);
+}
+.el-slider__button {
+  border-color: var(--color-brand);
+}
+.el-slider__button:hover,
+.el-slider__button.dragging {
+  transform: scale(1.15);
+  border-color: var(--color-brand-dark);
+}
+
+/* ── Tag / Badge / Alert ── */
+.el-tag {
+  border-radius: 4px;
+}
+.el-tag--primary {
+  background-color: var(--color-brand-light);
+  border-color: var(--color-brand-border);
+  color: var(--color-brand);
+}
+.el-badge__content {
+  background-color: var(--color-brand);
+}
+.el-alert--info {
+  background-color: var(--color-brand-light);
+  color: var(--color-brand);
+}
+.el-alert--info .el-alert__description {
+  color: var(--color-brand-dark);
+}
+.el-alert--info.is-light {
+  background-color: var(--color-brand-tint-5);
+}
+
+/* ── Tree / Menu (内容区) ── */
+.el-tree-node.is-current > .el-tree-node__content {
+  background-color: var(--color-brand-light);
+  color: var(--color-brand);
+}
+.el-tree-node__content:hover {
+  background-color: var(--color-brand-tint-5);
+}
+.el-menu-item.is-active {
+  color: var(--color-brand);
+}
+.el-menu--horizontal > .el-menu-item.is-active {
+  border-bottom-color: var(--color-brand);
+  color: var(--color-brand);
+}
+.el-menu--horizontal > .el-menu-item:not(.is-disabled):hover,
+.el-menu--horizontal > .el-menu-item:not(.is-disabled):focus {
+  color: var(--color-brand);
+}
+.el-submenu.is-active .el-submenu__title {
+  border-bottom-color: var(--color-brand);
+}
+
+/* ── Upload / Transfer ── */
+.el-upload-dragger:hover {
+  border-color: var(--color-brand);
+}
+.el-upload-dragger .el-upload__text em {
+  color: var(--color-brand);
+}
+.el-upload-list__item.is-success .el-upload-list__item-name:hover,
+.el-upload-list__item .el-icon-close-tip {
+  color: var(--color-brand);
+}
+.el-transfer-panel__item:hover {
+  color: var(--color-brand);
+}
+.el-transfer__button {
+  background-color: var(--color-brand);
+  border-color: var(--color-brand);
+}
+.el-transfer__button:hover,
+.el-transfer__button:focus {
+  background-color: var(--color-brand-dark);
+  border-color: var(--color-brand-dark);
+}
+
+/* ── Loading / Message / Notification ── */
+.el-loading-spinner .path {
+  stroke: var(--color-brand);
+}
+.el-loading-spinner .el-loading-text {
+  color: var(--color-brand);
+}
+.el-message--info .el-message__content {
+  color: var(--color-brand);
+}
+.el-message-box__headerbtn:hover .el-message-box__close {
+  color: var(--color-brand);
+}
+
+/* ── Collapse / Drawer / Dialog 细节 ── */
+.el-collapse-item__header.focusing:focus:not(:hover) {
+  color: var(--color-brand);
+}
+.el-dialog__headerbtn:hover .el-dialog__close {
+  color: var(--color-brand);
+}
+.el-drawer__headerbtn:hover .el-drawer__close {
+  color: var(--color-brand);
+}
+
+/* ── Rate / ColorPicker ── */
+.el-rate__icon.hover {
+  color: var(--color-brand);
+}
+.el-color-dropdown__link-btn {
+  color: var(--color-brand);
+}
+.el-color-dropdown__link-btn:hover {
+  color: var(--color-brand-dark);
+}

@@ -29,7 +29,8 @@
 | `column_analysis.py` / `column_analysis.txt` | 🐍📝 分析产物 | ~20KB | 字段级数据分析。 |
 | `excel_structure.txt` | 📝 结构导出 | ~5KB | 表结构快照。 |
 | `index.html` | 🌐 应用入口 | ~3KB | CDN + 业务脚本；`npm start` → http://127.0.0.1:3000/ |
-| `css/style.css` | 🎨 全局样式 | ~15KB | 品牌色、变更字段色（`--color-changed-field-*`）、图例、侧栏、工具栏。 |
+| `css/style.css` | 🎨 全局样式 | ~15KB | 品牌色 CSS 变量、变更字段色、图例、侧栏、工具栏。 |
+| `css/element-theme.css` | 🎨 Element 主题 | ~6KB | 覆盖 Element UI 默认蓝色，对齐 DESIGN.md 品牌色 `#007069`。 |
 | `js/formatters.js` | 🔧 格式化工具 | ~4KB | 金额、日期、百分比等。 |
 | `js/formula-engine.js` | ⚙️ 公式引擎 | ~8KB | 83 字段 `auto_calc` 逻辑与汇总。 |
 | `js/field-config.js` | 🔐 字段权限 | ~7KB | 角色 × 锁定期字段可写矩阵。 |
