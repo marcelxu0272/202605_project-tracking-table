@@ -106,6 +106,8 @@
     snapshots: {},
     /** 与本月对比的「上月归档」快照版本键，如 Month:2026-04 */
     priorMonthSnapshotVersion: null,
+    systemDataSyncedAt: null,
+    systemDataSyncMeta: null,
     auditLog: [],
     sidebarCollapsed: !!lsGet(LS_KEY_SIDEBAR, false),
     editorViewMode: 'all',
@@ -136,6 +138,8 @@
     Store.sectorNames = d.sectorNames || Store.sectorNames || {};
     Store.companyFlow = d.companyFlow || { archiveStatus: 'pending', archivedAt: null };
     Store.priorMonthSnapshotVersion = d.priorMonthSnapshotVersion || null;
+    Store.systemDataSyncedAt = d.systemDataSyncedAt || null;
+    Store.systemDataSyncMeta = d.systemDataSyncMeta || null;
     Store._hydrated = true;
   }
 
@@ -497,6 +501,26 @@
         reportingMonth: Store.reportingMonth
       }
     });
+  };
+
+  Store.syncPlatformData = async function () {
+    const user = Store.currentUser || {};
+    const d = await apiFetch('/admin/sync-platform-data', {
+      method: 'POST',
+      body: {
+        user: {
+          id: user.id,
+          name: user.name,
+          role: user.role
+        }
+      }
+    });
+    if (d && d.state) applyBootstrap(d.state);
+    else if (d && d.systemDataSyncedAt) {
+      Store.systemDataSyncedAt = d.systemDataSyncedAt;
+      Store.systemDataSyncMeta = d.syncMeta || null;
+    }
+    return d;
   };
 
   Store.getMonthIdx = function () {

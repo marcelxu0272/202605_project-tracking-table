@@ -1,7 +1,7 @@
 # 📁 项目追踪表线上化 — 目录说明
 
 > **项目目标：** 将金山中心（S520）项目执行跟踪 Excel 表的填写、汇总、统计与展示线上化  
-> **最后更新：** 2026-05-19
+> **最后更新：** 2026-05-20
 
 ---
 
@@ -15,6 +15,8 @@
 | `server/load-modules.js` | 🔧 模块加载 | ~1KB | 在 Node 中 vm 执行 `fields-data.js`、`formula-engine.js`、`field-config.js`。 |
 | `server/xlsx-seed.js` | 📥 服务端解析 | ~3KB | xlsx → projects（与 `js/xlsx-importer.js` 对齐）。 |
 | `server/prior-month-snapshot.js` | 📅 上月快照 | ~3KB | 从当前库剔除部分项目生成 `Month:YYYY-MM` 快照，供「新增项目」对比。 |
+| `server/platform-sync.js` | 🔄 平台同步 | ~4KB | 从中台/CRB/财务合并 `system_sync` 字段；每日定时 + 管理员手动触发；写 `systemDataSyncedAt`。 |
+| `server/platform-sync-stub.js` | 🔧 同步 stub | ~2KB | 开发期平台快照（优先读 xlsx，否则克隆库微调）；待 `PTRACK_PLATFORM_API_URL` 替换。 |
 | `server/seed-prior-month-snapshot.js` | 🔧 CLI | ~1KB | `npm run seed:prior-month [剔除条数]`，默认剔除 48 条。 |
 | `初始数据.xlsx` | 📊 初始化数据 | 视文件 | 置于项目根目录；库为空时自动导入；管理页可「从初始 Excel 恢复」。 |
 | `data/ptrack.sqlite` | 🗄 运行时库 | 自动生成 | SQLite 数据文件（`.gitignore`）；种子来源见上或 S520 源表。 |

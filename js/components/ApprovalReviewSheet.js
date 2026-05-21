@@ -10,6 +10,7 @@
     data() {
       return {
         viewMode: 'all',
+        compactColumnsOnly: false,
         activeTab: 'luckysheet',
         showLegacyHtmlTable: false,
         showDiffHint: true,
@@ -42,7 +43,6 @@
       isPm() { return false; },
       isSectorAdmin() { return false; },
       lsMountId() { return 'approval-luckysheet-mount'; },
-      lsShowToolbar() { return false; },
       lsGridKey() { return 'ptrack_approval_review'; },
       scopedProjects() {
         const sector = this.reviewSector;
@@ -89,6 +89,10 @@
         const self = this;
         this.buildTableData();
         this.$nextTick(function () { self.refreshLuckysheet(); });
+      },
+      compactColumnsOnly: function () {
+        const self = this;
+        this.$nextTick(function () { self.refreshLuckysheet(); });
       }
     },
     mounted() {
@@ -132,14 +136,6 @@
     },
     template: [
       '<motion-placeholder class="approval-review-sheet">',
-      '<motion-placeholder class="approval-review-toolbar">',
-      '<el-radio-group v-model="viewMode" size="small" class="view-toggle">',
-      '<el-radio-button label="all">全部（{{ scopedProjects.length }}）</el-radio-button>',
-      '<el-radio-button label="new_only">新增项目（{{ newProjectCount }}）</el-radio-button>',
-      '<el-radio-button label="changed_only">有变更（{{ changedProjectCount }}）</el-radio-button>',
-      '</el-radio-group>',
-      '<span class="approval-review-toolbar-hint">{{ reviewHintText }}</span>',
-      '</motion-placeholder>',
       '<motion-placeholder v-if="showDiffHint" class="editor-diff-hint">',
       '<span class="editor-legend-item"><span class="editor-legend-swatch editor-legend-swatch--new"></span>本月新增项目</span>',
       '<span class="editor-legend-item"><span class="editor-legend-swatch editor-legend-swatch--editable"></span>可编辑列</span>',
@@ -152,6 +148,16 @@
       '<p style="margin-top:8px;font-size:13px;color:#64748b;">{{ reviewEmptyText }}</p>',
       '</motion-placeholder>',
       '<motion-placeholder v-else class="luckysheet-editor-wrap">',
+      '<motion-placeholder class="sheet-toolbar">',
+      '<el-radio-group v-model="viewMode" size="mini" class="view-toggle view-toggle--compact">',
+      '<el-radio-button label="all">全部（{{ scopedProjects.length }}）</el-radio-button>',
+      '<el-radio-button label="new_only">新增（{{ newProjectCount }}）</el-radio-button>',
+      '<el-radio-button label="changed_only">有变更（{{ changedProjectCount }}）</el-radio-button>',
+      '</el-radio-group>',
+      '<el-divider direction="vertical" class="sheet-toolbar-divider"></el-divider>',
+      '<el-checkbox v-model="compactColumnsOnly" class="sheet-toolbar-checkbox">仅显示项目信息与可编辑列</el-checkbox>',
+      '<span class="approval-review-toolbar-hint">{{ reviewHintText }}</span>',
+      '</motion-placeholder>',
       '<motion-placeholder :id="lsMountId"></motion-placeholder>',
       '</motion-placeholder>',
       '</motion-placeholder>'

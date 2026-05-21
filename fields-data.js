@@ -241,28 +241,28 @@ window.FIELD_DICTIONARY = [
   {
     "id": 18,
     "col": "R",
-    "section": "开票差与完成差",
+    "section": "存量指标",
     "section_range": "R–S",
-    "name_cn": "总合同额-开票",
-    "name_en": "Contract minus Invoiced",
+    "name_cn": "存量开票额",
+    "name_en": "Remaining Invoice Capacity",
     "data_type": "金额",
     "source_type": "auto_calc",
     "calc_logic": "=P-AC",
     "enum_values": [],
-    "description": "合同额与项目始累开票的差额，正数表示尚未开票的合同部分。"
+    "description": "总合同额减始累开票（P-AC）。正数表示尚未开票的合同部分；小于 0 时触发预警（累计开票已超过总合同额）。"
   },
   {
     "id": 19,
     "col": "S",
-    "section": "开票差与完成差",
+    "section": "存量指标",
     "section_range": "R–S",
-    "name_cn": "总合同额-完成",
-    "name_en": "Contract minus Completed",
+    "name_cn": "存量合同额",
+    "name_en": "Remaining Contract Capacity",
     "data_type": "金额",
     "source_type": "auto_calc",
     "calc_logic": "=P-U",
     "enum_values": [],
-    "description": "合同额与项目始累完成额的差额，正数表示尚未完成的合同部分。"
+    "description": "总合同额减始累完成（P-U）。表示尚未完成的合同部分，不得为负；调增月度完成额时若将导致本列为负则禁止保存；提交前须调减至非负。"
   },
   {
     "id": 20,

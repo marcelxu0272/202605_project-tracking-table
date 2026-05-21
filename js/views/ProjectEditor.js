@@ -10,6 +10,7 @@
     '合同签署与进展':   '#e8f0fa',
     '合同额':           '#fef3e2',
     '开票差与完成差':   '#fce8e8',
+    '存量指标':         '#fce8e8',
     '始累完成合同额':   '#e8f4e8',
     '年度完成额申报':   '#fff8e1',
     '开票回款情况':     '#ede8fa',
@@ -27,6 +28,7 @@
     '合同签署与进展':   '#c2d600',
     '合同额':           '#c2d600',
     '开票差与完成差':   '#00b050',
+    '存量指标':         '#00b050',
     '始累完成合同额':   '#2dbdb6',
     '年度完成额申报':   '#5f2167',
     '开票回款情况':     '#00848a',
@@ -70,12 +72,14 @@
     data() {
       return {
         luckysheetReady: false,
-        viewMode: 'all',       // 'all' | 'new_only' | 'changed_only'
+        viewMode: 'all',       // 'all' | 'new_only' | 'changed_only' | 'warning_only'
+        compactColumnsOnly: false,
         submitLoading: false,
         saveLoading: false,
         archiveLoading: false,
         importLoading: false,
         exportLoading: false,
+        syncLoading: false,
         showDiffHint: true,
         viewingVersion: '__current__',
         snapshotLoading: false,
@@ -157,6 +161,11 @@
     watch: {
       viewMode: function () {
         this.buildTableData();
+        if (this.activeTab === 'luckysheet') {
+          this.$nextTick(function () { this.refreshLuckysheet(); }.bind(this));
+        }
+      },
+      compactColumnsOnly: function () {
         if (this.activeTab === 'luckysheet') {
           this.$nextTick(function () { this.refreshLuckysheet(); }.bind(this));
         }
@@ -288,6 +297,65 @@
           editScenarios: 0
         };
       },
+
+      /** 紧凑列视图：项目基本信息 + 当前角色可编辑列 */
+      shouldShowCompactColumn(field) {
+        if (!this.compactColumnsOnly) return true;
+        return field.section === '项目基本信息' || this.canEditField(field);
+      },
+
+      buildLuckysheetColhidden() {
+        if (!this.compactColumnsOnly) return {};
+        const hidden = {};
+        this.tableFields.forEach(function (field, c) {
+          if (!this.shouldShowCompactColumn(field)) hidden[String(c)] = 0;
+        }, this);
+        return hidden;
+      },
+
+      buildLuckysheetCellRightClickConfig() {
+        return {
+          copy: false,
+          copyAs: false,
+          paste: false,
+          insertRow: false,
+          insertColumn: false,
+          deleteRow: false,
+          deleteColumn: false,
+          deleteCell: false,
+          hideRow: false,
+          hideColumn: false,
+          rowHeight: false,
+          columnWidth: false,
+          clear: false,
+          matrix: false,
+          sort: false,
+          filter: true,
+          chart: false,
+          image: false,
+          link: false,
+          data: false,
+          cellFormat: false
+        };
+      },
+
+      buildLuckysheetRowHeaderRightClickConfig() {
+        return {
+          insertRow: false,
+          deleteRow: false,
+          hideRow: false,
+          rowHeight: false
+        };
+      },
+
+      buildLuckysheetColumnHeaderRightClickConfig() {
+        return {
+          insertColumn: false,
+          deleteColumn: false,
+          hideColumn: false,
+          columnWidth: false
+        };
+      },
       isFieldChanged(project, field) {
         const cols = project._changed_fields;
         if (!cols || !cols.length) return false;
@@ -309,6 +377,9 @@
         if (!this.canEditField(field)) cls.push('readonly-cell');
         if (FieldConfig.isPastReportingMonthField(field, this.monthIdx)) {
           cls.push('month-locked-cell');
+        }
+        if (window.StockValidation && StockValidation.isStockWarningCell(project, field, this.monthIdx)) {
+          cls.push('field-stock-warning');
         }
         if (project._added_this_month) cls.push('new-project-cell');
         if (window.ChangeMeta
@@ -334,6 +405,11 @@
           textOverflow: field.data_type === '文本' ? 'ellipsis' : 'clip',
           fontVariantNumeric: field.data_type === '金额' ? 'tabular-nums' : 'normal'
         };
+        if (window.StockValidation && StockValidation.isStockWarningCell(project, field, this.monthIdx)) {
+          base.background = StockValidation.STOCK_WARNING_STYLE.bg;
+          base.color = StockValidation.STOCK_WARNING_STYLE.fc;
+          return base;
+        }
         if (this.isEditableDataCell(project, field)) {
           return base;
         }
@@ -651,6 +727,18 @@
         if (oldVal === newVal) return;
         if (String(oldVal) === String(newVal)) return;
 
+        if (window.StockValidation && StockValidation.isCompletionField(field)) {
+          const storeProj = this.getStoreProject(project.project_no) || project;
+          const check = StockValidation.validateCompletionEdit(
+            storeProj, field, newVal, this.monthIdx
+          );
+          if (!check.ok) {
+            this.$message.warning(check.message);
+            if (opts && opts.fromLuckysheet) this.scheduleRefreshLuckysheet();
+            return Promise.reject(new Error(check.message));
+          }
+        }
+
         const self = this;
         return this._trackCellSave((async function () {
           const storeProj = self.getStoreProject(project.project_no) || project;
@@ -721,7 +809,12 @@
             const self = this;
             this.submitLoading = true;
             this.preparePmSubmit()
-              .then(function () { return Store.submitPmReporting(); })
+              .then(function () {
+                if (!self.assertStockBeforeSubmit()) {
+                  throw new Error('stock_validation');
+                }
+                return Store.submitPmReporting();
+              })
               .then(function (result) {
                 self.applyPmSubmitSnapshotToStore(result);
                 self.$message.success('已提交，等待板块管理员接收');
@@ -730,7 +823,9 @@
                 }
               })
               .catch(function (e) {
-                self.$message.error('提交失败：' + (e.message || e));
+                if (e && e.message !== 'stock_validation') {
+                  self.$message.error('提交失败：' + (e.message || e));
+                }
               })
               .finally(function () { self.submitLoading = false; });
           }).catch(() => {});
@@ -741,7 +836,13 @@
             '提交审批', { confirmButtonText: '确认提交', cancelButtonText: '取消', type: 'warning' }
           ).then(() => {
             this.submitLoading = true;
-            Store.submitForApproval()
+            this.persistLuckysheetBeforeSubmit()
+              .then(() => {
+                if (!this.assertStockBeforeSubmit()) {
+                  throw new Error('stock_validation');
+                }
+                return Store.submitForApproval();
+              })
               .then(() => {
                 this.$message.success('已提交审批，Draft快照已生成');
                 if (this.activeTab === 'luckysheet') {
@@ -749,7 +850,11 @@
                 }
                 this.$router.push('/approval');
               })
-              .catch(e => { this.$message.error('提交失败：' + (e.message || e)); })
+              .catch(e => {
+                if (e && e.message !== 'stock_validation') {
+                  this.$message.error('提交失败：' + (e.message || e));
+                }
+              })
               .finally(() => { this.submitLoading = false; });
           }).catch(() => {});
         }
@@ -885,10 +990,65 @@
           this.exportLoading = false;
         }, 300);
       },
+      handleSyncPlatformData() {
+        const self = this;
+        this.$confirm(
+          '将从中台拉取 CRB / 财务系统数据并合并到当前跟踪表。仅更新系统同步字段与报告月当月开票/回款实际值，不会覆盖手工填报与预测列。是否继续？',
+          '更新系统数据',
+          { confirmButtonText: '立即更新', cancelButtonText: '取消', type: 'info' }
+        ).then(function () {
+          self.syncLoading = true;
+          return Store.syncPlatformData();
+        }).then(function (res) {
+          self.buildTableData();
+          self.$nextTick(function () { self.refreshLuckysheet(); });
+          const stats = res && res.stats ? res.stats : {};
+          self.$message.success(
+            '系统数据已更新（更新 ' + (stats.updated || 0) + ' 条，新增 ' + (stats.added || 0) + ' 条）'
+          );
+        }).catch(function (err) {
+          if (err !== 'cancel' && err !== 'close') {
+            self.$message.error('更新失败：' + (err.message || err));
+          }
+        }).finally(function () {
+          self.syncLoading = false;
+        });
+      },
       getRowClass(project) {
         if (project._added_this_month) return 'row-new-project';
         if (project._changed_fields && project._changed_fields.length > 0) return 'row-changed';
+        if (window.StockValidation && StockValidation.hasStockWarning(project, this.monthIdx)) {
+          return 'row-stock-warning';
+        }
         return '';
+      },
+
+      applyLuckysheetStockWarning(cell, project, field) {
+        if (!window.StockValidation) return cell;
+        if (!StockValidation.isStockWarningCell(project, field, this.monthIdx)) return cell;
+        cell.bg = StockValidation.STOCK_WARNING_STYLE.bg;
+        cell.fc = StockValidation.STOCK_WARNING_STYLE.fc;
+        return cell;
+      },
+
+      validateStockBeforeSubmit() {
+        const list = this.scopedProjects.map(function (p) {
+          return FormulaEngine.compute(
+            this.getStoreProject(p.project_no) || p,
+            this.monthIdx
+          );
+        }.bind(this));
+        if (!window.StockValidation) return { ok: true, violations: [] };
+        return StockValidation.validateProjectsForSubmit(list, this.monthIdx);
+      },
+
+      assertStockBeforeSubmit() {
+        const check = this.validateStockBeforeSubmit();
+        if (!check.ok) {
+          this.$message.error(check.message);
+          return false;
+        }
+        return true;
       },
       // 分区背景色
       sectionBg(field) {
@@ -1217,6 +1377,9 @@
       },
 
       luckysheetCellBg(project, field, readonly, dataRowIndex) {
+        if (window.StockValidation && StockValidation.isStockWarningCell(project, field, this.monthIdx)) {
+          return StockValidation.STOCK_WARNING_STYLE.bg;
+        }
         if (window.ChangeMeta && ChangeMeta.hasFieldChangeMarkup(project, field)) {
           return ChangeMeta.CHANGED_FIELD_STYLE.bg;
         }
@@ -1264,6 +1427,7 @@
         } else {
           cell.ht = '0';
         }
+        this.applyLuckysheetStockWarning(cell, project, field);
         return this.lsApplyCellLock(cell, true);
       },
 
@@ -1300,6 +1464,7 @@
           if (!field) continue;
           const cell = row[c];
           if (!cell) continue;
+          this.applyLuckysheetStockWarning(cell, project, field);
           if (window.ChangeMeta && ChangeMeta.hasFieldChangeMarkup(project, field)) {
             this.applyLuckysheetHighlight(cell, project, field);
             this.applyLuckysheetChangeComment(cell, project, field);
@@ -1337,8 +1502,12 @@
           const formula = this.buildLuckysheetFieldFormula(field.col, row0);
           if (formula) {
             return this.applyLuckysheetChangeComment(
-              this.applyLuckysheetHighlight(
-                this.makeLuckysheetFormulaCell(formula, field, project, bg),
+              this.applyLuckysheetStockWarning(
+                this.applyLuckysheetHighlight(
+                  this.makeLuckysheetFormulaCell(formula, field, project, bg),
+                  project,
+                  field
+                ),
                 project,
                 field
               ),
@@ -1350,7 +1519,11 @@
         const val = this.getCellValue(project, field);
         const cell = this.makeLuckysheetCell(val, field, ro, bg);
         return this.applyLuckysheetChangeComment(
-          this.applyLuckysheetHighlight(cell, project, field),
+          this.applyLuckysheetStockWarning(
+            this.applyLuckysheetHighlight(cell, project, field),
+            project,
+            field
+          ),
           project,
           field
         );
@@ -1360,12 +1533,18 @@
         const merge = {};
         const sections = FieldConfig.getSections(this.tableFields);
         const fields = this.tableFields;
+        const self = this;
         sections.forEach(function (sec) {
           if (!sec.fields.length) return;
-          const first = sec.fields[0];
-          const last = sec.fields[sec.fields.length - 1];
-          const c0 = fields.indexOf(first);
-          const cs = fields.indexOf(last) - fields.indexOf(first) + 1;
+          var visibleIdx = [];
+          sec.fields.forEach(function (fld) {
+            var idx = fields.indexOf(fld);
+            if (idx >= 0 && self.shouldShowCompactColumn(fld)) visibleIdx.push(idx);
+          });
+          if (!visibleIdx.length) return;
+          var c0 = visibleIdx[0];
+          var cLast = visibleIdx[visibleIdx.length - 1];
+          var cs = cLast - c0 + 1;
           if (c0 < 0 || cs < 1) return;
           merge[LS_ROW_SECTION + '_' + c0] = {
             r: LS_ROW_SECTION, c: c0, rs: 1, cs: cs
@@ -1441,7 +1620,14 @@
         const sections = FieldConfig.getSections(fields);
         sections.forEach(function (sec) {
           if (!sec.fields.length) return;
-          const c0 = fields.indexOf(sec.fields[0]);
+          var c0 = -1;
+          for (var si = 0; si < sec.fields.length; si++) {
+            if (self.shouldShowCompactColumn(sec.fields[si])) {
+              c0 = fields.indexOf(sec.fields[si]);
+              break;
+            }
+          }
+          if (c0 < 0) return;
           const secBg = self.lsSectionRowBg(sec.name);
           push(LS_ROW_SECTION, c0, lockCell({
             v: sec.name, m: sec.name, ct: { fa: 'General', t: 'g' },
@@ -1765,10 +1951,15 @@
 
         luckysheet.create({
           container: this.lsMountId,
+          lang: 'zh',
           showinfobar: false,
           showsheetbar: false,
           showstatisticBar: false,
-          showtoolbar: this.lsShowToolbar,
+          showtoolbar: false,
+          sheetFormulaBar: false,
+          cellRightClickConfig: this.buildLuckysheetCellRightClickConfig(),
+          rowHeaderRightClickConfig: this.buildLuckysheetRowHeaderRightClickConfig(),
+          columnHeaderRightClickConfig: this.buildLuckysheetColumnHeaderRightClickConfig(),
           enableAddRow: false,
           enableAddBackTop: false,
           row: rows,
@@ -1795,6 +1986,7 @@
             },
             config: {
               columnlen: this.buildLuckysheetColumnlen(),
+              colhidden: this.buildLuckysheetColhidden(),
               merge: merge,
               customWidth: this.buildLuckysheetCustomWidth(),
               rowlen: this.buildLuckysheetRowlen(),
@@ -1822,6 +2014,24 @@
               if (fld && fld.data_type === '金额' && value != null && value !== '') {
                 if (!self.isLuckysheetAmountInputValid(self.extractLuckysheetInput(value))) {
                   return false;
+                }
+              }
+              if (window.StockValidation && fld && StockValidation.isCompletionField(fld)) {
+                var projs = self.filteredProjects;
+                var layout = self.lsLayout();
+                if (r >= layout.dataStart && r <= layout.dataEnd) {
+                  var project = projs[r - layout.dataStart];
+                  if (project) {
+                    var newVal = self.coerceFieldValue(self.extractLuckysheetInput(value), fld);
+                    var storeProject = self.getStoreProject(project.project_no) || project;
+                    var check = StockValidation.validateCompletionEdit(
+                      storeProject, fld, newVal, self.monthIdx
+                    );
+                    if (!check.ok) {
+                      self.$message.warning(check.message);
+                      return false;
+                    }
+                  }
                 }
               }
               return true;
@@ -1907,20 +2117,14 @@
 
           <div class="editor-toolbar-spacer"></div>
 
-          <!-- 视图切换 -->
-          <el-radio-group v-model="viewMode" size="small" class="view-toggle">
-            <el-radio-button label="all">全部（{{ scopedProjects.length }}）</el-radio-button>
-            <el-radio-button label="new_only">
-              新增项目（{{ scopedProjects.filter(p=>p._added_this_month).length }}）
-            </el-radio-button>
-            <el-radio-button label="changed_only">
-              有变更（{{ scopedProjects.filter(p=>p._changed_fields&&p._changed_fields.length).length }}）
-            </el-radio-button>
-          </el-radio-group>
-
-          <el-divider direction="vertical"></el-divider>
-
           <div class="editor-toolbar-group">
+            <el-button
+              v-if="isSystemAdmin && !isViewingSnapshot"
+              size="small"
+              icon="el-icon-refresh"
+              :loading="syncLoading"
+              @click="handleSyncPlatformData"
+            >更新系统数据</el-button>
             <el-button
               size="small"
               icon="el-icon-download"
@@ -1988,6 +2192,9 @@
           <span class="editor-legend-item">
             <span class="editor-legend-swatch editor-legend-swatch--changed" aria-hidden="true">Aa</span>本月有变更字段
           </span>
+          <span class="editor-legend-item">
+            <span class="editor-legend-swatch editor-legend-swatch--warning"></span>存量预警（R/S 为负）
+          </span>
 
 
           <span style="flex:1;"></span>
@@ -1996,7 +2203,19 @@
 
         <!-- 填报主体：默认 Luckysheet；经典 HTML 表格见 showLegacyHtmlTable -->
         <div class="luckysheet-editor-wrap" style="flex:1;min-height:0;display:flex;flex-direction:column;">
-          <div id="luckysheet-mount" style="flex:1;min-height:360px;width:100%;"></div>
+          <div v-if="activeTab === 'luckysheet'" class="sheet-toolbar">
+            <el-radio-group v-model="viewMode" size="mini" class="view-toggle view-toggle--compact">
+              <el-radio-button label="all">全部（{{ scopedProjects.length }}）</el-radio-button>
+              <el-radio-button label="new_only">新增（{{ newProjectCount }}）</el-radio-button>
+              <el-radio-button label="changed_only">有变更（{{ changedProjectCount }}）</el-radio-button>
+              <el-radio-button label="warning_only">预警（{{ warningProjectCount }}）</el-radio-button>
+            </el-radio-group>
+            <el-divider direction="vertical" class="sheet-toolbar-divider"></el-divider>
+            <el-checkbox v-model="compactColumnsOnly" class="sheet-toolbar-checkbox">
+              仅显示项目信息与可编辑列
+            </el-checkbox>
+          </div>
+          <div :id="lsMountId" style="flex:1;min-height:360px;width:100%;"></div>
           <div v-show="showLegacyHtmlTable && activeTab === 'table'" style="flex:1;overflow:auto;position:relative;min-height:200px;">
           <table class="editor-table" style="border-collapse:collapse;min-width:max-content;font-size:12px;">
             <!-- 分区标题行 -->
@@ -2132,18 +2351,23 @@
         </div>
 
         <!-- 底部状态栏 -->
-        <div style="padding:6px 16px;background:#f8fafc;border-top:1px solid #e2e8f0;display:flex;align-items:center;gap:12px;font-size:11px;color:#64748b;flex-shrink:0;">
-          <span>共 {{ filteredProjects.length }} 条记录</span>
-          <span>报告月份：{{ store.reportingMonth }}</span>
-          <span>当前角色：{{ user.name || '—' }}</span>
-          <span v-if="isPm && pmLocked" style="color:#f59e0b;font-weight:500;">
-            <i class="el-icon-lock"></i> 已提交，待板块接收
-          </span>
-          <span v-else-if="!isSystemAdmin && reportingSubmitted" style="color:#ef4444;font-weight:500;">
-            <i class="el-icon-lock"></i> 板块已提交审批，填报数据已锁定
-          </span>
-          <span v-else-if="!isSystemAdmin && lockStatus !== 'open'" style="color:#ef4444;font-weight:500;">
-            <i class="el-icon-lock"></i> 编辑受限
+        <div style="padding:6px 16px;background:#f8fafc;border-top:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:11px;color:#64748b;flex-shrink:0;">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <span>共 {{ filteredProjects.length }} 条记录</span>
+            <span>报告月份：{{ store.reportingMonth }}</span>
+            <span>当前角色：{{ user.name || '—' }}</span>
+            <span v-if="isPm && pmLocked" style="color:#f59e0b;font-weight:500;">
+              <i class="el-icon-lock"></i> 已提交，待板块接收
+            </span>
+            <span v-else-if="!isSystemAdmin && reportingSubmitted" style="color:#ef4444;font-weight:500;">
+              <i class="el-icon-lock"></i> 板块已提交审批，填报数据已锁定
+            </span>
+            <span v-else-if="!isSystemAdmin && lockStatus !== 'open'" style="color:#ef4444;font-weight:500;">
+              <i class="el-icon-lock"></i> 编辑受限
+            </span>
+          </div>
+          <span style="color:#94a3b8;white-space:nowrap;">
+            系统数据{{ systemDataSyncedAtLabel ? ('更新于 ' + systemDataSyncedAtLabel) : '尚未同步' }}
           </span>
         </div>
 
@@ -2197,8 +2421,15 @@
       isPm()    { return this.user.role === 'pm'; },
       isSectorAdmin() { return this.user.role === 'sector_admin'; },
       lsMountId() { return 'luckysheet-mount'; },
-      lsShowToolbar() { return true; },
       lsGridKey() { return 'ptrack_editor_v2'; },
+      newProjectCount() {
+        return this.scopedProjects.filter(function (p) { return p._added_this_month; }).length;
+      },
+      changedProjectCount() {
+        return this.scopedProjects.filter(function (p) {
+          return p._changed_fields && p._changed_fields.length;
+        }).length;
+      },
 
       // PM 专属：当前 PM 是否处于「已提交待接收」锁定
       pmName()  { return this.user.pmName || this.user.name || ''; },
@@ -2211,6 +2442,7 @@
         if (!this.isPm) return false;
         if (this.reportingSubmitted) return false;
         if (this.lockStatus !== 'open') return false;
+        if (this.hasStockViolationsInScope) return false;
         return !this.pmLocked;
       },
 
@@ -2242,14 +2474,17 @@
         if (this.isSystemAdmin) return false;
         return this.isSectorAdmin
           && this.lockStatus === 'open'
-          && !this.reportingSubmitted;
+          && !this.reportingSubmitted
+          && !this.hasStockViolationsInScope;
       },
       submitButtonLabel() {
         if (this.isPm) {
+          if (this.hasStockViolationsInScope) return '存量合同额为负，请调减完成额';
           if (this.pmLocked) return '已提交，待板块接收';
           if (this.reportingSubmitted) return '板块已提交审批';
           return '提交';
         }
+        if (this.hasStockViolationsInScope) return '存量合同额为负，请调减完成额';
         return this.reportingSubmitted ? '已提交审批' : '提交审批';
       },
       isViewingSnapshot() {
@@ -2335,7 +2570,19 @@
         let p = this.scopedProjects;
         if (this.viewMode === 'new_only')     return p.filter(x => x._added_this_month);
         if (this.viewMode === 'changed_only') return p.filter(x => x._changed_fields && x._changed_fields.length > 0);
+        if (this.viewMode === 'warning_only' && window.StockValidation) {
+          const monthIdx = this.monthIdx;
+          return p.filter(function (x) { return StockValidation.hasStockWarning(x, monthIdx); });
+        }
         return p;
+      },
+      warningProjectCount() {
+        if (!window.StockValidation) return 0;
+        return StockValidation.countWarnings(this.scopedProjects, this.monthIdx);
+      },
+      hasStockViolationsInScope() {
+        if (!window.StockValidation) return false;
+        return StockValidation.countContractViolations(this.scopedProjects, this.monthIdx) > 0;
       },
       lockBannerClass() {
         if (this.isSystemAdmin) return 'open';
@@ -2371,6 +2618,15 @@
       },
       tableSections() {
         return FieldConfig.getSections(this.tableFields);
+      },
+      systemDataSyncedAtLabel() {
+        const raw = Store.systemDataSyncedAt;
+        if (!raw) return '';
+        const d = new Date(raw);
+        if (isNaN(d.getTime())) return '';
+        const pad = function (n) { return n < 10 ? '0' + n : String(n); };
+        return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+          ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
       }
     }
   };

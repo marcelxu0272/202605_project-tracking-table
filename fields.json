@@ -241,9 +241,9 @@
   {
     "id": 18,
     "col": "R",
-    "section": "开票差与完成差",
+    "section": "存量指标",
     "section_range": "R–S",
-    "name_cn": "总合同额-开票",
+    "name_cn": "存量开票额",
     "name_en": "Contract minus Invoiced",
     "data_type": "金额",
     "source_type": "auto_calc",
@@ -254,9 +254,9 @@
   {
     "id": 19,
     "col": "S",
-    "section": "开票差与完成差",
+    "section": "存量指标",
     "section_range": "R–S",
-    "name_cn": "总合同额-完成",
+    "name_cn": "存量合同额",
     "name_en": "Contract minus Completed",
     "data_type": "金额",
     "source_type": "auto_calc",

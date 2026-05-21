@@ -9,6 +9,7 @@ const { seedPriorMonthSnapshot } = require('./prior-month-snapshot');
 const { seedDevEnvironment, normalizeProjects } = require('./dev-reset-seed');
 const dbm = require('./db');
 const sw = require('./sector-workflow');
+const platformSync = require('./platform-sync');
 
 const ROOT = path.join(__dirname, '..');
 const PORT = Number(process.env.PTRACK_PORT) || 3000;
@@ -47,6 +48,8 @@ function seedFromXlsxIfEmpty(db) {
     return { seeded: false, count: 0 };
   }
   dbm.replaceAllProjects(db, projects);
+  dbm.setMeta(db, 'systemDataSyncedAt', new Date().toISOString());
+  dbm.setMeta(db, 'systemDataSyncMeta', { trigger: 'seed', at: new Date().toISOString() });
   let devSeed = null;
   try {
     devSeed = seedDevEnvironment(db, modules, { reportingMonth, repickDemoNew: true });
@@ -601,6 +604,27 @@ app.post('/api/admin/reseed', (_req, res) => {
   }
 });
 
+/** 手动从中台/CRB/财务同步系统字段 */
+app.post('/api/admin/sync-platform-data', (req, res) => {
+  try {
+    const body = req.body || {};
+    const actor = body.user || body.actor || null;
+    const result = platformSync.runPlatformSync(db, dbm, modules, {
+      trigger: 'manual',
+      actor: actor ? { id: actor.id || actor.userId, name: actor.name || actor.userName } : null
+    });
+    res.json({
+      ok: true,
+      systemDataSyncedAt: result.syncedAt,
+      stats: result.stats,
+      syncMeta: result.syncMeta,
+      state: dbm.getBootstrapState(db)
+    });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: String(e.message) });
+  }
+});
+
 /** 开发测试：配置/流程/数据全部恢复初始默认 */
 app.post('/api/admin/reset-dev', (_req, res) => {
   try {
@@ -622,6 +646,33 @@ app.post('/api/admin/reset-dev', (_req, res) => {
 
 app.use(express.static(ROOT));
 
+function runScheduledPlatformSync() {
+  try {
+    if (dbm.getEffectiveLockStatus(db) !== 'open') {
+      return;
+    }
+    const result = platformSync.runPlatformSync(db, dbm, modules, { trigger: 'scheduled' });
+    console.log('[ptrack] 定时平台同步完成', result.syncedAt, result.stats);
+  } catch (e) {
+    console.warn('[ptrack] 定时平台同步失败:', e.message);
+  }
+}
+
+function scheduleDailyPlatformSync() {
+  let lastRunDate = '';
+  setInterval(() => {
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    const pc = Object.assign({}, dbm.DEFAULT_PERIOD_CONFIG, dbm.getMeta(db, 'periodConfig') || {});
+    const hour = pc.platformSyncHour != null ? Number(pc.platformSyncHour) : 2;
+    if (now.getHours() === hour && lastRunDate !== today) {
+      lastRunDate = today;
+      runScheduledPlatformSync();
+    }
+  }, 60 * 1000);
+}
+
 app.listen(PORT, () => {
   console.log(`[ptrack] http://127.0.0.1:${PORT}/  | SQLite: ${dbm.DB_PATH}`);
+  scheduleDailyPlatformSync();
 });

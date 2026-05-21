@@ -40,7 +40,8 @@ const DEFAULT_PERIOD_CONFIG = {
   lockDay: 25,
   unlockDay: 9,
   reportingMonth: '2026-05',
-  systemYear: 2026
+  systemYear: 2026,
+  platformSyncHour: 2
 };
 
 function getMeta(db, key, fallback = null) {
@@ -170,7 +171,9 @@ function getBootstrapState(db) {
     sectorFlows,
     sectorRegistry,
     sectorNames: sw.getSectorNames(getMeta, db),
-    companyFlow
+    companyFlow,
+    systemDataSyncedAt: getMeta(db, 'systemDataSyncedAt', null),
+    systemDataSyncMeta: getMeta(db, 'systemDataSyncMeta', null)
   };
 }
 
@@ -232,6 +235,15 @@ function resetDevMeta(db) {
   setMeta(db, 'sectorRegistry', registry);
 }
 
+function getEffectiveLockStatus(db) {
+  ensureDefaultMeta(db);
+  const periodConfig = Object.assign({}, DEFAULT_PERIOD_CONFIG, getMeta(db, 'periodConfig') || {});
+  const lockOverride = getMeta(db, 'lockStatus', null);
+  return lockOverride != null
+    ? _normalizeLockStatus(lockOverride, periodConfig)
+    : _calcLockStatus(periodConfig);
+}
+
 module.exports = {
   openDb,
   DB_PATH,
@@ -240,6 +252,7 @@ module.exports = {
   getPmSubmissions,
   setPmSubmissions,
   getBootstrapState,
+  getEffectiveLockStatus,
   replaceAllProjects,
   upsertProject,
   pushAudit,
