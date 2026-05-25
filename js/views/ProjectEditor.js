@@ -1343,8 +1343,9 @@
       },
 
       /** 为合并区域从属格写入 mc，供 mergeCalculation 读取 */
-      applyLuckysheetMergeMc(data, merge) {
+      applyLuckysheetMergeMc(data, merge, colCount) {
         if (!data || !merge) return;
+        var cols = colCount != null ? colCount : 0;
         Object.keys(merge).forEach(function (key) {
           const m = merge[key];
           if (!m || m.r == null || m.c == null) return;
@@ -1357,15 +1358,50 @@
               const r = r0 + dr;
               const c = c0 + dc;
               if (r < 0 || r >= data.length || c < 0) continue;
-              if (!data[r]) data[r] = [];
+              if (cols > 0 && c >= cols) continue;
+              if (!data[r]) {
+                data[r] = cols > 0 ? Array(cols).fill(null) : [];
+              } else if (cols > 0 && data[r].length < cols) {
+                while (data[r].length < cols) data[r].push(null);
+              }
               if (dr === 0 && dc === 0) {
-                if (!data[r][c]) data[r][c] = {};
+                if (data[r][c] == null) data[r][c] = {};
                 continue;
               }
               data[r][c] = { mc: { r: r0, c: c0 } };
             }
           }
         });
+      },
+
+      /** 将 merge 从属格同步进 celldata，避免 Luckysheet 仅用稀疏 celldata 初始化时 mergeCalculation 读 undefined */
+      appendLuckysheetMergeCelldata(celldata, data, merge) {
+        if (!celldata || !data || !merge) return celldata;
+        var seen = {};
+        celldata.forEach(function (item) {
+          seen[item.r + '_' + item.c] = true;
+        });
+        Object.keys(merge).forEach(function (key) {
+          const m = merge[key];
+          if (!m || m.r == null || m.c == null) return;
+          const r0 = m.r;
+          const c0 = m.c;
+          const rs = m.rs || 1;
+          const cs = m.cs || 1;
+          for (let dr = 0; dr < rs; dr++) {
+            for (let dc = 0; dc < cs; dc++) {
+              if (dr === 0 && dc === 0) continue;
+              const r = r0 + dr;
+              const c = c0 + dc;
+              const sk = r + '_' + c;
+              if (seen[sk]) continue;
+              if (!data[r] || data[r][c] == null) continue;
+              celldata.push({ r: r, c: c, v: data[r][c] });
+              seen[sk] = true;
+            }
+          }
+        });
+        return celldata;
       },
 
       /** celldata → 二维 data，避免 Luckysheet mergeCalculation 访问 data[r][c] 为 undefined */
@@ -1383,7 +1419,7 @@
             data[item.r][item.c] = item.v;
           }
         });
-        this.applyLuckysheetMergeMc(data, merge);
+        this.applyLuckysheetMergeMc(data, merge, colCount);
         return data;
       },
 
@@ -1932,7 +1968,7 @@
         const $ = window.jQuery;
         if (!$) return;
         const file = this.lsGetActiveLuckysheetFile();
-        if (!file || !file.filter_select) return;
+        if (!file || !file.filter_select || !file.filter_select.column) return;
         const cellMain = document.querySelector('#' + this.lsMountId + ' #luckysheet-cell-main');
         if (!cellMain) return;
         const $opts = $('#luckysheet-filter-options-sheet' + file.index + ' .luckysheet-filter-options');
@@ -1940,6 +1976,7 @@
 
         const scrollLeft = cellMain.scrollLeft;
         const c1 = file.filter_select.column[0];
+        if (c1 == null) return;
         const freezeRight = this.lsFreezeRightPx(file);
         const hideBefore = scrollLeft + freezeRight;
 
@@ -2002,8 +2039,9 @@
             self.bindLuckysheetFilterFreezeSync();
             setTimeout(function () {
               const file = self.lsGetActiveLuckysheetFile();
-              if (!file) return;
+              if (!file || !file.filter_select || !file.filter_select.column) return;
               const c1 = file.filter_select.column[0];
+              if (c1 == null) return;
               $('#luckysheet-filter-options-sheet' + file.index + ' .luckysheet-filter-options')
                 .each(function (i, el) {
                   const $e = $(el);
@@ -2154,6 +2192,7 @@
         var sheetIndex = 0;
         var merge = this.buildLuckysheetMerge();
         var dataMatrix = this.buildLuckysheetDataMatrix(celldata, rows, cols, merge);
+        this.appendLuckysheetMergeCelldata(celldata, dataMatrix, merge);
         var calcChain = this.buildLuckysheetCalcChain(celldata, sheetIndex, lay);
 
         luckysheet.create({

@@ -35,7 +35,9 @@
 | `server/platform-sync.js` | 🔄 平台同步 | ~4KB | 从中台/CRB/财务合并 `system_sync` 字段；每日定时 + 管理员手动触发。 |
 | `server/platform-sync-stub.js` | 🔧 同步 stub | ~2KB | 开发期平台快照；待 `PTRACK_PLATFORM_API_URL` 替换。 |
 | `server/sector-workflow.js` | 🔀 板块流程 | ~4KB | 十二板块注册、快照键、流程状态（服务端）。 |
-| `server/dev-reset-seed.js` | 🔧 开发重置 | ~3KB | 重置为初始状态并重建上月对比快照。 |
+| `server/dev-reset-seed.js` | 🔧 开发重置 | ~3KB | 重置为初始状态并重建上月对比快照；调用 `alert-demo-seed` 注入预警演示数据。 |
+| `server/alert-demo-seed.js` | 🔧 预警演示 | ~3KB | 重导/重置后为 4 条项目注入 R/S、完成额 vs 工时预警场景及演示工时。 |
+| `server/patch-init-xlsx-alerts.js` | 🔧 初始化补丁 | ~2KB | `npm run patch:init-alerts` 将预警演示字段写回 `初始数据.xlsx`。 |
 
 ### `css/` 样式
 
@@ -56,6 +58,7 @@
 | `js/field-config.js` | 🔐 字段权限 | ~7KB | 角色 × 锁定期字段可写矩阵。 |
 | `js/change-meta.js` | 📝 变更批注 | ~7KB | `_field_change_log`；`CHANGED_FIELD_STYLE` / `EDITABLE_FIELD_STYLE`。 |
 | `js/stock-validation.js` | ⚠️ 存量校验 | ~3KB | R/S 列预警、完成额调增阻断提交。 |
+| `js/project-alerts.js` | ⚠️ 项目预警 | ~3KB | Drawer 四类预警标签计算（存量 R/S、完成额 vs 工时）。 |
 | `js/sector-workflow.js` | 🔀 板块流程 | ~4KB | 十二板块名称、快照键、前端流程展示。 |
 | `js/diff-utils.js` | 🔍 Diff 工具 | ~2KB | 快照/版本字段级对比。 |
 | `js/project-drawer-layout.js` | 📐 Drawer 布局 | ~5KB | 字段分区、控件类型、月度条带、批量 diff。 |

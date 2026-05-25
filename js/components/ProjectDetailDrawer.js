@@ -42,7 +42,10 @@
       return {
         draft: {},
         primaryActive: [],
-        readonlyActive: []
+        readonlyActive: [],
+        timesheetStats: null,
+        timesheetLoading: false,
+        timesheetLoadFailed: false
       };
     },
     computed: {
@@ -139,14 +142,39 @@
           return Number(String(store.reportingMonth).slice(0, 4)) || new Date().getFullYear();
         }
         return new Date().getFullYear();
+      },
+      projectAlerts: function () {
+        if (!this.project || !window.ProjectAlerts) return [];
+        return ProjectAlerts.getProjectAlerts(
+          this.project,
+          this.monthIdx,
+          this.timesheetStats,
+          { timesheetReady: !this.timesheetLoading && !this.timesheetLoadFailed }
+        );
+      },
+      hasProjectAlerts: function () {
+        return this.projectAlerts.length > 0;
       }
     },
     watch: {
       visible: function (v) {
-        if (v) this.resetDraft();
+        if (v) {
+          this.resetDraft();
+          this.fetchTimesheetStats();
+        } else {
+          this.timesheetStats = null;
+          this.timesheetLoading = false;
+          this.timesheetLoadFailed = false;
+        }
       },
       project: function () {
-        if (this.visible) this.resetDraft();
+        if (this.visible) {
+          this.resetDraft();
+          this.fetchTimesheetStats();
+        }
+      },
+      systemYear: function () {
+        if (this.visible && this.projectTitle) this.fetchTimesheetStats();
       }
     },
     methods: {
@@ -272,6 +300,32 @@
       },
       sectionUsesEditableBg: function (sectionName) {
         return sectionName === '合同签署与进展' || sectionName === 'WIP分析与措施';
+      },
+      fetchTimesheetStats: function () {
+        var self = this;
+        if (!this.projectTitle) {
+          this.timesheetStats = null;
+          this.timesheetLoading = false;
+          this.timesheetLoadFailed = false;
+          return;
+        }
+        this.timesheetLoading = true;
+        this.timesheetLoadFailed = false;
+        var base = window.PTRACK_API_BASE != null ? window.PTRACK_API_BASE : '';
+        fetch(base + '/api/projects/' + encodeURIComponent(this.projectTitle) + '/timesheet?year=' + this.systemYear)
+          .then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+          })
+          .then(function (data) {
+            self.timesheetStats = data;
+            self.timesheetLoading = false;
+          })
+          .catch(function () {
+            self.timesheetStats = null;
+            self.timesheetLoadFailed = true;
+            self.timesheetLoading = false;
+          });
       }
     },
     template: `
@@ -350,6 +404,20 @@
         </div>
 
         <div v-if="project" class="project-drawer-body">
+
+          <!-- 项目预警 -->
+          <section v-if="hasProjectAlerts" class="project-drawer-section project-drawer-alerts">
+            <div class="project-drawer-section-label">项目预警</div>
+            <div class="drawer-alert-tags">
+              <span
+                v-for="alert in projectAlerts"
+                :key="alert.id"
+                class="drawer-alert-tag"
+              >
+                <i class="el-icon-warning"></i>{{ alert.label }}
+              </span>
+            </div>
+          </section>
 
           <!-- 填报区 -->
           <section v-if="layout.editableSections.length" class="project-drawer-section">

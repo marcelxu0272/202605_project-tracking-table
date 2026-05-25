@@ -7,6 +7,7 @@ const { loadBrowserScripts } = require('./load-modules');
 const { projectsFromXlsxBuffer } = require('./xlsx-seed');
 const { seedPriorMonthSnapshot } = require('./prior-month-snapshot');
 const { seedDevEnvironment, normalizeProjects } = require('./dev-reset-seed');
+const { ensureInitXlsx } = require('./init-xlsx-export');
 const dbm = require('./db');
 const sw = require('./sector-workflow');
 const platformSync = require('./platform-sync');
@@ -14,6 +15,7 @@ const timesheetImport = require('./timesheet-import');
 const timesheetStats = require('./timesheet-stats');
 const costImport = require('./cost-import');
 const costStats = require('./cost-stats');
+const alertDemo = require('./alert-demo-seed');
 
 const ROOT = path.join(__dirname, '..');
 const PORT = Number(process.env.PTRACK_PORT) || 3000;
@@ -21,16 +23,7 @@ const PORT = Number(process.env.PTRACK_PORT) || 3000;
 const modules = loadBrowserScripts();
 
 function resolveInitXlsx() {
-  const env = process.env.PTRACK_INIT_XLSX;
-  const candidates = [
-    env && path.isAbsolute(env) ? env : env && path.join(ROOT, env),
-    path.join(ROOT, '初始数据.xlsx'),
-    path.join(ROOT, 'S520_金山中心_项目执行跟踪详细数据2026年05月.xlsx')
-  ].filter(Boolean);
-  for (const c of candidates) {
-    if (fs.existsSync(c)) return c;
-  }
-  return null;
+  return require('./init-xlsx-export').findExistingInitXlsx();
 }
 
 function seedFromXlsxIfEmpty(db) {
@@ -70,6 +63,11 @@ const db = dbm.openDb();
 dbm.ensureDefaultMeta(db);
 seedFromXlsxIfEmpty(db);
 timesheetImport.seedTimesheetsIfEmpty(db, dbm);
+try {
+  alertDemo.seedAlertDemoTimesheets(db);
+} catch (e) {
+  console.warn('[ptrack] 预警演示工时初始化失败:', e.message);
+}
 costImport.seedCostIfEmpty(db, dbm);
 
 const app = express();
@@ -570,12 +568,8 @@ app.post('/api/pm-submissions/receive', (req, res) => {
 });
 
 function importProjectsFromInitXlsx(reportingMonth) {
-  const xlsxPath = resolveInitXlsx();
-  if (!xlsxPath) {
-    const err = new Error('未找到 初始数据.xlsx（或 S520 xlsx / PTRACK_INIT_XLSX）');
-    err.status = 400;
-    throw err;
-  }
+  const ensured = ensureInitXlsx(db, modules, { reportingMonth });
+  const xlsxPath = ensured.path;
   const buf = fs.readFileSync(xlsxPath);
   const projects = projectsFromXlsxBuffer(buf, modules, reportingMonth);
   if (projects.length === 0) {
@@ -584,7 +578,11 @@ function importProjectsFromInitXlsx(reportingMonth) {
     throw err;
   }
   dbm.replaceAllProjects(db, normalizeProjects(projects));
-  return { count: projects.length, file: path.basename(xlsxPath) };
+  return {
+    count: projects.length,
+    file: path.basename(xlsxPath),
+    xlsxGenerated: ensured.generated
+  };
 }
 
 function applyDevSeedAfterImport(reportingMonth) {

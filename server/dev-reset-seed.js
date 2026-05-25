@@ -5,6 +5,7 @@
  */
 const dbm = require('./db');
 const prior = require('./prior-month-snapshot');
+const alertDemo = require('./alert-demo-seed');
 
 const DEV_DEMO_NEW_COUNT = 5;
 
@@ -71,7 +72,15 @@ function seedDevEnvironment(db, modules, options) {
 
   const projects = rows.map(function (r) { return JSON.parse(r.payload); });
   const normalized = normalizeProjects(projects);
-  dbm.replaceAllProjects(db, normalized);
+  const patched = alertDemo.applyAlertDemoPatches(normalized, modules, reportingMonth);
+  dbm.replaceAllProjects(db, patched);
+
+  let timesheetDemo = null;
+  try {
+    timesheetDemo = alertDemo.seedAlertDemoTimesheets(db);
+  } catch (e) {
+    console.warn('[ptrack] 预警演示工时写入失败:', e.message);
+  }
 
   let demoNewProjectNos = options.removeProjectNos;
   if (!demoNewProjectNos || !demoNewProjectNos.length) {
@@ -98,13 +107,16 @@ function seedDevEnvironment(db, modules, options) {
   });
 
   dbm.setMeta(db, 'demoNewProjectNos', demoNewProjectNos);
-  dbm.setMeta(db, 'devSeedVersion', 2);
+  dbm.setMeta(db, 'alertDemoProjectNos', alertDemo.ALERT_DEMO_PROJECTS);
+  dbm.setMeta(db, 'devSeedVersion', 3);
   dbm.setMeta(db, 'devSeedAppliedAt', new Date().toISOString());
 
   return {
     priorSnapshot: priorResult,
     demoNewProjectNos,
-    normalizedCount: normalized.length,
+    alertDemoProjectNos: alertDemo.ALERT_DEMO_PROJECTS,
+    alertDemoTimesheets: timesheetDemo,
+    normalizedCount: patched.length,
     reportingMonth,
     priorMonth
   };

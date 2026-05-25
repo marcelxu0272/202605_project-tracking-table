@@ -1651,6 +1651,37 @@ body {
   font-weight: 600;
 }
 
+/* Drawer 项目预警区 */
+.project-drawer-alerts {
+  border-color: #fecaca !important;
+  background: #fff5f5 !important;
+}
+.project-drawer-alerts .project-drawer-section-label {
+  color: #b91c1c;
+}
+.drawer-alert-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 16px 14px;
+}
+.drawer-alert-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: #b91c1c;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+}
+.drawer-alert-tag i {
+  font-size: 13px;
+}
+
 /* 辅助区占位 */
 .project-drawer-aux {
   border-color: #e2e8f0 !important;
