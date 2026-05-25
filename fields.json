@@ -200,10 +200,10 @@
     "name_cn": "当年调整值",
     "name_en": "Adjustment",
     "data_type": "金额",
-    "source_type": "auto_calc",
-    "calc_logic": "=P-N",
+    "source_type": "system_sync",
+    "calc_logic": "",
     "enum_values": [],
-    "description": "总合同额与上一年底基准的差值，反映当年合同额相对于基准的变化量。"
+    "description": "工程平台（CRB）同步：本项目在报告年度内已完成的 CRB3 与 CRB5 合同额之和，反映当年合同变更增量。前端不可编辑。"
   },
   {
     "id": 16,
@@ -213,10 +213,10 @@
     "name_cn": "总合同额",
     "name_en": "Contract Value",
     "data_type": "金额",
-    "source_type": "system_sync",
-    "calc_logic": "",
+    "source_type": "auto_calc",
+    "calc_logic": "=N+O",
     "enum_values": [],
-    "description": "CRB 动态取数：未签署项目取 CRB1 合同额；签署后（状态变为「已确认」）自动切换取 CRB3 合同额。前端不可修改。"
+    "description": "公式计算：截止上一年底合同额（N）+ 当年调整值（O）。随 N、O 变化自动重算，前端不可编辑。"
   },
   {
     "id": 17,

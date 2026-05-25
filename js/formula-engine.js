@@ -25,17 +25,20 @@
     const mp = r.monthly_payment     || Array(12).fill(0);  // BI,BK,...
     const Y  = r.tax_rate            || 0.09;                // 税率
     const N  = r.prev_year_contract  || 0;                   // N
+    const O  = r.adj_value           || 0;                   // O（系统同步）
+    r.adj_value         = O;
+    r.total_contract    = N + O;                             // P = N + O
     const P  = r.total_contract      || 0;                   // P
-    const T  = r.prev_year_completion|| 0;                   // T
-    const AA = r.prev_year_invoice   || 0;                   // AA
-    const AD = r.prev_year_payment   || 0;                   // AD
 
     // ── 栏位 L: 合同签署状态 ─────────────────────────────
     r.signed = (r.crb_status === '已确认' || r.signed === '已签署') ? '已签署' : '未签署';
 
-    // ── 合同额区 (O, Q) ──────────────────────────────────
-    r.adj_value         = P - N;                            // O = P - N
+    // ── 合同额区 (Q) ──────────────────────────────────
     r.contract_excl_tax = P / (1 + Y);                     // Q = P/(1+Y)
+
+    const T  = r.prev_year_completion|| 0;                   // T
+    const AA = r.prev_year_invoice   || 0;                   // AA
+    const AD = r.prev_year_payment   || 0;                   // AD
 
     // ── 年度完成区 (W, X, Z) ─────────────────────────────
     // X = SUM(1月..报告当月)

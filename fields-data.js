@@ -200,10 +200,10 @@ window.FIELD_DICTIONARY = [
     "name_cn": "当年调整值",
     "name_en": "Adjustment",
     "data_type": "金额",
-    "source_type": "auto_calc",
-    "calc_logic": "=P-N",
+    "source_type": "system_sync",
+    "calc_logic": "",
     "enum_values": [],
-    "description": "总合同额与上一年底基准的差值，反映当年合同额相对于基准的变化量。"
+    "description": "工程平台（CRB）同步：本项目在报告年度内已完成的 CRB3 与 CRB5 合同额之和，反映当年合同变更增量。前端不可编辑。"
   },
   {
     "id": 16,
@@ -213,10 +213,10 @@ window.FIELD_DICTIONARY = [
     "name_cn": "总合同额",
     "name_en": "Contract Value",
     "data_type": "金额",
-    "source_type": "system_sync",
-    "calc_logic": "",
+    "source_type": "auto_calc",
+    "calc_logic": "=N+O",
     "enum_values": [],
-    "description": "CRB 动态取数：未签署项目取 CRB1 合同额；签署后（状态变为「已确认」）自动切换取 CRB3 合同额。前端不可修改。"
+    "description": "公式计算：截止上一年底合同额（N）+ 当年调整值（O）。随 N、O 变化自动重算，前端不可编辑。"
   },
   {
     "id": 17,
@@ -237,12 +237,12 @@ window.FIELD_DICTIONARY = [
     "section": "存量指标",
     "section_range": "R–S",
     "name_cn": "存量开票额",
-    "name_en": "Remaining Invoice Capacity",
+    "name_en": "Contract minus Invoiced",
     "data_type": "金额",
     "source_type": "auto_calc",
     "calc_logic": "=P-AC",
     "enum_values": [],
-    "description": "总合同额减始累开票（P-AC）。正数表示尚未开票的合同部分；小于 0 时触发预警（累计开票已超过总合同额）。"
+    "description": "合同额与项目始累开票的差额，正数表示尚未开票的合同部分。"
   },
   {
     "id": 19,
@@ -250,12 +250,12 @@ window.FIELD_DICTIONARY = [
     "section": "存量指标",
     "section_range": "R–S",
     "name_cn": "存量合同额",
-    "name_en": "Remaining Contract Capacity",
+    "name_en": "Contract minus Completed",
     "data_type": "金额",
     "source_type": "auto_calc",
     "calc_logic": "=P-U",
     "enum_values": [],
-    "description": "总合同额减始累完成（P-U）。表示尚未完成的合同部分，不得为负；调增月度完成额时若将导致本列为负则禁止保存；提交前须调减至非负。"
+    "description": "合同额与项目始累完成额的差额，正数表示尚未完成的合同部分。"
   },
   {
     "id": 20,

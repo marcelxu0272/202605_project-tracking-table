@@ -103,11 +103,11 @@
 | `project_no` | F | system_sync | 主键 |
 | `sector_code` | D | system_sync | 执行单位编码 |
 | `pm_name` | E | system_sync | 项目经理 |
-| `contract_amt_inc_tax` | P | system_sync | 总合同额(含税) |
+| `contract_amt_inc_tax` | P | auto_calc | 总合同额(含税) (=N+O) |
 | `contract_amt_ex_tax` | N | system_sync | 总合同额(未含税) |
 | `tax_rate` | Q | system_sync | 税率 |
 | `prev_year_end_amt` | — | 年度基线 | 截止上一年底(含税) |
-| `current_year_adj` | O | auto_calc | 当年调整值 (=P - prev_year_end_amt) |
+| `current_year_adj` | O | system_sync | 当年调整值（CRB 当年 CRB3+CRB5 完成额之和） |
 | `fx_adjustment` | TY | manual_input | 汇率差调整值 (新增) |
 | `implementation_status` | M | manual_input | 项目实施进展 |
 | `wip_analysis_note` | TR | manual_input | WIP 分析说明 |
