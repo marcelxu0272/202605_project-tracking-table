@@ -5,8 +5,8 @@ const fs = require('fs');
 const express = require('express');
 const { loadBrowserScripts } = require('./load-modules');
 const { projectsFromXlsxBuffer } = require('./xlsx-seed');
-const { seedPriorMonthSnapshot } = require('./prior-month-snapshot');
-const { seedDevEnvironment, normalizeProjects } = require('./dev-reset-seed');
+const snapSvc = require('./snapshot-service');
+const { seedDevEnvironment, createDevImportSnapshot, normalizeProjects } = require('./dev-reset-seed');
 const { ensureInitXlsx } = require('./init-xlsx-export');
 const dbm = require('./db');
 const sw = require('./sector-workflow');
@@ -48,20 +48,34 @@ function seedFromXlsxIfEmpty(db) {
   dbm.setMeta(db, 'systemDataSyncedAt', new Date().toISOString());
   dbm.setMeta(db, 'systemDataSyncMeta', { trigger: 'seed', at: new Date().toISOString() });
   let devSeed = null;
+  let importSnapshot = null;
   try {
     devSeed = seedDevEnvironment(db, modules, { reportingMonth, repickDemoNew: true });
-    console.log('[ptrack] 已生成上月对比快照', devSeed.priorSnapshot.version,
-      '| 五月新增演示', devSeed.demoNewProjectNos.join(', '));
+    importSnapshot = createDevImportSnapshot(db, devSeed, {
+      sourceFile: path.basename(xlsxPath)
+    });
+    console.log('[ptrack] 已生成导入快照', importSnapshot.version,
+      '| 新增项目演示', devSeed.demoNewProjectNos.join(', '));
   } catch (e) {
-    console.warn('[ptrack] 演示快照生成失败:', e.message);
+    console.warn('[ptrack] 演示/导入快照生成失败:', e.message);
   }
   console.log('[ptrack] 已从', xlsxPath, '初始化', projects.length, '条项目');
-  return { seeded: true, count: projects.length, file: xlsxPath, devSeed };
+  return { seeded: true, count: projects.length, file: xlsxPath, devSeed, importSnapshot };
 }
 
 const db = dbm.openDb();
 dbm.ensureDefaultMeta(db);
 seedFromXlsxIfEmpty(db);
+try {
+  const snapMaint = snapSvc.maintainSnapshotStore(db);
+  if (snapMaint.repaired) {
+    console.log('[ptrack] 快照库已修复', snapMaint.action, snapMaint.baselineVersion || '');
+  } else if (snapMaint.purged) {
+    console.log('[ptrack] 已清理旧版快照', snapMaint.purged, '条');
+  }
+} catch (e) {
+  console.warn('[ptrack] 快照库维护失败:', e.message);
+}
 timesheetImport.seedTimesheetsIfEmpty(db, dbm);
 try {
   alertDemo.seedAlertDemoTimesheets(db);
@@ -75,6 +89,7 @@ app.use(express.json({ limit: '80mb' }));
 
 app.get('/api/bootstrap', (_req, res) => {
   try {
+    snapSvc.maintainSnapshotStore(db);
     const state = dbm.getBootstrapState(db);
     res.json(state);
   } catch (e) {
@@ -180,6 +195,8 @@ app.patch('/api/meta', (req, res) => {
     if (body.reportingSubmitted !== undefined) {
       dbm.setMeta(db, 'reportingSubmitted', !!body.reportingSubmitted);
     }
+    const reportingMonth = dbm.getMeta(db, 'reportingMonth') || '2026-05';
+    platformSync.maybeRunNewExistingYearRollover(db, dbm, modules, reportingMonth);
     res.json(dbm.getBootstrapState(db));
   } catch (e) {
     res.status(500).json({ error: String(e.message) });
@@ -195,75 +212,7 @@ function getPmProjectsFromDb(database, pmName) {
   return getAllProjectsFromDb(database).filter(p => p.pm_name === pmName);
 }
 
-function writeSectorSnapshot(database, versionKey, sectorCode, projects, user, role) {
-  const subset = sw.filterProjectsBySector(projects, sectorCode);
-  const snap = {
-    version: versionKey,
-    time: new Date().toISOString(),
-    user: user || '系统',
-    role: role || 'system',
-    sector: sectorCode,
-    projects: subset
-  };
-  dbm.putSnapshot(database, versionKey, snap);
-  return snap;
-}
-
-/** 为 PM 创建填报基准快照（本轮编辑开始时的数据）；projectsOverride 由前端在首次打开填报页时传入 */
-function createPmBaselineSnapshot(db, pmName, reportingMonth, userName, projectsOverride) {
-  const pmProjects = (projectsOverride && projectsOverride.length)
-    ? projectsOverride
-    : getPmProjectsFromDb(db, pmName);
-  const version = 'PM:' + pmName + ':' + reportingMonth + ':baseline:' + Date.now();
-  const snap = {
-    version,
-    time: new Date().toISOString(),
-    user: userName || pmName,
-    role: 'pm_baseline',
-    pmName,
-    projects: pmProjects
-  };
-  dbm.putSnapshot(db, version, snap);
-  return { version, snap };
-}
-
 // ── PM 提交端点 ──────────────────────────────────────────
-app.post('/api/pm-submissions/ensure-baseline', (req, res) => {
-  try {
-    const { pmName, reportingMonth, userName, projects } = req.body || {};
-    if (!pmName || !reportingMonth) {
-      res.status(400).json({ error: 'pmName 与 reportingMonth 必填' });
-      return;
-    }
-    const subs = dbm.getPmSubmissions(db);
-    const monthSubs = subs[reportingMonth] || {};
-    const entry = monthSubs[pmName] || {};
-    const state = dbm.getBootstrapState(db);
-    if (entry.baselineSnapshotVersion && state.snapshots[entry.baselineSnapshotVersion]) {
-      res.json({
-        ok: true,
-        created: false,
-        baselineSnapshotVersion: entry.baselineSnapshotVersion
-      });
-      return;
-    }
-    const { version, snap } = createPmBaselineSnapshot(
-      db, pmName, reportingMonth, userName, projects
-    );
-    if (!subs[reportingMonth]) subs[reportingMonth] = {};
-    subs[reportingMonth][pmName] = Object.assign({}, entry, { baselineSnapshotVersion: version });
-    dbm.setPmSubmissions(db, subs);
-    res.json({
-      ok: true,
-      created: true,
-      baselineSnapshotVersion: version,
-      snapshot: snap
-    });
-  } catch (e) {
-    res.status(500).json({ error: String(e.message) });
-  }
-});
-
 app.post('/api/pm-submissions/submit', (req, res) => {
   try {
     const { pmName, reportingMonth, userName, projectNos } = req.body || {};
@@ -281,30 +230,17 @@ app.post('/api/pm-submissions/submit', (req, res) => {
     }
 
     const pmProjects = getPmProjectsFromDb(db, pmName);
-    const snapVersion = 'PM:' + pmName + ':' + reportingMonth + ':' + Date.now();
 
-    // 写快照（含该 PM 项目子集）
-    const snap = {
-      version: snapVersion,
-      time: new Date().toISOString(),
-      user: userName || pmName,
-      role: 'pm',
-      pmName,
-      projects: pmProjects
-    };
-    dbm.putSnapshot(db, snapVersion, snap);
-
-    // 更新 pmSubmissions（保留 baselineSnapshotVersion 供 diff）
     const subs = dbm.getPmSubmissions(db);
     if (!subs[reportingMonth]) subs[reportingMonth] = {};
     const prev = subs[reportingMonth][pmName] || {};
-    const submissionBaseline = prev.baselineSnapshotVersion || null;
+    if (prev.status === 'submitted' || prev.status === 'received') {
+      res.status(409).json({ error: '本月已提交，不可重复提交；如有问题请联系板块管理员修正' });
+      return;
+    }
     subs[reportingMonth][pmName] = {
       status: 'submitted',
       submittedAt: new Date().toISOString(),
-      snapshotVersion: snapVersion,
-      baselineSnapshotVersion: submissionBaseline,
-      submissionBaselineSnapshotVersion: submissionBaseline,
       projectNos: pmProjects.map(p => p.project_no),
       projectCount: pmProjects.length
     };
@@ -327,11 +263,7 @@ app.post('/api/pm-submissions/submit', (req, res) => {
 
     res.json({
       ok: true,
-      snapshotVersion: snapVersion,
-      baselineSnapshotVersion: subs[reportingMonth][pmName].baselineSnapshotVersion,
-      submissionBaselineSnapshotVersion: subs[reportingMonth][pmName].submissionBaselineSnapshotVersion,
-      projectCount: pmProjects.length,
-      snapshot: snap
+      projectCount: pmProjects.length
     });
   } catch (e) {
     res.status(500).json({ error: String(e.message) });
@@ -364,10 +296,11 @@ app.post('/api/sectors/:code/submit-approval', (req, res) => {
       res.status(409).json({ error: '该板块已提交审批' });
       return;
     }
-    const versionKey = sw.sectorSnapshotKey('Draft', sectorCode);
-    const snap = writeSectorSnapshot(
-      db, versionKey, sectorCode, allProjects, userName, role || 'sector_admin'
+    const snapResult = snapSvc.createDraftSnapshot(
+      db, sectorCode, allProjects, { name: userName, role: role || 'sector_admin' }
     );
+    const versionKey = snapResult.version;
+    const snap = snapResult.snap;
     sw.setSectorFlow(db, dbm.setMeta, dbm.getMeta, sectorCode, {
       approvalStatus: 'draft',
       reportingSubmitted: true
@@ -402,21 +335,14 @@ app.post('/api/sectors/:code/advance-approval', (req, res) => {
     const flow = sw.getSectorFlow(sectorFlows, sectorCode);
     const allProjects = getAllProjectsFromDb(db);
     let nextStatus;
-    let snapLabel;
     if (flow.approvalStatus === 'draft' && flow.reportingSubmitted) {
       nextStatus = 'approve1';
-      snapLabel = 'Approve1';
     } else if (flow.approvalStatus === 'approve1') {
       nextStatus = 'approve2';
-      snapLabel = 'Approve2';
     } else {
       res.status(409).json({ error: '当前板块状态不可推进审批' });
       return;
     }
-    const versionKey = sw.sectorSnapshotKey(snapLabel, sectorCode);
-    const snap = writeSectorSnapshot(
-      db, versionKey, sectorCode, allProjects, userName, role
-    );
     sw.setSectorFlow(db, dbm.setMeta, dbm.getMeta, sectorCode, { approvalStatus: nextStatus });
     const updatedFlows = dbm.getMeta(db, 'sectorFlows', {});
     const registry = sw.getSectorRegistry(db, dbm.getMeta, allProjects);
@@ -434,7 +360,7 @@ app.post('/api/sectors/:code/advance-approval', (req, res) => {
       userId: role,
       userName: userName
     });
-    res.json({ ok: true, version: versionKey, snapshot: snap, state: dbm.getBootstrapState(db) });
+    res.json({ ok: true, state: dbm.getBootstrapState(db) });
   } catch (e) {
     res.status(500).json({ error: String(e.message) });
   }
@@ -476,23 +402,14 @@ app.post('/api/company/archive', (req, res) => {
   try {
     const { userName, role } = req.body || {};
     const allProjects = getAllProjectsFromDb(db);
-    const companyFlow = sw.getCompanyFlow(dbm.getMeta, db);
-    if (companyFlow.archiveStatus === 'final') {
-      res.status(409).json({ error: '已完成公司归档' });
-      return;
-    }
-    const snap = {
-      version: 'J版',
-      time: new Date().toISOString(),
-      user: userName || '系统管理员',
-      role: role || 'system_admin',
-      scope: 'company',
-      projects: JSON.parse(JSON.stringify(allProjects))
-    };
-    dbm.putSnapshot(db, 'J版', snap);
+    const result = snapSvc.createFinalSnapshot(db, allProjects, {
+      name: userName || '系统管理员',
+      role: role || 'system_admin'
+    });
+    const snap = result.snap;
     dbm.setMeta(db, 'companyFlow', {
       archiveStatus: 'final',
-      archivedAt: new Date().toISOString()
+      archivedAt: snap.time
     });
     dbm.setMeta(db, 'approvalStatus', 'final');
     dbm.pushAudit(db, {
@@ -503,68 +420,18 @@ app.post('/api/company/archive', (req, res) => {
       fieldName: 'archive',
       fieldCN: '公司归档',
       oldVal: 'pending_archive',
-      newVal: 'J版',
+      newVal: result.version,
       userId: role || 'system_admin',
       userName: userName || '系统管理员'
     });
-    res.json({ ok: true, snapshot: snap, state: dbm.getBootstrapState(db) });
+    res.json({ ok: true, version: result.version, snapshot: snap, state: dbm.getBootstrapState(db) });
   } catch (e) {
     res.status(500).json({ error: String(e.message) });
   }
 });
 
-app.post('/api/pm-submissions/receive', (req, res) => {
-  try {
-    const { pmName, reportingMonth, userName } = req.body || {};
-    if (!pmName || !reportingMonth) {
-      res.status(400).json({ error: 'pmName 与 reportingMonth 必填' });
-      return;
-    }
-
-    const subs = dbm.getPmSubmissions(db);
-    const monthSubs = subs[reportingMonth] || {};
-    if (!monthSubs[pmName] || monthSubs[pmName].status !== 'submitted') {
-      res.status(409).json({ error: '该 PM 当前无待接收的提交' });
-      return;
-    }
-
-    monthSubs[pmName].status = 'received';
-    monthSubs[pmName].receivedAt = new Date().toISOString();
-    monthSubs[pmName].receivedBy = userName || '板块管理员';
-    // 为下一轮填报建立基准快照（不覆盖 submissionBaselineSnapshotVersion，供历史 diff）
-    const { version: baselineVersion, snap: baselineSnap } = createPmBaselineSnapshot(
-      db, pmName, reportingMonth, userName
-    );
-    monthSubs[pmName].baselineSnapshotVersion = baselineVersion;
-    // submissionBaselineSnapshotVersion 保留本轮提交时的对比基准
-    subs[reportingMonth] = monthSubs;
-    dbm.setPmSubmissions(db, subs);
-
-    // 审计
-    const record = {
-      id: Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-      timestamp: new Date().toISOString(),
-      projectNo: '—',
-      projectName: '全局',
-      fieldName: 'pm_receive',
-      fieldCN: '板块接收',
-      oldVal: 'submitted',
-      newVal: 'received',
-      userId: 'sector_admin',
-      userName: userName || '板块管理员'
-    };
-    dbm.pushAudit(db, record);
-
-    res.json({
-      ok: true,
-      pmName,
-      status: 'received',
-      baselineSnapshotVersion: baselineVersion,
-      baselineSnapshot: baselineSnap
-    });
-  } catch (e) {
-    res.status(500).json({ error: String(e.message) });
-  }
+app.post('/api/pm-submissions/receive', (_req, res) => {
+  res.status(410).json({ error: '已废弃：PM 提交后无需板块确认接收' });
 });
 
 function importProjectsFromInitXlsx(reportingMonth) {
@@ -585,33 +452,27 @@ function importProjectsFromInitXlsx(reportingMonth) {
   };
 }
 
-function applyDevSeedAfterImport(reportingMonth) {
-  return seedDevEnvironment(db, modules, {
+function applyDevSeedAfterImport(reportingMonth, sourceFile) {
+  const devSeed = seedDevEnvironment(db, modules, {
     reportingMonth,
     repickDemoNew: true
   });
+  const importSnapshot = createDevImportSnapshot(db, devSeed, { sourceFile });
+  return Object.assign({}, devSeed, { importSnapshot });
 }
 
-/** 基于当前库生成上一报告月对比快照（剔除部分项目，用于「新增项目」演示） */
-app.post('/api/admin/seed-prior-month-snapshot', (req, res) => {
-  try {
-    const body = req.body || {};
-    const reportingMonth = body.reportingMonth
-      || dbm.getMeta(db, 'reportingMonth')
-      || '2026-05';
-    const removeCount = body.removeCount != null ? Number(body.removeCount) : 5;
-    const result = seedPriorMonthSnapshot(db, modules, {
-      reportingMonth,
-      removeCount,
-      removeProjectNos: body.removeProjectNos,
-      user: body.userName || '系统',
-      role: body.role || 'system_admin'
-    });
-    res.json({ ok: true, state: dbm.getBootstrapState(db), ...result });
-  } catch (e) {
-    res.status(e.status || 500).json({ error: String(e.message) });
-  }
-});
+function resetWorkflowMeta(db) {
+  dbm.clearLockOverride(db);
+  dbm.setMeta(db, 'approvalStatus', 'draft');
+  dbm.setMeta(db, 'reportingSubmitted', false);
+  dbm.setMeta(db, 'pmSubmissions', {});
+  dbm.setMeta(db, 'companyFlow', { archiveStatus: 'pending', archivedAt: null });
+  const registry = sw.DEFAULT_SECTOR_REGISTRY.slice();
+  const flows = {};
+  registry.forEach(code => { flows[code] = sw.defaultSectorFlowEntry(); });
+  dbm.setMeta(db, 'sectorFlows', flows);
+  dbm.setMeta(db, 'sectorRegistry', registry);
+}
 
 app.post('/api/admin/reseed', (_req, res) => {
   try {
@@ -619,20 +480,21 @@ app.post('/api/admin/reseed', (_req, res) => {
     const reportingMonth = dbm.getMeta(db, 'reportingMonth') || '2026-05';
     const { count, file } = importProjectsFromInitXlsx(reportingMonth);
     dbm.clearAudit(db);
-    dbm.clearSnapshots(db);
-    db.prepare('DELETE FROM meta WHERE key = ?').run('priorMonthSnapshotVersion');
-    dbm.clearLockOverride(db);
-    dbm.setMeta(db, 'approvalStatus', 'draft');
-    dbm.setMeta(db, 'reportingSubmitted', false);
-    dbm.setMeta(db, 'pmSubmissions', {});
-    dbm.setMeta(db, 'companyFlow', { archiveStatus: 'pending', archivedAt: null });
-    const registry = sw.DEFAULT_SECTOR_REGISTRY.slice();
-    const flows = {};
-    registry.forEach(code => { flows[code] = sw.defaultSectorFlowEntry(); });
-    dbm.setMeta(db, 'sectorFlows', flows);
-    dbm.setMeta(db, 'sectorRegistry', registry);
-    const devSeed = applyDevSeedAfterImport(reportingMonth);
-    res.json({ ok: true, count, file, devSeed });
+    resetWorkflowMeta(db);
+    const allProjects = getAllProjectsFromDb(db);
+    const importSnapshot = snapSvc.createImportSnapshot(db, allProjects, {
+      reportingMonth,
+      sourceFile: file,
+      userName: '系统',
+      role: 'system_admin'
+    });
+    res.json({
+      ok: true,
+      count,
+      file,
+      importSnapshot,
+      state: dbm.getBootstrapState(db)
+    });
   } catch (e) {
     res.status(e.status || 500).json({ error: String(e.message) });
   }
@@ -700,7 +562,33 @@ app.post('/api/admin/cost-import', (req, res) => {
   }
 });
 
-/** 手动从中台/CRB/财务同步系统字段 */
+/** 填报页刷新：工程平台引用 + 库内最新项目（含 PM/板块已保存数据） */
+app.post('/api/editor/refresh-data', (req, res) => {
+  try {
+    const body = req.body || {};
+    const user = body.user || body.actor || {};
+    const role = user.role || user.id;
+    if (role !== 'system_admin' && role !== 'sector_admin') {
+      res.status(403).json({ error: '仅系统管理员或板块管理员可刷新' });
+      return;
+    }
+    const result = platformSync.runPlatformSync(db, dbm, modules, {
+      trigger: 'manual',
+      actor: user ? { id: user.id || user.role, name: user.name || user.userName } : null
+    });
+    res.json({
+      ok: true,
+      systemDataSyncedAt: result.syncedAt,
+      stats: result.stats,
+      syncMeta: result.syncMeta,
+      state: dbm.getBootstrapState(db)
+    });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: String(e.message) });
+  }
+});
+
+/** 手动从中台/CRB/财务同步系统字段（兼容旧调用，等同 refresh-data） */
 app.post('/api/admin/sync-platform-data', (req, res) => {
   try {
     const body = req.body || {};
@@ -727,16 +615,63 @@ app.post('/api/admin/reset-dev', (_req, res) => {
     dbm.resetDevMeta(db);
     const reportingMonth = dbm.DEFAULT_PERIOD_CONFIG.reportingMonth;
     const { count, file } = importProjectsFromInitXlsx(reportingMonth);
-    const devSeed = applyDevSeedAfterImport(reportingMonth);
+    const devSeed = applyDevSeedAfterImport(reportingMonth, file);
     res.json({
       ok: true,
       count,
       file,
       devSeed,
+      importSnapshot: devSeed.importSnapshot,
       state: dbm.getBootstrapState(db)
     });
   } catch (e) {
     res.status(e.status || 500).json({ error: String(e.message) });
+  }
+});
+
+app.get('/api/admin/users', (_req, res) => {
+  try {
+    dbm.ensureDefaultMeta(db);
+    res.json({
+      users: dbm.getMeta(db, 'users', dbm.DEFAULT_USERS),
+      groupRegistry: dbm.getMeta(db, 'groupRegistry', dbm.DEFAULT_GROUP_REGISTRY),
+      sectorRegistry: dbm.getBootstrapState(db).sectorRegistry
+    });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message) });
+  }
+});
+
+app.patch('/api/admin/users', (req, res) => {
+  try {
+    const body = req.body || {};
+    if (body.users != null) {
+      if (!Array.isArray(body.users)) {
+        res.status(400).json({ error: 'users 必须为数组' });
+        return;
+      }
+      dbm.setMeta(db, 'users', body.users);
+    }
+    if (body.groupRegistry != null) {
+      dbm.setMeta(db, 'groupRegistry', body.groupRegistry);
+    }
+    const actor = body.user || {};
+    dbm.pushAudit(db, {
+      id: Date.now() + '_users_' + Math.random().toString(36).slice(2, 6),
+      timestamp: new Date().toISOString(),
+      operation_type: 'user_config',
+      projectNo: '—',
+      projectName: '用户权限',
+      fieldName: 'users',
+      fieldCN: '用户与权限配置',
+      oldVal: '—',
+      newVal: (body.users && body.users.length) ? body.users.length + ' 用户' : '群配置更新',
+      userId: actor.role || 'system_admin',
+      userName: actor.name || '系统管理员'
+    });
+    res.json({ ok: true, state: dbm.getBootstrapState(db) });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message) });
   }
 });
 

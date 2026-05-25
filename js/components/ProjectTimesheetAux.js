@@ -100,6 +100,9 @@
         if (f.dimensionKey != null) parts.push(f.dimensionKey);
         if (f.monthIdx != null && f.monthIdx >= 0) parts.push(MONTH_LABELS[f.monthIdx]);
         return parts.join(' · ');
+      },
+      hasTimesheetData: function () {
+        return !!(this.stats && !this.stats.empty);
       }
     },
     watch: {
@@ -129,6 +132,10 @@
           .then(function (data) {
             self.stats = data;
             self.loading = false;
+            if (!data || data.empty) {
+              self.detailVisible = false;
+              self.detailFilter = null;
+            }
           })
           .catch(function (e) {
             self.loadError = '工时数据加载失败';
@@ -185,117 +192,119 @@
     },
     template: `
       <div class="drawer-timesheet-aux">
-        <div class="drawer-timesheet-tabs-row">
-          <el-tabs v-model="dimensionTab" class="drawer-timesheet-tabs">
-            <el-tab-pane label="专业×月" name="profession"></el-tab-pane>
-            <el-tab-pane label="板块×月" name="sector"></el-tab-pane>
-          </el-tabs>
-        </div>
-
-        <div class="drawer-timesheet-metric-row">
-          <el-radio-group v-model="metric" size="mini">
-            <el-radio-button label="hours">工时</el-radio-button>
-            <el-radio-button label="cost">工时成本</el-radio-button>
-          </el-radio-group>
-          <button
-            type="button"
-            class="drawer-timesheet-detail-link"
-            :disabled="!stats || stats.empty"
-            @click="openDetail(null)"
-          >
-            <i class="el-icon-tickets" aria-hidden="true"></i>
-            <span>查看明细</span>
-          </button>
-        </div>
-
-        <div class="drawer-timesheet-subtitle">{{ subtitle }}</div>
-
         <div v-if="loading" class="drawer-timesheet-empty">
           <i class="el-icon-loading"></i> 加载工时数据…
         </div>
-        <div v-else-if="!stats || stats.empty" class="drawer-timesheet-empty">
-          暂无 {{ year }} 年已审工时记录（辅助参考，不影响填报）
+        <div v-else-if="loadError" class="drawer-timesheet-empty">{{ loadError }}</div>
+        <div v-else-if="!hasTimesheetData" class="drawer-timesheet-empty">
+          本年度暂无已审工时记录
         </div>
-        <div v-else class="drawer-timesheet-table-wrap">
-          <el-table
-            :data="currentMatrix.rows"
-            size="mini"
-            border
-            max-height="280"
-            :class="['drawer-timesheet-table', tableMetricClass]"
-            :row-class-name="rowClassName"
-            :header-cell-style="{ background: '#f8fafc', fontWeight: '600', fontSize: '11px', padding: '4px 0' }"
-            :cell-style="{ padding: '2px 6px', fontSize: '11px', whiteSpace: 'nowrap' }"
-          >
-            <el-table-column
-              :label="dimensionLabel"
-              prop="key"
-              fixed
-              min-width="140"
-              show-overflow-tooltip
-            >
-              <template slot-scope="{ row }">
-                <span :class="{ 'drawer-ts-item--total': row.isTotal }">{{ row.key }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column
-              v-for="(ml, mi) in monthLabels"
-              :key="'m-' + mi"
-              :label="ml"
-              :min-width="monthColumnWidth"
-              align="right"
-              class-name="drawer-ts-col-month"
-            >
-              <template slot-scope="{ row }">
-                <span
-                  class="drawer-ts-cell"
-                  :class="{ 'drawer-ts-cell--clickable': cellHasValue(row, mi) }"
-                  @click="openDetailFromCell(row, mi)"
-                >{{ cellValue(row, mi) }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="合计" :min-width="totalColumnWidth" align="right" fixed="right" class-name="drawer-ts-col-total">
-              <template slot-scope="{ row }">
-                <span class="drawer-ts-cell drawer-ts-cell--total">{{ totalValue(row) }}</span>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-
-        <el-dialog
-          :visible.sync="detailVisible"
-          :title="'工时明细 · ' + projectNo"
-          width="1200px"
-          append-to-body
-          custom-class="drawer-timesheet-detail-dialog"
-        >
-          <div v-if="detailFilterLabel" class="drawer-ts-detail-filter">
-            <el-tag size="small" closable @close="clearDetailFilter">{{ detailFilterLabel }}</el-tag>
-            <span class="drawer-ts-detail-count">共 {{ filteredDetails.length }} 条</span>
+        <template v-else>
+          <div class="drawer-timesheet-tabs-row">
+            <el-tabs v-model="dimensionTab" class="drawer-timesheet-tabs">
+              <el-tab-pane label="专业×月" name="profession"></el-tab-pane>
+              <el-tab-pane label="板块×月" name="sector"></el-tab-pane>
+            </el-tabs>
           </div>
-          <el-table
-            :data="filteredDetails"
-            size="small"
-            border
-            max-height="420"
-            :header-cell-style="{ background: '#f8fafc', fontWeight: '600', fontSize: '12px' }"
+
+          <div class="drawer-timesheet-metric-row">
+            <el-radio-group v-model="metric" size="mini">
+              <el-radio-button label="hours">工时</el-radio-button>
+              <el-radio-button label="cost">工时成本</el-radio-button>
+            </el-radio-group>
+            <button
+              type="button"
+              class="drawer-timesheet-detail-link"
+              @click="openDetail(null)"
+            >
+              <i class="el-icon-tickets" aria-hidden="true"></i>
+              <span>查看明细</span>
+            </button>
+          </div>
+
+          <div class="drawer-timesheet-subtitle">{{ subtitle }}</div>
+
+          <div class="drawer-timesheet-table-wrap">
+            <el-table
+              :data="currentMatrix.rows"
+              size="mini"
+              border
+              max-height="280"
+              :class="['drawer-timesheet-table', tableMetricClass]"
+              :row-class-name="rowClassName"
+              :header-cell-style="{ background: '#f8fafc', fontWeight: '600', fontSize: '11px', padding: '4px 0' }"
+              :cell-style="{ padding: '2px 6px', fontSize: '11px', whiteSpace: 'nowrap' }"
+            >
+              <el-table-column
+                :label="dimensionLabel"
+                prop="key"
+                fixed
+                min-width="140"
+                show-overflow-tooltip
+              >
+                <template slot-scope="{ row }">
+                  <span :class="{ 'drawer-ts-item--total': row.isTotal }">{{ row.key }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column
+                v-for="(ml, mi) in monthLabels"
+                :key="'m-' + mi"
+                :label="ml"
+                :min-width="monthColumnWidth"
+                align="right"
+                class-name="drawer-ts-col-month"
+              >
+                <template slot-scope="{ row }">
+                  <span
+                    class="drawer-ts-cell"
+                    :class="{ 'drawer-ts-cell--clickable': cellHasValue(row, mi) }"
+                    @click="openDetailFromCell(row, mi)"
+                  >{{ cellValue(row, mi) }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="合计" :min-width="totalColumnWidth" align="right" fixed="right" class-name="drawer-ts-col-total">
+                <template slot-scope="{ row }">
+                  <span class="drawer-ts-cell drawer-ts-cell--total">{{ totalValue(row) }}</span>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+
+          <el-dialog
+            :visible.sync="detailVisible"
+            :title="'工时明细 · ' + projectNo"
+            width="1200px"
+            append-to-body
+            custom-class="drawer-timesheet-detail-dialog"
           >
-            <el-table-column label="日期" prop="date" width="108" sortable>
-              <template slot-scope="{ row }">{{ formatDetailDate(row.date) }}</template>
-            </el-table-column>
-            <el-table-column label="工程师" prop="engineer" min-width="120" show-overflow-tooltip sortable></el-table-column>
-            <el-table-column label="工程师管理归属" prop="engineerSector" width="160" show-overflow-tooltip sortable></el-table-column>
-            <el-table-column label="专业" prop="profession" min-width="130" show-overflow-tooltip sortable></el-table-column>
-            <el-table-column label="单元" prop="unitName" min-width="120" show-overflow-tooltip></el-table-column>
-            <el-table-column label="已审工时" width="100" align="right" sortable :sort-method="(a,b)=>a.approvedHours-b.approvedHours">
-              <template slot-scope="{ row }">{{ formatDetailHours(row.approvedHours) }}</template>
-            </el-table-column>
-            <el-table-column label="已审工时成本" width="140" align="right" sortable :sort-method="(a,b)=>a.approvedCost-b.approvedCost">
-              <template slot-scope="{ row }">{{ formatDetailCost(row.approvedCost) }}</template>
-            </el-table-column>
-            <el-table-column label="备注" prop="remark" min-width="100" show-overflow-tooltip></el-table-column>
-          </el-table>
-        </el-dialog>
+            <div v-if="detailFilterLabel" class="drawer-ts-detail-filter">
+              <el-tag size="small" closable @close="clearDetailFilter">{{ detailFilterLabel }}</el-tag>
+              <span class="drawer-ts-detail-count">共 {{ filteredDetails.length }} 条</span>
+            </div>
+            <el-table
+              :data="filteredDetails"
+              size="small"
+              border
+              max-height="420"
+              :header-cell-style="{ background: '#f8fafc', fontWeight: '600', fontSize: '12px' }"
+            >
+              <el-table-column label="日期" prop="date" width="108" sortable>
+                <template slot-scope="{ row }">{{ formatDetailDate(row.date) }}</template>
+              </el-table-column>
+              <el-table-column label="工程师" prop="engineer" min-width="120" show-overflow-tooltip sortable></el-table-column>
+              <el-table-column label="工程师管理归属" prop="engineerSector" width="160" show-overflow-tooltip sortable></el-table-column>
+              <el-table-column label="专业" prop="profession" min-width="130" show-overflow-tooltip sortable></el-table-column>
+              <el-table-column label="单元" prop="unitName" min-width="120" show-overflow-tooltip></el-table-column>
+              <el-table-column label="已审工时" width="100" align="right" sortable :sort-method="(a,b)=>a.approvedHours-b.approvedHours">
+                <template slot-scope="{ row }">{{ formatDetailHours(row.approvedHours) }}</template>
+              </el-table-column>
+              <el-table-column label="已审工时成本" width="140" align="right" sortable :sort-method="(a,b)=>a.approvedCost-b.approvedCost">
+                <template slot-scope="{ row }">{{ formatDetailCost(row.approvedCost) }}</template>
+              </el-table-column>
+              <el-table-column label="备注" prop="remark" min-width="100" show-overflow-tooltip></el-table-column>
+            </el-table>
+          </el-dialog>
+        </template>
       </div>
     `
   };

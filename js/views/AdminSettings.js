@@ -5,20 +5,42 @@
 (function (window) {
   'use strict';
 
-  const DEMO_USERS = [
-    { name: '管理员 Admin',   role: 'system_admin',    sector: '—',   status: '在线' },
-    { name: '财务总监 张颖',   role: 'finance',         sector: '财务部', status: '在线' },
-    { name: '运营总监 周明',   role: 'sector_admin',    sector: 'S520', status: '在线' },
-    { name: '何孝刚',         role: 'pm',              sector: 'S520', status: '在线' },
-    { name: '宋建生',         role: 'pm',              sector: 'S520', status: '在线' },
-    { name: '板块总监 陈磊',   role: 'sector_director', sector: 'S52X', status: '在线' },
-    { name: '项目群主 王总',   role: 'group_leader',    sector: '—',   status: '在线' }
+  const ROLE_OPTIONS = [
+    { value: 'system_admin', label: '系统管理员' },
+    { value: 'executive_viewer', label: '经营管理（只读）' },
+    { value: 'sector_admin', label: '板块管理员' },
+    { value: 'pm', label: '项目经理' },
+    { value: 'sector_director', label: '板块总监' },
+    { value: 'group_leader', label: '项目群群主' }
+  ];
+
+  const DATA_SCOPE_OPTIONS = [
+    { value: 'company', label: '全公司' },
+    { value: 'sector', label: '板块' },
+    { value: 'group', label: '项目群' }
   ];
 
   const ROLE_LABELS = {
-    system_admin: '系统管理员', finance: '财务审核', sector_admin: '板块管理员',
-    pm: '项目经理', sector_director: '板块总监', group_leader: '项目群群主'
+    system_admin: '系统管理员',
+    executive_viewer: '经营管理（只读）',
+    sector_admin: '板块管理员',
+    pm: '项目经理',
+    sector_director: '板块总监',
+    group_leader: '项目群群主'
   };
+
+  function emptyUser() {
+    return {
+      id: 'u_' + Date.now(),
+      name: '',
+      role: 'pm',
+      status: 'active',
+      sector: 'S520',
+      dataScope: 'company',
+      sectorCode: 'SAS520',
+      groupCode: 'GRP_JS'
+    };
+  }
 
   window.AdminSettingsView = {
     name: 'AdminSettings',
@@ -29,10 +51,17 @@
         importLoading: false,
         importResult: null,
         importFile: null,
-        priorMonthSeedLoading: false,
-        users: DEMO_USERS,
+        users: [],
+        groupRegistry: {},
+        userDialogVisible: false,
+        userForm: emptyUser(),
+        userSaving: false,
+        groupDialogVisible: false,
+        groupForm: { code: '', name: '', sectors: [] },
         activeSection: 'period',
-        resetConfirmVisible: false
+        resetConfirmVisible: false,
+        roleOptions: ROLE_OPTIONS,
+        dataScopeOptions: DATA_SCOPE_OPTIONS
       };
     },
     computed: {
@@ -43,12 +72,113 @@
       lockLabel()     { return { open: '填报中', locked: '已锁定' }[this.lockStatus] || '—'; },
       lockTagType()   { return { open: 'success', locked: 'danger' }[this.lockStatus] || 'info'; },
       projectCount()  { return Store.projects.length; },
-      auditCount()    { return Store.auditLog.length; }
+      auditCount()    { return Store.auditLog.length; },
+      sectorOptions() {
+        return (Store.sectorRegistry || []).map(function (code) {
+          return { value: code, label: (Store.sectorNames && Store.sectorNames[code]) || code };
+        });
+      },
+      groupOptions() {
+        const reg = this.groupRegistry || {};
+        return Object.keys(reg).map(function (code) {
+          return { value: code, label: (reg[code] && reg[code].name) || code };
+        });
+      },
+      groupList() {
+        const reg = this.groupRegistry || {};
+        return Object.keys(reg).map(function (code) {
+          const g = reg[code] || {};
+          return { code: code, name: g.name || code, sectors: (g.sectors || []).join(', ') };
+        });
+      }
     },
     created() {
       this.periodForm = Object.assign({}, Store.periodConfig);
+      this.syncUsersFromStore();
+    },
+    watch: {
+      'store.users': function () { this.syncUsersFromStore(); },
+      'store.groupRegistry': function () { this.syncUsersFromStore(); }
     },
     methods: {
+      syncUsersFromStore() {
+        this.users = JSON.parse(JSON.stringify(Store.users || []));
+        this.groupRegistry = JSON.parse(JSON.stringify(Store.groupRegistry || {}));
+      },
+      userScopeLabel(row) {
+        if (row.role !== 'executive_viewer') return row.sector || '—';
+        if (window.DataScope) {
+          return DataScope.getScopeLabel(row, this.groupRegistry, Store.sectorNames);
+        }
+        return row.dataScope || '—';
+      },
+      openUserDialog(row) {
+        this.userForm = Object.assign(emptyUser(), row ? JSON.parse(JSON.stringify(row)) : {});
+        if (!this.userForm.id) this.userForm.id = 'u_' + Date.now();
+        this.userDialogVisible = true;
+      },
+      saveUserDialog() {
+        if (!this.userForm.name) {
+          this.$message.warning('请填写姓名');
+          return;
+        }
+        const idx = this.users.findIndex(function (u) { return u.id === this.userForm.id; }.bind(this));
+        if (idx >= 0) Vue.set(this.users, idx, Object.assign({}, this.userForm));
+        else this.users.push(Object.assign({}, this.userForm));
+        this.persistUsersConfig();
+        this.userDialogVisible = false;
+      },
+      removeUser(row) {
+        const self = this;
+        this.$confirm('停用用户「' + row.name + '」？', '确认', { type: 'warning' })
+          .then(function () {
+            const idx = self.users.findIndex(function (u) { return u.id === row.id; });
+            if (idx >= 0) {
+              Vue.set(self.users[idx], 'status', 'inactive');
+              self.persistUsersConfig();
+            }
+          }).catch(function () {});
+      },
+      openGroupDialog(row) {
+        if (row) {
+          const g = this.groupRegistry[row.code] || {};
+          this.groupForm = {
+            code: row.code,
+            name: g.name || row.name,
+            sectors: (g.sectors || []).slice()
+          };
+        } else {
+          this.groupForm = { code: 'GRP_' + Date.now().toString(36).slice(2, 6).toUpperCase(), name: '', sectors: [] };
+        }
+        this.groupDialogVisible = true;
+      },
+      saveGroupDialog() {
+        if (!this.groupForm.code || !this.groupForm.name) {
+          this.$message.warning('请填写群编码与名称');
+          return;
+        }
+        Vue.set(this.groupRegistry, this.groupForm.code, {
+          name: this.groupForm.name,
+          sectors: this.groupForm.sectors || []
+        });
+        this.persistUsersConfig();
+        this.groupDialogVisible = false;
+      },
+      persistUsersConfig() {
+        if (!this.isAdmin) return;
+        this.userSaving = true;
+        Store.saveUsersConfig({
+          users: this.users,
+          groupRegistry: this.groupRegistry,
+          user: this.user
+        }).then(function () {
+          this.$message.success('用户与权限配置已保存');
+        }.bind(this)).catch(function (e) {
+          this.$message.error('保存失败：' + (e.message || e));
+        }.bind(this)).finally(function () {
+          this.userSaving = false;
+        }.bind(this));
+      },
       savePeriodConfig() {
         if (!this.isAdmin) { this.$message.error('仅管理员可修改配置'); return; }
         this.$confirm('保存后将立即生效，确认？', '保存配置', {
@@ -148,39 +278,17 @@
         }).catch(() => {});
       },
       handleReseedFromXlsx() {
-        this.$confirm('将从服务器项目根目录的「初始数据.xlsx」（或 S520 源表）重新导入，覆盖当前项目并清空审计日志与快照，确认？', '从初始 Excel 恢复', {
+        this.$confirm('将从服务器项目根目录的「初始数据.xlsx」（或 S520 源表）重新导入，覆盖当前项目并清空审计日志；保留历史 I/D/J 快照，但对比基准将切换为新导入 I 版。确认？', '从初始 Excel 恢复', {
           confirmButtonText: '确认恢复', cancelButtonText: '取消', type: 'danger'
         }).then(() => {
           Store.reseedFromInit()
             .then(() => {
               this.periodForm = Object.assign({}, Store.periodConfig);
-              this.$message.success('已从初始 Excel 恢复数据库');
+              const bv = Store.baselineVersion || '';
+              this.$message.success('已从初始 Excel 恢复' + (bv ? '；baseline：' + bv : ''));
             })
             .catch(e => { this.$message.error('恢复失败：' + (e.message || e)); });
         }).catch(() => {});
-      },
-      handleSeedPriorMonthSnapshot() {
-        const self = this;
-        this.$confirm(
-          '将基于当前库项目生成「上一报告月」归档快照（默认剔除 5 条项目）。' +
-          '填报页将把不在该快照中的项目标为「本月新增」。确认？',
-          '生成上月对比快照',
-          { confirmButtonText: '确认生成', cancelButtonText: '取消', type: 'info' }
-        ).then(function () {
-          self.priorMonthSeedLoading = true;
-          Store.seedPriorMonthSnapshot(5)
-            .then(function (d) {
-              const msg = d
-                ? '已生成 ' + (d.version || '') + '：上月 ' + d.projectCount + ' 条，' +
-                  '本月新增标记约 ' + d.removedCount + ' 条'
-                : '已生成上月对比快照';
-              self.$message.success(msg);
-            })
-            .catch(function (e) {
-              self.$message.error('生成失败：' + (e.message || e));
-            })
-            .finally(function () { self.priorMonthSeedLoading = false; });
-        }).catch(function () {});
       },
       roleLabel(role) { return ROLE_LABELS[role] || role; }
     },
@@ -313,18 +421,8 @@
                 <el-button size="mini" type="warning" plain icon="el-icon-refresh-left" @click="handleReseedFromXlsx">
                   从初始 Excel 恢复
                 </el-button>
-                <el-button
-                  size="mini"
-                  type="primary"
-                  plain
-                  icon="el-icon-document-copy"
-                  :loading="priorMonthSeedLoading"
-                  :disabled="!isAdmin || projectCount === 0"
-                  style="margin-left:8px;"
-                  @click="handleSeedPriorMonthSnapshot"
-                >生成上月对比快照</el-button>
                 <div style="font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.6;">
-                  报告月为 2026-05 时生成 <code>Month:2026-04</code>，用于填报页「新增项目」高亮演示。
+                  恢复后会写入新的 <code>I:YYYYMMDD:ALL:NN</code> 导入快照并设为对比基准（保留历史 J/D 快照）。
                 </div>
               </div>
             </div>
@@ -333,23 +431,95 @@
             <div class="card">
               <div class="card-header">
                 <div class="card-title"><i class="el-icon-user" style="color:#007069;margin-right:6px;"></i>系统用户</div>
-                <el-tag size="mini">{{ users.length }} 人</el-tag>
+                <el-button size="mini" type="primary" plain :disabled="!isAdmin" @click="openUserDialog()">新增用户</el-button>
               </div>
-              <el-table :data="users" size="mini" border style="width:100%;">
+              <el-table :data="users.filter(u => u.status !== 'inactive')" size="mini" border style="width:100%;">
                 <el-table-column label="姓名" prop="name" min-width="110"></el-table-column>
-                <el-table-column label="角色" width="100">
+                <el-table-column label="角色" width="120">
                   <template slot-scope="{row}">
                     <span style="font-size:11px;">{{ roleLabel(row.role) }}</span>
                   </template>
                 </el-table-column>
-                <el-table-column label="板块" prop="sector" width="70"></el-table-column>
-                <el-table-column label="状态" width="60">
+                <el-table-column label="数据范围" min-width="120">
                   <template slot-scope="{row}">
-                    <el-tag :type="row.status==='在线'?'success':'info'" size="mini">{{ row.status }}</el-tag>
+                    <span style="font-size:11px;">{{ userScopeLabel(row) }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" width="100" v-if="isAdmin">
+                  <template slot-scope="{row}">
+                    <el-button type="text" size="mini" @click="openUserDialog(row)">编辑</el-button>
+                    <el-button type="text" size="mini" style="color:#ef4444;" @click="removeUser(row)">停用</el-button>
                   </template>
                 </el-table-column>
               </el-table>
             </div>
+
+            <!-- 项目群配置 -->
+            <div class="card" style="margin-top:16px;">
+              <div class="card-header">
+                <div class="card-title"><i class="el-icon-share" style="color:#007069;margin-right:6px;"></i>项目群配置</div>
+                <el-button size="mini" type="primary" plain :disabled="!isAdmin" @click="openGroupDialog()">新增项目群</el-button>
+              </div>
+              <el-table :data="groupList" size="mini" border style="width:100%;">
+                <el-table-column label="群编码" prop="code" width="100"></el-table-column>
+                <el-table-column label="名称" prop="name" min-width="100"></el-table-column>
+                <el-table-column label="所含板块" prop="sectors" min-width="180"></el-table-column>
+                <el-table-column label="操作" width="70" v-if="isAdmin">
+                  <template slot-scope="{row}">
+                    <el-button type="text" size="mini" @click="openGroupDialog(row)">编辑</el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+
+            <el-dialog title="用户配置" :visible.sync="userDialogVisible" width="480px" append-to-body>
+              <el-form label-width="88px" size="small">
+                <el-form-item label="姓名"><el-input v-model="userForm.name"></el-input></el-form-item>
+                <el-form-item label="角色">
+                  <el-select v-model="userForm.role" style="width:100%;">
+                    <el-option v-for="o in roleOptions" :key="o.value" :label="o.label" :value="o.value"></el-option>
+                  </el-select>
+                </el-form-item>
+                <el-form-item v-if="userForm.role === 'executive_viewer'" label="数据范围">
+                  <el-select v-model="userForm.dataScope" style="width:100%;">
+                    <el-option v-for="o in dataScopeOptions" :key="o.value" :label="o.label" :value="o.value"></el-option>
+                  </el-select>
+                </el-form-item>
+                <el-form-item v-if="userForm.role === 'executive_viewer' && userForm.dataScope === 'sector'" label="板块">
+                  <el-select v-model="userForm.sectorCode" filterable style="width:100%;">
+                    <el-option v-for="o in sectorOptions" :key="o.value" :label="o.label" :value="o.value"></el-option>
+                  </el-select>
+                </el-form-item>
+                <el-form-item v-if="userForm.role === 'executive_viewer' && userForm.dataScope === 'group'" label="项目群">
+                  <el-select v-model="userForm.groupCode" style="width:100%;">
+                    <el-option v-for="o in groupOptions" :key="o.value" :label="o.label" :value="o.value"></el-option>
+                  </el-select>
+                </el-form-item>
+                <el-form-item v-if="userForm.role === 'sector_admin' || userForm.role === 'pm'" label="板块">
+                  <el-input v-model="userForm.sector" placeholder="如 S520"></el-input>
+                </el-form-item>
+              </el-form>
+              <span slot="footer">
+                <el-button size="small" @click="userDialogVisible = false">取消</el-button>
+                <el-button size="small" type="primary" :loading="userSaving" @click="saveUserDialog">保存</el-button>
+              </span>
+            </el-dialog>
+
+            <el-dialog title="项目群配置" :visible.sync="groupDialogVisible" width="520px" append-to-body>
+              <el-form label-width="88px" size="small">
+                <el-form-item label="群编码"><el-input v-model="groupForm.code" :disabled="!!groupRegistry[groupForm.code]"></el-input></el-form-item>
+                <el-form-item label="名称"><el-input v-model="groupForm.name"></el-input></el-form-item>
+                <el-form-item label="所含板块">
+                  <el-select v-model="groupForm.sectors" multiple filterable style="width:100%;">
+                    <el-option v-for="o in sectorOptions" :key="o.value" :label="o.label" :value="o.value"></el-option>
+                  </el-select>
+                </el-form-item>
+              </el-form>
+              <span slot="footer">
+                <el-button size="small" @click="groupDialogVisible = false">取消</el-button>
+                <el-button size="small" type="primary" :loading="userSaving" @click="saveGroupDialog">保存</el-button>
+              </span>
+            </el-dialog>
           </div>
         </div>
 

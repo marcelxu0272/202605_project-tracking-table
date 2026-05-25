@@ -17,7 +17,9 @@ function loadBrowserScripts() {
   const files = [
     path.join(ROOT, 'fields-data.js'),
     path.join(ROOT, 'js', 'formula-engine.js'),
-    path.join(ROOT, 'js', 'field-config.js')
+    path.join(ROOT, 'js', 'field-config.js'),
+    path.join(ROOT, 'js', 'system-ref-meta.js'),
+    path.join(ROOT, 'js', 'new-existing-ref.js')
   ];
 
   for (const file of files) {
@@ -28,6 +30,8 @@ function loadBrowserScripts() {
   return {
     FieldConfig: ctx.FieldConfig,
     FormulaEngine: ctx.FormulaEngine,
+    SystemRefMeta: ctx.SystemRefMeta,
+    NewExistingRef: ctx.NewExistingRef,
     FIELD_DICTIONARY: ctx.FIELD_DICTIONARY
   };
 }

@@ -1,10 +1,10 @@
 'use strict';
 
 /**
- * 开发/重置后的演示数据：清洗导入元数据 + 生成上一报告月归档快照（供「五月新增」高亮）
+ * 开发/重置后的演示数据：清洗导入元数据 + 预警演示；新增项目高亮由 I 版 baseline 排除演示项目号实现
  */
 const dbm = require('./db');
-const prior = require('./prior-month-snapshot');
+const snapSvc = require('./snapshot-service');
 const alertDemo = require('./alert-demo-seed');
 
 const DEV_DEMO_NEW_COUNT = 5;
@@ -19,14 +19,14 @@ const DEMO_NEW_PROJECT_NOS_SMALL = [
 ];
 
 function stripEphemeralMeta(p) {
-  return prior.stripEphemeralMeta(p);
+  return snapSvc.stripEphemeralMeta(p);
 }
 
 function normalizeProjects(projects) {
   return (projects || []).map(stripEphemeralMeta);
 }
 
-/** 从大库中均匀抽取 N 个项目号，作为「本月新增」演示 */
+/** 从大库中均匀抽取 N 个项目号，作为「相对 I 版 baseline 的新增项目」演示 */
 function pickDemoNewProjectNos(projects, count) {
   const n = count != null ? count : DEV_DEMO_NEW_COUNT;
   const sorted = projects.slice().sort(function (a, b) {
@@ -56,8 +56,8 @@ function pickDemoNewProjectNos(projects, count) {
 }
 
 /**
- * 重置/重导 Excel 后写入演示环境：干净项目 payload + Month:YYYY-MM 上月快照
- * @returns {{ priorSnapshot, demoNewProjectNos, normalizedCount }}
+ * 重置/重导 Excel 后写入演示环境（不含 I 版写入，由调用方在适当时机 createImportSnapshot）
+ * @returns {{ demoNewProjectNos, normalizedCount, projectsForBaseline }}
  */
 function seedDevEnvironment(db, modules, options) {
   options = options || {};
@@ -67,7 +67,7 @@ function seedDevEnvironment(db, modules, options) {
 
   const rows = db.prepare('SELECT project_no, payload FROM projects ORDER BY project_no ASC').all();
   if (rows.length === 0) {
-    throw new Error('项目库为空，无法生成演示快照');
+    throw new Error('项目库为空，无法生成演示数据');
   }
 
   const projects = rows.map(function (r) { return JSON.parse(r.payload); });
@@ -87,39 +87,49 @@ function seedDevEnvironment(db, modules, options) {
     const saved = dbm.getMeta(db, 'demoNewProjectNos', null);
     if (saved && saved.length && !options.repickDemoNew) {
       demoNewProjectNos = saved.filter(function (no) {
-        return normalized.some(function (p) { return p.project_no === no; });
+        return patched.some(function (p) { return p.project_no === no; });
       });
     }
   }
   if (!demoNewProjectNos || !demoNewProjectNos.length) {
-    demoNewProjectNos = pickDemoNewProjectNos(normalized, options.removeCount || DEV_DEMO_NEW_COUNT);
+    demoNewProjectNos = pickDemoNewProjectNos(patched, options.removeCount || DEV_DEMO_NEW_COUNT);
   }
   demoNewProjectNos = demoNewProjectNos.slice(0, DEV_DEMO_NEW_COUNT);
+  const demoSet = {};
+  demoNewProjectNos.forEach(function (no) { demoSet[no] = true; });
 
-  const priorMonth = prior.priorReportingMonth(reportingMonth);
-  const priorResult = prior.seedPriorMonthSnapshot(db, modules, {
-    reportingMonth,
-    removeCount: 0,
-    removeProjectNos: demoNewProjectNos,
-    time: options.snapshotTime || (priorMonth + '-28T10:00:00.000Z'),
-    user: options.user || '系统',
-    role: options.role || 'system_admin'
+  const projectsForBaseline = patched.filter(function (p) {
+    return !demoSet[p.project_no];
   });
 
   dbm.setMeta(db, 'demoNewProjectNos', demoNewProjectNos);
   dbm.setMeta(db, 'alertDemoProjectNos', alertDemo.ALERT_DEMO_PROJECTS);
-  dbm.setMeta(db, 'devSeedVersion', 3);
+  dbm.setMeta(db, 'devSeedVersion', 4);
   dbm.setMeta(db, 'devSeedAppliedAt', new Date().toISOString());
 
   return {
-    priorSnapshot: priorResult,
     demoNewProjectNos,
     alertDemoProjectNos: alertDemo.ALERT_DEMO_PROJECTS,
     alertDemoTimesheets: timesheetDemo,
     normalizedCount: patched.length,
     reportingMonth,
-    priorMonth
+    projectsForBaseline
   };
+}
+
+/** 开发重置：写 I 版 baseline（排除演示新增项目号） */
+function createDevImportSnapshot(db, devSeedResult, options) {
+  options = options || {};
+  const projects = (devSeedResult && devSeedResult.projectsForBaseline) || [];
+  if (!projects.length) {
+    throw new Error('无法生成导入快照：baseline 项目集为空');
+  }
+  return snapSvc.createImportSnapshot(db, projects, {
+    reportingMonth: devSeedResult.reportingMonth,
+    sourceFile: options.sourceFile || '初始数据.xlsx',
+    userName: options.userName || '系统',
+    role: options.role || 'system_admin'
+  });
 }
 
 module.exports = {
@@ -128,5 +138,6 @@ module.exports = {
   stripEphemeralMeta,
   normalizeProjects,
   pickDemoNewProjectNos,
-  seedDevEnvironment
+  seedDevEnvironment,
+  createDevImportSnapshot
 };

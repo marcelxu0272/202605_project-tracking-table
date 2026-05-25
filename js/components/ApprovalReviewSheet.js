@@ -36,9 +36,7 @@
         return false;
       },
       canEdit() {
-        if (!this.reviewerEditActive) return false;
-        if (this.lockStatus === 'locked') return false;
-        return true;
+        return false;
       },
       isPm() { return false; },
       isSectorAdmin() { return false; },
@@ -79,9 +77,11 @@
         return '';
       },
       reviewHintText() {
-        const base = '本板块 ' + this.scopedProjects.length + ' 条 · 当前显示 ' + this.reviewProjectCount + ' 条';
-        if (this.reviewerEditActive) return base + ' · 可编辑列可修改（变更将记入批注）';
-        return base + ' · 只读';
+        const base = '本板块 ' + this.scopedProjects.length + ' 条 · 当前显示 ' + this.reviewProjectCount + ' 条 · 只读';
+        if (this.reviewerEditActive) {
+          return base + ' · 需修改数据请「驳回」，由板块管理员编辑后重新提交';
+        }
+        return base;
       }
     },
     watch: {
@@ -137,9 +137,9 @@
     template: [
       '<motion-placeholder class="approval-review-sheet">',
       '<motion-placeholder v-if="showDiffHint" class="editor-diff-hint">',
-      '<span class="editor-legend-item"><span class="editor-legend-swatch editor-legend-swatch--new"></span>本月新增项目</span>',
       '<span class="editor-legend-item"><span class="editor-legend-swatch editor-legend-swatch--editable"></span>可编辑列</span>',
-      '<span class="editor-legend-item"><span class="editor-legend-swatch editor-legend-swatch--changed" aria-hidden="true">Aa</span>本月有变更字段</span>',
+      '<span class="editor-legend-item"><span class="editor-legend-swatch editor-legend-swatch--new"></span>新增项目</span>',
+      '<span class="editor-legend-item"><span class="editor-legend-swatch editor-legend-swatch--changed"></span>本月有变更字段</span>',
       '<span style="flex:1;"></span>',
       '<span style="cursor:pointer;" @click="showDiffHint=false"><i class="el-icon-close"></i></span>',
       '</motion-placeholder>',

@@ -1,6 +1,6 @@
 /**
  * Approval.js — 审批流程页
- * 板块总监 / 项目群群主：时间轴 + Luckysheet（本板块全部项目、筛选、待办节点内可编辑）
+ * 板块总监 / 项目群群主：时间轴 + Luckysheet（本板块全部项目、筛选、只读；需修改请驳回）
  * 其他角色：时间轴 + 版本快照；系统管理员无版本差异对比与各板块进度卡片
  */
 (function (window) {
@@ -73,7 +73,12 @@
         return APPROVAL_REVIEW_ROLES.indexOf(this.user.role) >= 0;
       },
       isSystemAdmin() { return this.user.role === 'system_admin'; },
-      reviewSector() { return this.user.sector || 'S520'; },
+      reviewSector() {
+        const raw = this.user.sector || 'S520';
+        return window.SectorWorkflow
+          ? SectorWorkflow.normalizeSectorCode(raw)
+          : raw;
+      },
       sectorFlow() { return Store.getSectorFlow(this.reviewSector); },
       currentStatus() {
         if (this.isSystemAdmin) {
@@ -88,13 +93,21 @@
       },
       snapshots()      { return Store.snapshots; },
       snapshotList()   {
-        return Object.values(this.snapshots)
-          .sort((a, b) => new Date(b.time) - new Date(a.time));
+        const self = this;
+        return Object.keys(this.snapshots)
+          .filter(function (k) {
+            if (window.BaselineDiff && BaselineDiff.isModernSnapshotKey(k)) {
+              return BaselineDiff.isSnapshotVisibleToUser(k, self.user, self.reviewSector);
+            }
+            return /^D:/.test(k) || k === 'J版' || /^Draft:/.test(k);
+          })
+          .map(function (k) { return self.snapshots[k]; })
+          .sort(function (a, b) { return new Date(b.time) - new Date(a.time); });
       },
       canApprove() {
         const role = this.user.role;
         if (role === 'system_admin') {
-          return !Store.isCompanyArchived();
+          return true;
         }
         const sf = this.sectorFlow;
         if (role === 'sector_director') {
@@ -121,7 +134,12 @@
         return '';
       },
       versionOptions() {
-        return Object.keys(this.snapshots).map(k => ({ label: k, value: k }));
+        const self = this;
+        return this.snapshotList.map(function (snap) {
+          const k = snap.version || '';
+          const label = snap.label || k;
+          return { label: label, value: k };
+        });
       },
       activeFlowIdx() {
         if (this.isSystemAdmin) {
@@ -164,7 +182,7 @@
       },
       handleApprove() {
         this.$confirm(
-          `确认执行「${this.nextActionLabel}」？此操作将推进审批流程并生成版本快照。`,
+          `确认执行「${this.nextActionLabel}」？此操作将推进审批流程${this.user.role === 'system_admin' ? '并生成 J 版快照' : ''}。`,
           '审批确认', { confirmButtonText: '确认', cancelButtonText: '取消', type: 'warning' }
         ).then(() => {
           this.approveLoading = true;
@@ -208,13 +226,13 @@
         }).catch(() => {});
       },
       openDiffDialog() {
-        const keys = Object.keys(this.snapshots);
-        if (keys.length < 1) {
+        const opts = this.versionOptions;
+        if (opts.length < 1) {
           this.$message.info('暂无可对比的快照版本');
           return;
         }
-        this.diffLeftVersion  = keys[Math.max(0, keys.length - 2)];
-        this.diffRightVersion = keys[keys.length - 1];
+        this.diffLeftVersion  = opts[Math.max(0, opts.length - 2)].value;
+        this.diffRightVersion = opts[opts.length - 1].value;
         this.computeDiff();
         this.diffDialogVisible = true;
       },
@@ -320,9 +338,9 @@
                       <el-tag size="mini" :type="nodeStatusTagType(idx)">{{ nodeStatusLabel(idx) }}</el-tag>
                     </div>
                     <div class="timeline-sub">{{ node.desc }}</div>
-                    <div v-if="node.key === 'final' && snapshots['J版']" style="margin-top:6px;">
+                    <div v-if="node.key === 'final' && (store.latestJVersion || snapshots['J版'])" style="margin-top:6px;">
                       <el-tag size="mini" type="success">
-                        {{ snapshots['J版'].user }} · {{ formatTime(snapshots['J版'].time) }}
+                        {{ (snapshots[store.latestJVersion] || snapshots['J版'] || {}).user }} · {{ formatTime((snapshots[store.latestJVersion] || snapshots['J版'] || {}).time) }}
                       </el-tag>
                     </div>
                   </div>

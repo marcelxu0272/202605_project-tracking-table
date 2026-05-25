@@ -15,7 +15,9 @@
     '始累完成合同额': 'el-icon-s-flag',
     '开票回款情况': 'el-icon-wallet',
     '财务数据（WIP/应收）': 'el-icon-bank-card',
-    '应收账款及WIP': 'el-icon-money'
+    '应收账款及WIP': 'el-icon-money',
+    '工时数据': 'el-icon-time',
+    '成本数据': 'el-icon-data-analysis'
   };
 
   window.ProjectDetailDrawer = {
@@ -43,9 +45,13 @@
         draft: {},
         primaryActive: [],
         readonlyActive: [],
+        auxActive: [],
         timesheetStats: null,
         timesheetLoading: false,
-        timesheetLoadFailed: false
+        timesheetLoadFailed: false,
+        completionAuxVisible: false,
+        completionAuxBlurTimer: null,
+        numFocusKey: null
       };
     },
     computed: {
@@ -154,6 +160,18 @@
       },
       hasProjectAlerts: function () {
         return this.projectAlerts.length > 0;
+      },
+      completionFillAux: function () {
+        if (!this.project || !window.ProjectAlerts) return null;
+        return ProjectAlerts.getCompletionFillAux(
+          this.project,
+          this.monthIdx,
+          this.timesheetStats,
+          this.draft
+        );
+      },
+      completionAuxLoading: function () {
+        return this.timesheetLoading;
       }
     },
     watch: {
@@ -165,6 +183,12 @@
           this.timesheetStats = null;
           this.timesheetLoading = false;
           this.timesheetLoadFailed = false;
+          this.completionAuxVisible = false;
+          if (this.completionAuxBlurTimer) {
+            clearTimeout(this.completionAuxBlurTimer);
+            this.completionAuxBlurTimer = null;
+          }
+          this.numFocusKey = null;
         }
       },
       project: function () {
@@ -190,6 +214,66 @@
         }
         this.primaryActive = names.slice();
         this.readonlyActive = [];
+        this.auxActive = [];
+        this.numFocusKey = null;
+      },
+      numInputKey: function (field) {
+        if (!field) return '';
+        var k = this.draftKey(field);
+        return k != null ? k : ('col-' + field.col);
+      },
+      isNumInputFocused: function (field) {
+        return this.numFocusKey === this.numInputKey(field);
+      },
+      formatNumInputDisplay: function (field) {
+        if (!field) return '';
+        var val = this.draftVal(field);
+        if (this.isNumInputFocused(field)) {
+          if (val === '' || val == null) return '';
+          return String(val);
+        }
+        if (val === '' || val == null) return '';
+        if (window.Formatters) {
+          var formatted = Formatters.formatAmount(val);
+          return formatted === '—' ? '' : formatted;
+        }
+        return String(val);
+      },
+      onNumInputFocus: function (field) {
+        this.numFocusKey = this.numInputKey(field);
+      },
+      onNumInputInput: function (field, val) {
+        this.setDraftVal(field, val);
+      },
+      onNumInputBlur: function (field) {
+        if (!field) {
+          this.numFocusKey = null;
+          return;
+        }
+        var k = this.draftKey(field);
+        if (k == null) {
+          this.numFocusKey = null;
+          return;
+        }
+        var raw = this.draft[k];
+        if (raw === '' || raw == null) {
+          this.numFocusKey = null;
+          return;
+        }
+        var parsed = window.Formatters
+          ? Formatters.parseAmount(raw)
+          : Number(String(raw).replace(/,/g, ''));
+        if (isNaN(parsed)) parsed = 0;
+        this.$set(this.draft, k, parsed);
+        this.numFocusKey = null;
+      },
+      onMonthNumInputFocus: function (field, showAux) {
+        this.onNumInputFocus(field);
+        if (showAux) this.showCompletionAux();
+      },
+      onMonthNumInputBlur: function (field, hideAux) {
+        this.onNumInputBlur(field);
+        if (hideAux) this.hideCompletionAuxSoon();
       },
       draftKey: function (field) {
         return FieldConfig.COL_TO_KEY[field.col];
@@ -300,6 +384,45 @@
       },
       sectionUsesEditableBg: function (sectionName) {
         return sectionName === '合同签署与进展' || sectionName === 'WIP分析与措施';
+      },
+      isEditableField: function (field) {
+        return this.fieldEditable(field);
+      },
+      isSystemRefOverridden: function (field) {
+        if (!window.SystemRefMeta || !this.project) return false;
+        return SystemRefMeta.isOverriddenField(this.project, field, this.monthIdx);
+      },
+      systemRefTooltip: function (field) {
+        if (!window.SystemRefMeta || !this.project) return '';
+        return SystemRefMeta.formatRefComment(this.project, field, this.monthIdx);
+      },
+      isReportMonthCompletionCell: function (monthly, kind, mi) {
+        return kind === 'completion' && mi === this.monthIdx && this.isMonthCellEditable(monthly, kind, mi);
+      },
+      formatAuxAmount: function (val) {
+        if (window.Formatters) return Formatters.formatAmount(val);
+        var n = Number(val) || 0;
+        return n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      },
+      formatAuxHours: function (val) {
+        var n = Number(val) || 0;
+        if (Math.abs(n) < 1e-9) return '—';
+        return n.toFixed(1) + ' h';
+      },
+      showCompletionAux: function () {
+        if (this.completionAuxBlurTimer) {
+          clearTimeout(this.completionAuxBlurTimer);
+          this.completionAuxBlurTimer = null;
+        }
+        this.completionAuxVisible = true;
+      },
+      hideCompletionAuxSoon: function () {
+        var self = this;
+        if (this.completionAuxBlurTimer) clearTimeout(this.completionAuxBlurTimer);
+        this.completionAuxBlurTimer = setTimeout(function () {
+          self.completionAuxVisible = false;
+          self.completionAuxBlurTimer = null;
+        }, 160);
       },
       fetchTimesheetStats: function () {
         var self = this;
@@ -425,7 +548,7 @@
               <div class="project-drawer-section-label">跟踪信息填报</div>
               <el-tooltip placement="top-start" effect="light" popper-class="project-drawer-fill-tip">
                 <div slot="content" class="project-drawer-fill-tip-content">
-                  <p><span class="drawer-tip-swatch"></span>浅绿色底色表示当前角色<strong>可编辑</strong>的字段。</p>
+                  <p><span class="drawer-tip-swatch"></span>浅黄色底色表示当前角色<strong>可编辑</strong>的字段（与 Luckysheet 表格一致）。</p>
                   <p>若项目<strong>未产生 WIP</strong>（WIP 不含税为 0），「WIP分析与措施」分区将<strong>自动折叠</strong>，无需填写 WIP 成因、说明、措施等内容</p>
                 </div>
                 <i class="el-icon-question project-drawer-section-tip" aria-label="填报说明"></i>
@@ -451,7 +574,12 @@
                     v-for="field in sec.fields"
                     :key="'f-' + field.col"
                     class="drawer-field-row"
-                    :class="{ 'drawer-field-row--full': widgetType(field) === 'longtext' }"
+                    :class="{
+                      'drawer-field-row--full': widgetType(field) === 'longtext',
+                      'drawer-field-row--editable': isEditableField(field),
+                      'drawer-field-row--system-ref-override': isSystemRefOverridden(field)
+                    }"
+                    :title="isSystemRefOverridden(field) ? systemRefTooltip(field) : ''"
                   >
                     <label class="drawer-field-label">{{ field.name_cn }}</label>
                     <div class="drawer-field-control">
@@ -480,7 +608,16 @@
                         @input="setDraftVal(field, $event)"
                       ></el-input>
                       <el-input
-                        v-else-if="widgetType(field) === 'amount' || widgetType(field) === 'ratio'"
+                        v-else-if="widgetType(field) === 'amount'"
+                        :value="formatNumInputDisplay(field)"
+                        size="small"
+                        class="drawer-field-input drawer-field-input--num"
+                        @focus="onNumInputFocus(field)"
+                        @blur="onNumInputBlur(field)"
+                        @input="onNumInputInput(field, $event)"
+                      ></el-input>
+                      <el-input
+                        v-else-if="widgetType(field) === 'ratio'"
                         :value="draftVal(field)"
                         size="small"
                         class="drawer-field-input drawer-field-input--num"
@@ -522,12 +659,58 @@
                       >
                         <div class="drawer-month-cell-hd">{{ ml }}</div>
                         <template v-if="fieldAtMonth(sec.monthly, kind, mi)">
+                          <el-popover
+                            v-if="isReportMonthCompletionCell(sec.monthly, kind, mi)"
+                            placement="top"
+                            trigger="manual"
+                            v-model="completionAuxVisible"
+                            popper-class="drawer-completion-aux-popover"
+                          >
+                            <div class="drawer-completion-aux">
+                              <div class="drawer-completion-aux-title">填报参考</div>
+                              <dl v-if="completionFillAux" class="drawer-completion-aux-list">
+                                <div class="drawer-completion-aux-item">
+                                  <dt>总合同额</dt>
+                                  <dd>{{ formatAuxAmount(completionFillAux.totalContract) }}</dd>
+                                </div>
+                                <div class="drawer-completion-aux-item">
+                                  <dt>截止上月始累完成合同额</dt>
+                                  <dd>{{ formatAuxAmount(completionFillAux.cumCompletedBeforeMonth) }}</dd>
+                                </div>
+                                <div class="drawer-completion-aux-item">
+                                  <dt>当月上报工时</dt>
+                                  <dd>
+                                    <span v-if="completionAuxLoading">加载中…</span>
+                                    <span v-else>{{ formatAuxHours(completionFillAux.monthHours) }}</span>
+                                  </dd>
+                                </div>
+                                <div class="drawer-completion-aux-item">
+                                  <dt>当月工时成本</dt>
+                                  <dd>
+                                    <span v-if="completionAuxLoading">加载中…</span>
+                                    <span v-else>{{ formatAuxAmount(completionFillAux.monthLaborCost) }}</span>
+                                  </dd>
+                                </div>
+                              </dl>
+                            </div>
+                            <el-input
+                              slot="reference"
+                              :value="formatNumInputDisplay(fieldAtMonth(sec.monthly, kind, mi))"
+                              size="mini"
+                              class="drawer-month-input"
+                              @focus="onMonthNumInputFocus(fieldAtMonth(sec.monthly, kind, mi), true)"
+                              @blur="onMonthNumInputBlur(fieldAtMonth(sec.monthly, kind, mi), true)"
+                              @input="onNumInputInput(fieldAtMonth(sec.monthly, kind, mi), $event)"
+                            ></el-input>
+                          </el-popover>
                           <el-input
-                            v-if="fieldEditable(fieldAtMonth(sec.monthly, kind, mi))"
-                            :value="draftVal(fieldAtMonth(sec.monthly, kind, mi))"
+                            v-else-if="fieldEditable(fieldAtMonth(sec.monthly, kind, mi))"
+                            :value="formatNumInputDisplay(fieldAtMonth(sec.monthly, kind, mi))"
                             size="mini"
                             class="drawer-month-input"
-                            @input="setDraftVal(fieldAtMonth(sec.monthly, kind, mi), $event)"
+                            @focus="onNumInputFocus(fieldAtMonth(sec.monthly, kind, mi))"
+                            @blur="onNumInputBlur(fieldAtMonth(sec.monthly, kind, mi))"
+                            @input="onNumInputInput(fieldAtMonth(sec.monthly, kind, mi), $event)"
                           ></el-input>
                           <span v-else class="drawer-month-ro">
                             {{ formatReadonly(fieldAtMonth(sec.monthly, kind, mi)) }}
@@ -563,7 +746,7 @@
 
           <!-- 只读参考区 -->
           <section v-if="layout.readonlySections.length" class="project-drawer-section">
-            <div class="project-drawer-section-label">其他参考数据</div>
+            <div class="project-drawer-section-label">其他跟踪数据</div>
             <el-collapse v-model="readonlyActive" class="project-drawer-collapse">
               <el-collapse-item
                 v-for="sec in layout.readonlySections"
@@ -614,26 +797,36 @@
           </section>
 
           <!-- 辅助区 -->
-          <section class="project-drawer-section project-drawer-aux">
-            <div class="project-drawer-section-label">辅助数据</div>
-            <div class="drawer-aux-rows">
-              <div class="drawer-aux-panel drawer-aux-panel--timesheet">
-                <div class="drawer-aux-panel-title">工时数据</div>
+          <section class="project-drawer-section">
+            <div class="project-drawer-section-label">项目工时与成本</div>
+            <el-collapse v-model="auxActive" class="project-drawer-collapse">
+              <el-collapse-item name="工时数据">
+                <template slot="title">
+                  <div class="drawer-collapse-title">
+                    <i class="drawer-collapse-title__icon" :class="sectionIcon('工时数据')"></i>
+                    <span class="drawer-collapse-title__text">工时数据</span>
+                  </div>
+                </template>
                 <project-timesheet-aux
                   v-if="projectTitle"
                   :project-no="projectTitle"
                   :year="systemYear"
                 ></project-timesheet-aux>
-              </div>
-              <div class="drawer-aux-panel drawer-aux-panel--cost">
-                <div class="drawer-aux-panel-title">成本数据</div>
+              </el-collapse-item>
+              <el-collapse-item name="成本数据">
+                <template slot="title">
+                  <div class="drawer-collapse-title">
+                    <i class="drawer-collapse-title__icon" :class="sectionIcon('成本数据')"></i>
+                    <span class="drawer-collapse-title__text">成本数据</span>
+                  </div>
+                </template>
                 <project-cost-aux
                   v-if="projectTitle"
                   :project-no="projectTitle"
                   :year="systemYear"
                 ></project-cost-aux>
-              </div>
-            </div>
+              </el-collapse-item>
+            </el-collapse>
           </section>
         </div>
 

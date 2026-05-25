@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const XLSX = require('xlsx');
 const dbm = require('./db');
-const prior = require('./prior-month-snapshot');
+const snapSvc = require('./snapshot-service');
 
 const ROOT = path.join(__dirname, '..');
 const DEFAULT_INIT_XLSX = path.join(ROOT, '初始数据.xlsx');
@@ -45,7 +45,7 @@ function exportProjectsToInitXlsx(projects, outPath, modules, reportingMonth) {
 
   const rows = [header1, header2];
   (projects || []).forEach(function (p) {
-    const clean = prior.stripEphemeralMeta(p);
+    const clean = snapSvc.stripEphemeralMeta(p);
     const flat = FieldConfig.arraysToFlat(clean);
     const row = fields.map(function (f) {
       const key = colMap[f.col];

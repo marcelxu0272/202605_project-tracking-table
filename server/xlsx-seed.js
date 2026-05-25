@@ -69,7 +69,7 @@ function normalizeDateValue(val) {
  * @param {string} reportingMonth YYYY-MM
  */
 function projectsFromXlsxBuffer(buf, modules, reportingMonth) {
-  const { FieldConfig, FormulaEngine } = modules;
+  const { FieldConfig, FormulaEngine, NewExistingRef } = modules;
   const wb = XLSX.read(buf, { type: 'buffer', cellDates: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows = sheetToRows(ws);
@@ -78,6 +78,10 @@ function projectsFromXlsxBuffer(buf, modules, reportingMonth) {
   const colMap = FieldConfig.COL_TO_KEY;
   const projects = [];
   const monthIdx = FormulaEngine.getMonthIdx(reportingMonth || '2026-05');
+  const reportingYear = NewExistingRef
+    ? NewExistingRef.reportingYearFromMonth(reportingMonth)
+    : Number(String(reportingMonth || '2026-05').slice(0, 4));
+  const syncedAt = new Date().toISOString();
 
   for (let ri = dataStartIdx; ri < rows.length; ri++) {
     const row = rows[ri];
@@ -106,10 +110,15 @@ function projectsFromXlsxBuffer(buf, modules, reportingMonth) {
     delete merged._field_change_log;
     merged._added_this_month = false;
     merged._changed_fields = [];
+    merged._system_ref = {};
+    merged._system_override = {};
 
     if (!merged.project_no) continue;
 
     merged.id = merged.project_no;
+    if (NewExistingRef) {
+      NewExistingRef.seedImportRefs(merged, reportingYear, syncedAt);
+    }
     const computed = FormulaEngine.compute(merged, monthIdx);
     projects.push(computed);
   }

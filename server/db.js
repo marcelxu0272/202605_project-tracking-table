@@ -68,6 +68,25 @@ const DEFAULT_PERIOD_CONFIG = {
   platformSyncHour: 2
 };
 
+const DEFAULT_GROUP_REGISTRY = {
+  GRP_JS: {
+    name: '金山项目群',
+    sectors: ['SAS520', 'SAS560', 'SAS550', 'SAS530']
+  }
+};
+
+const DEFAULT_USERS = [
+  { id: 'u_admin', name: '管理员 Admin', role: 'system_admin', status: 'active' },
+  { id: 'u_ev_company', name: '财务总监 张颖', role: 'executive_viewer', dataScope: 'company', status: 'active' },
+  { id: 'u_ev_sector', name: '板块领导 李强', role: 'executive_viewer', dataScope: 'sector', sectorCode: 'SAS520', status: 'active' },
+  { id: 'u_ev_group', name: '群领导 孙总', role: 'executive_viewer', dataScope: 'group', groupCode: 'GRP_JS', status: 'active' },
+  { id: 'u_sa', name: '运营总监 周明', role: 'sector_admin', sector: 'S520', status: 'active' },
+  { id: 'u_pm1', name: '何孝刚', role: 'pm', sector: 'S520', status: 'active' },
+  { id: 'u_pm2', name: '宋建生', role: 'pm', sector: 'S520', status: 'active' },
+  { id: 'u_sd', name: '板块总监 陈磊', role: 'sector_director', sector: 'S520', status: 'active' },
+  { id: 'u_gl', name: '项目群主 王总', role: 'group_leader', status: 'active' }
+];
+
 function getMeta(db, key, fallback = null) {
   const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(key);
   if (!row) return fallback;
@@ -124,6 +143,32 @@ function ensureDefaultMeta(db) {
   if (getMeta(db, 'approvalStatus', null) === null) {
     setMeta(db, 'approvalStatus', 'draft');
   }
+  if (getMeta(db, 'users', null) === null) {
+    setMeta(db, 'users', DEFAULT_USERS);
+  }
+  if (getMeta(db, 'groupRegistry', null) === null) {
+    setMeta(db, 'groupRegistry', DEFAULT_GROUP_REGISTRY);
+  }
+  if (getMeta(db, 'newExistingClassYear', null) === null) {
+    const rm = getMeta(db, 'reportingMonth') || DEFAULT_PERIOD_CONFIG.reportingMonth;
+    setMeta(db, 'newExistingClassYear', Number(String(rm).slice(0, 4)) || new Date().getFullYear());
+  }
+  patchDemoDirectorSector(db);
+}
+
+/** 演示账号：板块总监与金山中心板块管理员同属 SAS520 */
+function patchDemoDirectorSector(db) {
+  const users = getMeta(db, 'users', null);
+  if (!Array.isArray(users)) return;
+  let changed = false;
+  users.forEach(function (u) {
+    if (!u || (u.id !== 'u_sd' && u.id !== 'demo_sd')) return;
+    if (u.sector === 'S52X' || u.sector === 'SAS52X') {
+      u.sector = 'S520';
+      changed = true;
+    }
+  });
+  if (changed) setMeta(db, 'users', users);
 }
 
 function getPmSubmissions(db) {
@@ -163,7 +208,9 @@ function getBootstrapState(db) {
     snapshots[row.version] = JSON.parse(row.payload);
   }
 
-  const priorMonthSnapshotVersion = getMeta(db, 'priorMonthSnapshotVersion', null);
+  const baselineVersion = getMeta(db, 'baselineVersion', null);
+  const latestIVersion = getMeta(db, 'latestIVersion', null);
+  const latestJVersion = getMeta(db, 'latestJVersion', null);
 
   const migrated = sw.migrateSectorFlows(db, getMeta, setMeta, projects, snapshots);
   let sectorFlows = migrated.flows;
@@ -191,13 +238,17 @@ function getBootstrapState(db) {
     financeReviewReminder,
     reportingSubmitted,
     pmSubmissions,
-    priorMonthSnapshotVersion,
+    baselineVersion,
+    latestIVersion,
+    latestJVersion,
     sectorFlows,
     sectorRegistry,
     sectorNames: sw.getSectorNames(getMeta, db),
     companyFlow,
     systemDataSyncedAt: getMeta(db, 'systemDataSyncedAt', null),
-    systemDataSyncMeta: getMeta(db, 'systemDataSyncMeta', null)
+    systemDataSyncMeta: getMeta(db, 'systemDataSyncMeta', null),
+    users: getMeta(db, 'users', DEFAULT_USERS),
+    groupRegistry: getMeta(db, 'groupRegistry', DEFAULT_GROUP_REGISTRY)
   };
 }
 
@@ -247,7 +298,10 @@ function resetDevMeta(db) {
   clearLockOverride(db);
   clearAudit(db);
   clearSnapshots(db);
-  db.prepare('DELETE FROM meta WHERE key = ?').run('priorMonthSnapshotVersion');
+  ['baselineVersion', 'latestIVersion', 'latestJVersion', 'priorMonthSnapshotVersion', 'sectorLatestDVersion']
+    .forEach(function (key) {
+      db.prepare('DELETE FROM meta WHERE key = ?').run(key);
+    });
   setMeta(db, 'approvalStatus', 'draft');
   setMeta(db, 'reportingSubmitted', false);
   setMeta(db, 'pmSubmissions', {});
@@ -396,6 +450,8 @@ module.exports = {
   resetDevMeta,
   ensureDefaultMeta,
   DEFAULT_PERIOD_CONFIG,
+  DEFAULT_USERS,
+  DEFAULT_GROUP_REGISTRY,
   _calcLockStatus,
   countTimesheetEntries,
   replaceProjectTimesheet,

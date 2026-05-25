@@ -54,7 +54,6 @@
   const LS_FROZEN_COL = 5; // 冻结至 F 列（项目号），左侧 A–E 固定
   /** 键为字段字典列字母，与 Luckysheet 表头一致 */
   const LS_NARROW_COLS = { D: 60, E: 72, F: 88, G: 110 };
-  const LS_SYSTEM_YEAR = 2026;
   /** 月度完成 AV–BG；月度开票 BH,BJ,…；月度回款 BI,BK,… */
   const LS_MC_COLS = ['AV', 'AW', 'AX', 'AY', 'AZ', 'BA', 'BB', 'BC', 'BD', 'BE', 'BF', 'BG'];
   const LS_MI_COLS = ['BH', 'BJ', 'BL', 'BN', 'BP', 'BR', 'BT', 'BV', 'BX', 'BZ', 'CB', 'CD'];
@@ -100,9 +99,7 @@
         pmDiffName: '',
         pmDiffResults: [],
         pmDiffColLeft: '填报基准',
-        pmDiffColRight: '提交值',
-        _pmBaselineCaptured: false,
-        _pmBaselinePromise: null,
+        pmDiffColRight: '当前追踪表',
         _cellSaveChain: null,
         projectDrawerVisible: false,
         projectDrawerProject: null,
@@ -115,11 +112,9 @@
       const self = this;
       this.tableFields = FieldConfig.buildFieldConfig();
       this.buildTableData();
-      this.whenPmBaselineReady(function () {
-        if (self.activeTab === 'luckysheet') {
-          self.$nextTick(function () { self.initLuckysheet(); }.bind(self));
-        }
-      });
+      if (self.activeTab === 'luckysheet') {
+        self.$nextTick(function () { self.initLuckysheet(); });
+      }
       this.$nextTick(function () { this.setupLuckysheetResizeObserver(); }.bind(this));
       this._unwatchSidebar = this.$watch(
         function () { return Store.sidebarCollapsed; },
@@ -134,11 +129,9 @@
         } else {
           self.buildTableData();
         }
-        self.whenPmBaselineReady(function () {
-          if (self.activeTab === 'luckysheet') {
-            self.$nextTick(function () { self.refreshLuckysheet(); }.bind(self));
-          }
-        });
+        if (self.activeTab === 'luckysheet') {
+          self.$nextTick(function () { self.refreshLuckysheet(); });
+        }
       };
       if (Store.currentUser && Store.currentUser.role === 'sector_admin') {
         Store.syncPmWorkflow().then(afterData).catch(afterData);
@@ -193,60 +186,43 @@
           ? this.snapshotProjects
           : Store.projects;
         const self = this;
+        if (!this.isViewingSnapshot
+          && Store.lockStatus === 'open'
+          && window.StockValidation) {
+          StockValidation.syncOpenPeriodStockHedge(source, this.monthIdx, Store.lockStatus);
+        }
         this.tableProjects = FormulaEngine.computeAll(source, this.monthIdx).map(function (p) {
           if (self.isViewingSnapshot || !window.ChangeMeta) return p;
           const sp = Store.projects.find(function (x) { return x.project_no === p.project_no; });
           return ChangeMeta.attachChangeTracking(p, sp);
         });
-        if (!this.isViewingSnapshot && window.ProjectMonthDiff) {
-          const priorSnap = ProjectMonthDiff.resolvePriorSnapshot(
+        if (!this.isViewingSnapshot && window.BaselineDiff) {
+          const baselineSnap = BaselineDiff.resolveBaselineSnapshot(
             Store.snapshots,
-            Store.reportingMonth,
-            Store.priorMonthSnapshotVersion
+            Store.baselineVersion
           );
-          if (priorSnap && priorSnap.projects) {
-            this.tableProjects = ProjectMonthDiff.applyAddedThisMonthFlags(
+          if (baselineSnap && baselineSnap.projects) {
+            this.tableProjects = BaselineDiff.applyAddedSinceBaselineFlags(
               this.tableProjects,
-              priorSnap.projects
+              baselineSnap.projects
             );
+            const baselineMap = {};
+            baselineSnap.projects.forEach(function (bp) {
+              if (bp && bp.project_no) baselineMap[bp.project_no] = bp;
+            });
+            const compareFields = FieldConfig.buildFieldConfig();
+            this.tableProjects = this.tableProjects.map(function (p) {
+              return BaselineDiff.mergeBaselineChangedFields(
+                p,
+                baselineMap[p.project_no],
+                compareFields
+              );
+            });
           }
         }
-        if (!this.isViewingSnapshot) {
-          this.capturePmBaselineFromTable();
-        }
       },
-
       getStoreProject(projectNo) {
         return Store.projects.find(function (p) { return p.project_no === projectNo; });
-      },
-
-      capturePmBaselineFromTable() {
-        const user = Store.currentUser || {};
-        if (user.role !== 'pm') return;
-        const pmName = user.pmName || user.name;
-        if (!pmName || !Store.canPmSubmit(pmName)) return;
-        const sub = Store.getPmSubmission(pmName) || {};
-        if (sub.status === 'submitted') return;
-        if (this._pmBaselineCaptured) return;
-        if (sub.baselineSnapshotVersion && sub.status !== 'received') {
-          this._pmBaselineCaptured = true;
-          return;
-        }
-        const scoped = this.tableProjects.filter(function (p) {
-          return p.pm_name === pmName;
-        });
-        const clone = JSON.parse(JSON.stringify(scoped));
-        this._pmBaselineCaptured = true;
-        this._pmBaselinePromise = Store.ensurePmBaseline(pmName, clone);
-      },
-
-      whenPmBaselineReady(cb) {
-        const user = Store.currentUser || {};
-        if (user.role !== 'pm' || !this._pmBaselinePromise) {
-          cb();
-          return;
-        }
-        this._pmBaselinePromise.then(function () { cb(); }).catch(function () { cb(); });
       },
       canEditField(field) {
         return FieldConfig.canEdit(field, this.user.role, this.lockStatus, this.monthIdx);
@@ -476,7 +452,7 @@
           for (let c = 0; c < this.tableFields.length; c++) {
             const field = this.tableFields[c];
             if (!field || !this.canEditField(field) || !this.canEdit) continue;
-            if (field.source_type === 'auto_calc' || field.source_type === 'system_sync') continue;
+            if (field.source_type === 'auto_calc') continue;
             const cell = row[c];
             const newVal = this.coerceFieldValue(this.extractLuckysheetInput(cell), field);
             const key = FieldConfig.COL_TO_KEY[field.col];
@@ -515,20 +491,21 @@
 
       handleSubmitArchive() {
         if (!this.canShowArchiveButton) return;
-        if (Store.isCompanyArchived()) {
-          this.$message.info('已完成公司归档');
-          return;
-        }
         const self = this;
         this.$confirm(
-          '确认全公司归档？将生成 J版 快照（含全部项目）。',
+          '确认提交公司归档？将生成新的 J 版快照（含全部项目），并更新变更对比基准。',
           '提交归档',
           { confirmButtonText: '确认归档', cancelButtonText: '取消', type: 'warning' }
         ).then(function () {
           self.archiveLoading = true;
           return Store.archiveCompany();
-        }).then(function () {
-          self.$message.success('已生成 J版 全公司归档快照');
+        }).then(function (d) {
+          const ver = (d && d.version) || Store.latestJVersion;
+          self.$message.success('已生成 J 版快照' + (ver ? '：' + ver : ''));
+          if (ver) {
+            self.viewingVersion = ver;
+            self.handleViewingVersionChange(ver);
+          }
         }).catch(function (e) {
           if (e !== 'cancel' && e !== 'close') {
             self.$message.error('归档失败：' + (e && e.message ? e.message : e));
@@ -653,25 +630,21 @@
       },
 
       formatSnapshotOptionLabel(versionKey, snap) {
-        const ORDER_LABELS = {
-          Draft: '草稿',
-          Approve1: '初审',
-          Approve2: '复审',
-          'J版': 'J版'
-        };
         const iso = this.resolveSnapshotTime(versionKey, snap);
         const timeStr = iso ? this.formatSnapshotTime(iso, true) : '时间未知';
-        if (ORDER_LABELS[versionKey]) {
-          return ORDER_LABELS[versionKey] + ' · ' + timeStr;
-        }
-        const monthM = /^Month:(\d{4})-(\d{2})$/.exec(versionKey);
-        if (monthM) {
-          return monthM[1] + '年' + parseInt(monthM[2], 10) + '月归档 · ' + timeStr;
-        }
         if (snap && snap.label) {
           return snap.label + ' · ' + timeStr;
         }
-        return timeStr;
+        if (window.BaselineDiff && BaselineDiff.parseSnapshotKey(versionKey)) {
+          const parsed = BaselineDiff.parseSnapshotKey(versionKey);
+          const stageLabel = { I: '导入', D: 'D版', J: 'J版' }[parsed.stage] || parsed.stage;
+          return stageLabel + ' · ' + timeStr;
+        }
+        const legacyLabels = { 'J版': 'J版', Draft: '草稿', Approve1: '初审', Approve2: '复审' };
+        if (legacyLabels[versionKey]) {
+          return legacyLabels[versionKey] + ' · ' + timeStr;
+        }
+        return versionKey + ' · ' + timeStr;
       },
 
       setupLuckysheetResizeObserver() {
@@ -714,15 +687,6 @@
       async preparePmSubmit() {
         await this.flushLuckysheetToStore();
         await Store.syncPmProjectsToServer(this.pmName, this.monthIdx);
-      },
-
-      applyPmSubmitSnapshotToStore(result) {
-        if (!result || !result.snapshot || !result.snapshot.projects) return;
-        result.snapshot.projects.forEach(function (sp) {
-          const idx = Store.projects.findIndex(function (p) { return p.project_no === sp.project_no; });
-          if (idx >= 0) Vue.set(Store.projects, idx, sp);
-        });
-        this.buildTableData();
       },
 
       async _applyFieldChangesToProject(storeProject, changes, user) {
@@ -781,7 +745,87 @@
         return recomputed;
       },
 
+      async _applySystemRefChangesToProject(storeProject, field, newVal, user, opts) {
+        const self = this;
+        const key = FieldConfig.COL_TO_KEY[field.col];
+        const flat = FieldConfig.arraysToFlat(storeProject);
+        const oldVal = flat[key];
+        let updated = SystemRefMeta.applyOverride(storeProject, field, newVal, user, self.monthIdx);
+        updated = FormulaEngine.compute(updated, self.monthIdx);
+        await Store.updateProject(updated);
+        await Store.addAuditLog({
+          projectNo: storeProject.project_no,
+          projectName: storeProject.project_name,
+          fieldName: field.col,
+          fieldCN: field.name_cn,
+          operation_type: 'system_ref_override',
+          oldVal: Formatters.formatByType(oldVal, field.data_type),
+          newVal: Formatters.formatByType(newVal, field.data_type),
+          userId: user.role,
+          userName: user.name
+        });
+        self.buildTableData();
+        if (
+          SystemRefMeta.isEmptyDisplayValue(field, newVal) &&
+          SystemRefMeta.isOverriddenField(updated, field, self.monthIdx)
+        ) {
+          return self.promptRestoreSystemRef(updated, field, opts);
+        }
+        return updated;
+      },
+
+      promptRestoreSystemRef(project, field, opts) {
+        const self = this;
+        return this.$confirm('是否恢复工程平台引用值？', '恢复系统引用', {
+          confirmButtonText: '恢复',
+          cancelButtonText: '保持空值',
+          type: 'info'
+        }).then(function () {
+          const restored = SystemRefMeta.restoreFromRef(project, field, self.monthIdx);
+          return FormulaEngine.compute(restored, self.monthIdx);
+        }).then(function (recomputed) {
+          return Store.updateProject(recomputed).then(function () {
+            self.buildTableData();
+            if (opts && opts.fromLuckysheet && self.activeTab === 'luckysheet' && opts.lsRow != null) {
+              const rowIdx = opts.lsRow - self.lsLayout().dataStart;
+              self.syncLuckysheetProjectRowValues(rowIdx, recomputed);
+              self.syncLuckysheetProjectRowDecor(rowIdx, recomputed);
+            }
+            return recomputed;
+          });
+        }).catch(function (e) {
+          if (e === 'cancel' || e === 'close') return project;
+          throw e;
+        });
+      },
+
+      async handleSystemRefCellEdit(project, field, newVal, opts) {
+        const self = this;
+        return this._trackCellSave((async function () {
+          const storeProj = self.getStoreProject(project.project_no) || project;
+          const recomputed = await self._applySystemRefChangesToProject(
+            storeProj, field, newVal, self.user, opts
+          );
+          if (opts && opts.fromLuckysheet && self.activeTab === 'luckysheet' && opts.lsRow != null) {
+            const fresh = self.getStoreProject(project.project_no) || recomputed;
+            const rowIdx = opts.lsRow - self.lsLayout().dataStart;
+            self.syncLuckysheetProjectRowValues(rowIdx, fresh);
+            self.recalcLuckysheetFormulas();
+            setTimeout(function () {
+              self.syncLuckysheetProjectRowDecor(rowIdx, fresh);
+            }, 320);
+          }
+        })().catch(function (e) {
+          if (e === 'cancel' || e === 'close') return;
+          self.$message.error('保存失败：' + (e.message || e));
+          throw e;
+        }));
+      },
+
       async handleCellEdit(project, field, newVal, opts) {
+        if (window.SystemRefMeta && SystemRefMeta.isSystemRefField(field, this.monthIdx)) {
+          return this.handleSystemRefCellEdit(project, field, newVal, opts);
+        }
         if (!this.canEditField(field)) return;
         const key = FieldConfig.COL_TO_KEY[field.col];
         const flat = FieldConfig.arraysToFlat(project);
@@ -911,8 +955,26 @@
         this.projectDrawerSaving = true;
         try {
           await this._trackCellSave((async function () {
-            var recomputed = await self._applyFieldChangesToProject(storeProj, changes, self.user);
-            var fresh = self.getStoreProject(project.project_no) || recomputed;
+            var refChanges = [];
+            var normalChanges = [];
+            changes.forEach(function (ch) {
+              if (window.SystemRefMeta && SystemRefMeta.isSystemRefField(ch.field, self.monthIdx)) {
+                refChanges.push(ch);
+              } else {
+                normalChanges.push(ch);
+              }
+            });
+            var latest = storeProj;
+            for (var ri = 0; ri < refChanges.length; ri++) {
+              var rch = refChanges[ri];
+              latest = await self._applySystemRefChangesToProject(
+                latest, rch.field, rch.newVal, self.user, {}
+              );
+            }
+            if (normalChanges.length) {
+              latest = await self._applyFieldChangesToProject(latest, normalChanges, self.user);
+            }
+            var fresh = self.getStoreProject(project.project_no) || latest;
             var rowIdx = self.projectDrawerRowIndex;
             if (self.activeTab === 'luckysheet' && rowIdx != null && rowIdx >= 0) {
               self.syncLuckysheetProjectRowValues(rowIdx, fresh);
@@ -940,21 +1002,21 @@
         if (this.isPm) {
           // PM 提交：生成个人子集快照，锁定自己
           this.$confirm(
-            '提交后本月填报将被锁定，等待板块管理员接收确认。接收后可再次修改并重新提交。确认提交？',
+            '提交后本月填报将被锁定，且每月仅可提交一次。如有问题需由板块管理员在板块汇总表中修正。确认提交？',
             '提交填报', { confirmButtonText: '确认提交', cancelButtonText: '取消', type: 'warning' }
           ).then(() => {
             const self = this;
             this.submitLoading = true;
-            this.preparePmSubmit()
+            this.persistOpenPeriodStockHedgeForScope()
+              .then(function () { return self.preparePmSubmit(); })
               .then(function () {
                 if (!self.assertStockBeforeSubmit()) {
                   throw new Error('stock_validation');
                 }
                 return Store.submitPmReporting();
               })
-              .then(function (result) {
-                self.applyPmSubmitSnapshotToStore(result);
-                self.$message.success('已提交，等待板块管理员接收');
+              .then(function () {
+                self.$message.success('已提交，数据已同步至板块汇总；如有问题请联系板块管理员');
                 if (self.activeTab === 'luckysheet') {
                   self.$nextTick(function () { self.refreshLuckysheet(); });
                 }
@@ -972,27 +1034,29 @@
             '提交后将生成板块填报快照（Draft版），进入审批流程，当前数据将被锁定。确认提交？',
             '提交审批', { confirmButtonText: '确认提交', cancelButtonText: '取消', type: 'warning' }
           ).then(() => {
+            const self = this;
             this.submitLoading = true;
             this.persistLuckysheetBeforeSubmit()
-              .then(() => {
-                if (!this.assertStockBeforeSubmit()) {
+              .then(function () { return self.persistOpenPeriodStockHedgeForScope(); })
+              .then(function () {
+                if (!self.assertStockBeforeSubmit()) {
                   throw new Error('stock_validation');
                 }
                 return Store.submitForApproval();
               })
-              .then(() => {
-                this.$message.success('已提交审批，Draft快照已生成');
-                if (this.activeTab === 'luckysheet') {
-                  this.$nextTick(function () { this.refreshLuckysheet(); }.bind(this));
+              .then(function () {
+                self.$message.success('已提交审批，D 版快照已生成');
+                if (self.activeTab === 'luckysheet') {
+                  self.$nextTick(function () { self.refreshLuckysheet(); });
                 }
-                this.$router.push('/approval');
+                self.$router.push('/approval');
               })
-              .catch(e => {
+              .catch(function (e) {
                 if (e && e.message !== 'stock_validation') {
-                  this.$message.error('提交失败：' + (e.message || e));
+                  self.$message.error('提交失败：' + (e.message || e));
                 }
               })
-              .finally(() => { this.submitLoading = false; });
+              .finally(function () { self.submitLoading = false; });
           }).catch(() => {});
         }
       },
@@ -1008,112 +1072,51 @@
         return DiffUtils.diffProjectSets(leftProjects, rightProjects, compareFields);
       },
       onCompanyArchived() {
-        this.viewingVersion = 'J版';
-        this.handleViewingVersionChange('J版');
+        const ver = Store.latestJVersion || 'J版';
+        this.viewingVersion = ver;
+        this.handleViewingVersionChange(ver);
       },
 
-      // 板块管理员：查看某 PM 本轮填报变更
-      showPmDiff(pmName, snapshotVersion) {
-        if (!snapshotVersion) {
-          this.$message.info('无关联快照版本');
-          return;
-        }
+      showPmDiff(pmName) {
         const self = this;
-        const month = Store.reportingMonth;
-        const sub = (Store.pmSubmissions[month] || {})[pmName] || {};
-        const baselineVersion = sub.submissionBaselineSnapshotVersion || sub.baselineSnapshotVersion;
-        const loading = this.$loading({ lock: true, text: '加载快照…', background: 'rgba(0,0,0,0.15)' });
-        Promise.all([
-          Store.fetchSnapshot(snapshotVersion),
-          baselineVersion ? Store.fetchSnapshot(baselineVersion) : Promise.resolve(null)
-        ])
-          .then(function (arr) {
-            const submitSnap = arr[0];
-            const baselineSnap = arr[1];
-            if (!submitSnap) {
-              self.$message.info('提交快照不可用，请刷新页面后重试');
-              return;
-            }
-            self.renderPmDiff(pmName, submitSnap, baselineSnap);
+        const baselineSnap = window.BaselineDiff
+          ? BaselineDiff.resolveBaselineSnapshot(Store.snapshots, Store.baselineVersion)
+          : null;
+        const loading = this.$loading({ lock: true, text: '加载对比…', background: 'rgba(0,0,0,0.15)' });
+        Promise.resolve(baselineSnap)
+          .then(function (snap) {
+            self.renderPmDiff(pmName, snap);
           })
           .catch(function () {
-            self.$message.error('加载快照失败');
+            self.$message.error('加载对比失败');
           })
           .finally(function () { loading.close(); });
       },
 
-      renderPmDiff(pmName, submitSnap, baselineSnap) {
+      renderPmDiff(pmName, baselineSnap) {
         const fields = FieldConfig.buildFieldConfig();
         const compareFields = fields.filter(function (f) {
           return f.source_type === 'manual_input';
         });
-        const submitProjects = submitSnap.projects || [];
+        const baselineProjects = (baselineSnap && baselineSnap.projects) || [];
         const currentProjects = FormulaEngine.computeAll(
           Store.projects.filter(function (p) { return p.pm_name === pmName; }),
           this.monthIdx
         );
 
-        let results = [];
-        if (baselineSnap && (baselineSnap.projects || []).length) {
-          results = this.diffProjectSets(baselineSnap.projects, submitProjects, compareFields);
-          this.pmDiffColLeft = '填报基准';
-          this.pmDiffColRight = '提交值';
-        }
-
-        if (results.length === 0) {
-          results = this.diffProjectSets(submitProjects, currentProjects, compareFields);
-          this.pmDiffColLeft = '提交快照';
-          this.pmDiffColRight = '当前追踪表';
-        }
-
-        if (results.length === 0) {
-          submitProjects.forEach(function (sp) {
-            const cols = sp._changed_fields || [];
-            if (!cols.length) return;
-            const rFlat = FieldConfig.arraysToFlat(sp);
-            const rowDiffs = cols.map(function (col) {
-              const f = fields.find(function (x) { return x.col === col; });
-              const key = f && FieldConfig.COL_TO_KEY[f.col];
-              const rv = key ? rFlat[key] : '';
-              return {
-                field: f ? f.name_cn : col,
-                leftVal: '—',
-                rightVal: f ? Formatters.formatByType(rv, f.data_type) : String(rv)
-              };
-            });
-            results.push({
-              projectNo: sp.project_no,
-              projectName: sp.project_name,
-              diffs: rowDiffs
-            });
-          });
-          this.pmDiffColLeft = '—';
-          this.pmDiffColRight = '提交时变更列';
-        }
+        const results = this.diffProjectSets(baselineProjects, currentProjects, compareFields);
+        this.pmDiffColLeft = baselineSnap ? '对比基准' : '—';
+        this.pmDiffColRight = '当前追踪表';
 
         if (results.length === 0) {
           this.$message.info(
-            pmName + ' 未检测到可编辑字段差异。若您看到与管理员表不一致，请确认是否修改了自动计算列或他人项目。'
+            pmName + ' 相对当前对比基准未检测到可编辑字段差异。'
           );
           return;
         }
         this.pmDiffName = pmName;
         this.pmDiffResults = results;
         this.pmDiffVisible = true;
-      },
-
-      // 板块管理员：确认接收 PM 提交
-      handleReceivePm(pmName) {
-        this.$confirm(
-          '确认接收 ' + pmName + ' 的提交？接收后该 PM 将解除锁定，可继续编辑并重新提交。',
-          '确认接收', { confirmButtonText: '确认接收', cancelButtonText: '取消', type: 'info' }
-        ).then(() => {
-          Store.receivePmSubmission(pmName)
-            .then(() => {
-              this.$message.success('已接收 ' + pmName + ' 的提交，该 PM 已解锁');
-            })
-            .catch(e => { this.$message.error('接收失败：' + (e.message || e)); });
-        }).catch(() => {});
       },
       handleExport() {
         this.exportLoading = true;
@@ -1127,25 +1130,28 @@
           this.exportLoading = false;
         }, 300);
       },
-      handleSyncPlatformData() {
+      handleRefreshEditorData() {
         const self = this;
+        const isSector = this.isSectorAdmin;
         this.$confirm(
-          '将从中台拉取 CRB / 财务系统数据并合并到当前跟踪表。仅更新系统同步字段与报告月当月开票/回款实际值，不会覆盖手工填报与预测列。是否继续？',
-          '更新系统数据',
-          { confirmButtonText: '立即更新', cancelButtonText: '取消', type: 'info' }
+          isSector
+            ? '将从工程平台刷新系统引用列与新增项目，并重载库内最新数据（含本板块各 PM 已提交内容）。是否继续？'
+            : '将从工程平台刷新系统引用列与新增项目，并重载库内最新数据（含各 PM/板块已保存与审批中的变更）。是否继续？',
+          '刷新数据',
+          { confirmButtonText: '立即刷新', cancelButtonText: '取消', type: 'info' }
         ).then(function () {
           self.syncLoading = true;
-          return Store.syncPlatformData();
+          return Store.refreshEditorData();
         }).then(function (res) {
           self.buildTableData();
           self.$nextTick(function () { self.refreshLuckysheet(); });
           const stats = res && res.stats ? res.stats : {};
           self.$message.success(
-            '系统数据已更新（更新 ' + (stats.updated || 0) + ' 条，新增 ' + (stats.added || 0) + ' 条）'
+            '数据已刷新（引用更新 ' + (stats.refsUpdated || 0) + ' 条，新增项目 ' + (stats.added || 0) + ' 条）'
           );
         }).catch(function (err) {
           if (err !== 'cancel' && err !== 'close') {
-            self.$message.error('更新失败：' + (err.message || err));
+            self.$message.error('刷新失败：' + (err.message || err));
           }
         }).finally(function () {
           self.syncLoading = false;
@@ -1169,14 +1175,36 @@
       },
 
       validateStockBeforeSubmit() {
-        const list = this.scopedProjects.map(function (p) {
-          return FormulaEngine.compute(
-            this.getStoreProject(p.project_no) || p,
-            this.monthIdx
-          );
+        const scope = this.scopedProjects.map(function (p) {
+          return this.getStoreProject(p.project_no) || p;
+        }.bind(this));
+        if (window.StockValidation && this.lockStatus === 'open') {
+          StockValidation.syncOpenPeriodStockHedge(scope, this.monthIdx, this.lockStatus);
+        }
+        const list = scope.map(function (p) {
+          return FormulaEngine.compute(p, this.monthIdx);
         }.bind(this));
         if (!window.StockValidation) return { ok: true, violations: [] };
-        return StockValidation.validateProjectsForSubmit(list, this.monthIdx);
+        return StockValidation.validateProjectsForSubmit(list, this.monthIdx, this.lockStatus);
+      },
+
+      async persistOpenPeriodStockHedgeForScope() {
+        if (this.lockStatus !== 'open' || !window.StockValidation) return;
+        var self = this;
+        var tasks = [];
+        this.scopedProjects.forEach(function (p) {
+          var sp = self.getStoreProject(p.project_no);
+          if (!sp) return;
+          var r = StockValidation.applyOpenPeriodStockHedge(sp, self.monthIdx, self.lockStatus);
+          if (!r.changed) return;
+          sp['mc_' + self.monthIdx] = r.project['mc_' + self.monthIdx];
+          sp.monthly_completion = (r.project.monthly_completion || []).slice();
+          tasks.push(Store.updateProject(Object.assign({}, sp)));
+        });
+        if (tasks.length) {
+          await Promise.all(tasks);
+          self.buildTableData();
+        }
       },
 
       assertStockBeforeSubmit() {
@@ -1277,8 +1305,6 @@
           case 'AL': return '=MAX(' + R('AG') + ',0)';
           case 'AP': return '=MAX(' + R('T') + '-' + R('AA') + ',0)';
           case 'AQ': return '=MAX(' + R('AG') + '-' + last3McSum() + ',0)';
-          case 'A':
-            return '=IF(YEAR(' + R('B') + ')>=' + LS_SYSTEM_YEAR + ',"新项目","旧项目")';
           default:
             return null;
         }
@@ -1559,14 +1585,20 @@
         if (this.isFieldChanged(project, field) && window.ChangeMeta) {
           return ChangeMeta.CHANGED_FIELD_STYLE.bg;
         }
-        if (this.isFieldChanged(project, field)) return '#fff7ed';
+        if (this.isFieldChanged(project, field)) return '#ffedd5';
+        if (
+          window.SystemRefMeta &&
+          SystemRefMeta.isOverriddenField(project, field, this.monthIdx)
+        ) {
+          return SystemRefMeta.OVERRIDE_BG;
+        }
         if (!readonly && this.canEditField(field) && this.canEdit) {
           return (window.ChangeMeta && ChangeMeta.EDITABLE_FIELD_STYLE)
             ? ChangeMeta.EDITABLE_FIELD_STYLE.bg
             : '#fefce8';
         }
         if (project._added_this_month) {
-          return (window.ProjectMonthDiff && ProjectMonthDiff.NEW_PROJECT_BG) || '#d9e7d8';
+          return (window.BaselineDiff && BaselineDiff.NEW_PROJECT_BG) || '#d9e7d8';
         }
         if (readonly || field.source_type !== 'manual_input') {
           return this.lsZebraBg(dataRowIndex);
@@ -1610,9 +1642,18 @@
           return ChangeMeta.applyLuckysheetChangedStyle(cell, project, field);
         }
         if (!this.isFieldChanged(project, field)) return cell;
-        cell.fc = '#b45309';
-        cell.bg = '#fff7ed';
+        cell.fc = '#9a3412';
+        cell.bg = '#ffedd5';
 
+        return cell;
+      },
+
+      applyLuckysheetSystemRefDecor(cell, project, field) {
+        if (!window.SystemRefMeta) return cell;
+        if (!SystemRefMeta.isOverriddenField(project, field, this.monthIdx)) return cell;
+        const text = SystemRefMeta.formatRefComment(project, field, this.monthIdx);
+        if (text) cell.ps = SystemRefMeta.buildLuckysheetCommentPs(text);
+        cell.bg = SystemRefMeta.OVERRIDE_BG;
         return cell;
       },
 
@@ -1657,7 +1698,9 @@
           const cell = row[c];
           if (!cell) continue;
           this.applyLuckysheetStockWarning(cell, project, field);
-          if (window.ChangeMeta && ChangeMeta.hasFieldChangeMarkup(project, field)) {
+          if (window.SystemRefMeta && SystemRefMeta.isOverriddenField(project, field, this.monthIdx)) {
+            this.applyLuckysheetSystemRefDecor(cell, project, field);
+          } else if (window.ChangeMeta && ChangeMeta.hasFieldChangeMarkup(project, field)) {
             this.applyLuckysheetHighlight(cell, project, field);
             this.applyLuckysheetChangeComment(cell, project, field);
           }
@@ -1710,9 +1753,13 @@
         }
         const val = this.getCellValue(project, field);
         const cell = this.makeLuckysheetCell(val, field, ro, bg);
-        var out = this.applyLuckysheetChangeComment(
-          this.applyLuckysheetStockWarning(
-            this.applyLuckysheetHighlight(cell, project, field),
+        var out = this.applyLuckysheetSystemRefDecor(
+          this.applyLuckysheetChangeComment(
+            this.applyLuckysheetStockWarning(
+              this.applyLuckysheetHighlight(cell, project, field),
+              project,
+              field
+            ),
             project,
             field
           ),
@@ -2070,22 +2117,8 @@
             var fld = fields[k];
             var ro = !this.canEditField(fld) || !this.canEdit;
             if (fld.data_type === '金额') {
-              var layAmt = this.lsLayout();
-              var rAmt = layAmt.dataStart + i;
-              var cAmt = k;
-              if (!ro) {
-                dv[String(rAmt) + '_' + String(cAmt)] = {
-                  type: 'number',
-                  type2: false,
-                  value1: '',
-                  value2: '',
-                  prohibitInput: true,
-                  hintShow: true,
-                  hintText: '仅限数字',
-                  remote: false,
-                  checked: false
-                };
-              }
+              // 金额校验由 cellUpdateBefore + coerceFieldValue 处理，不下发 dataVerification，
+              // 避免左上角红色角标与「仅限数字」提示。
               continue;
             }
             if (!fld.enum_values || !fld.enum_values.length) continue;
@@ -2207,7 +2240,7 @@
             zoom: true
           },
           showtoolbar: false,
-          sheetFormulaBar: false,
+          sheetFormulaBar: true,
           cellRightClickConfig: this.buildLuckysheetCellRightClickConfig(),
           rowHeaderRightClickConfig: this.buildLuckysheetRowHeaderRightClickConfig(),
           columnHeaderRightClickConfig: this.buildLuckysheetColumnHeaderRightClickConfig(),
@@ -2373,12 +2406,12 @@
 
           <div class="editor-toolbar-group">
             <el-button
-              v-if="isSystemAdmin && !isViewingSnapshot"
+              v-if="canShowRefreshButton"
               size="small"
               icon="el-icon-refresh"
               :loading="syncLoading"
-              @click="handleSyncPlatformData"
-            >更新系统数据</el-button>
+              @click="handleRefreshEditorData"
+            >刷新数据</el-button>
             <el-button
               size="small"
               icon="el-icon-download"
@@ -2438,13 +2471,16 @@
         <!-- 图例说明 -->
         <div v-if="showDiffHint" class="editor-diff-hint">
           <span class="editor-legend-item">
-            <span class="editor-legend-swatch editor-legend-swatch--new"></span>本月新增项目
-          </span>
-          <span class="editor-legend-item">
             <span class="editor-legend-swatch editor-legend-swatch--editable"></span>可编辑列
           </span>
           <span class="editor-legend-item">
-            <span class="editor-legend-swatch editor-legend-swatch--changed" aria-hidden="true">Aa</span>本月有变更字段
+            <span class="editor-legend-swatch editor-legend-swatch--new"></span>新增项目
+          </span>
+          <span class="editor-legend-item">
+            <span class="editor-legend-swatch editor-legend-swatch--changed"></span>本月有变更字段
+          </span>
+          <span class="editor-legend-item">
+            <span class="editor-legend-swatch editor-legend-swatch--system-ref"></span>系统引用已覆盖
           </span>
           <span class="editor-legend-item">
             <span class="editor-legend-swatch editor-legend-swatch--warning"></span>预警
@@ -2579,18 +2615,19 @@
           @archived="onCompanyArchived"
         ></system-admin-sector-dock>
 
-        <!-- 板块管理员：待接收 PM 提交面板 -->
-        <div v-if="isSectorAdmin && pendingPmSubmissions.length > 0"
-          style="padding:10px 16px;background:#fffbeb;border-top:2px solid #f59e0b;flex-shrink:0;">
-          <div style="font-size:12px;font-weight:600;color:#92400e;margin-bottom:8px;">
-            <i class="el-icon-bell" style="margin-right:4px;"></i>
-            待接收 PM 提交（{{ pendingPmSubmissions.length }} 人）
+        <!-- 板块管理员：本月已提交 PM（自动进入汇总，可查看变更） -->
+        <div v-if="isSectorAdmin && submittedPmSubmissions.length > 0"
+          style="padding:10px 16px;background:#f8fafc;border-top:1px solid #e2e8f0;flex-shrink:0;">
+          <div style="font-size:12px;font-weight:600;color:#475569;margin-bottom:8px;">
+            <i class="el-icon-user" style="margin-right:4px;"></i>
+            本月已提交 PM（{{ submittedPmSubmissions.length }} 人）
+            <span style="font-weight:400;color:#94a3b8;margin-left:8px;">提交后已自动进入板块汇总；有问题由您直接改数</span>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:8px;">
             <div
-              v-for="sub in pendingPmSubmissions"
+              v-for="sub in submittedPmSubmissions"
               :key="sub.pmName"
-              style="background:#fff;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:10px;font-size:12px;"
+              style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:10px;font-size:12px;"
             >
               <div>
                 <div style="font-weight:600;color:#1e293b;">{{ sub.pmName }}</div>
@@ -2598,8 +2635,7 @@
                   {{ sub.projectCount || 0 }} 个项目 · {{ sub.submittedAt ? new Date(sub.submittedAt).toLocaleString('zh-CN', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—' }}
                 </div>
               </div>
-              <el-button size="mini" @click="showPmDiff(sub.pmName, sub.snapshotVersion)">查看变更</el-button>
-              <el-button size="mini" type="success" @click="handleReceivePm(sub.pmName)">确认接收</el-button>
+              <el-button size="mini" @click="showPmDiff(sub.pmName)">查看变更</el-button>
             </div>
           </div>
         </div>
@@ -2611,7 +2647,7 @@
             <span>报告月份：{{ store.reportingMonth }}</span>
             <span>当前角色：{{ user.name || '—' }}</span>
             <span v-if="isPm && pmLocked" style="color:#f59e0b;font-weight:500;">
-              <i class="el-icon-lock"></i> 已提交，待板块接收
+              <i class="el-icon-lock"></i> 已提交（本月不可再改，请联系板块管理员）
             </span>
             <span v-else-if="!isSystemAdmin && reportingSubmitted" style="color:#ef4444;font-weight:500;">
               <i class="el-icon-lock"></i> 板块已提交审批，填报数据已锁定
@@ -2702,7 +2738,7 @@
         }).length;
       },
 
-      // PM 专属：当前 PM 是否处于「已提交待接收」锁定
+      // PM 专属：本月是否已提交锁定
       pmName()  { return this.user.pmName || this.user.name || ''; },
       pmLocked() {
         if (!this.isPm) return false;
@@ -2713,18 +2749,36 @@
         if (!this.isPm) return false;
         if (this.reportingSubmitted) return false;
         if (this.lockStatus !== 'open') return false;
-        if (this.hasStockViolationsInScope) return false;
         return !this.pmLocked;
       },
 
-      // 板块管理员：本月待接收的 PM 提交列表
-      pendingPmSubmissions() {
+      // 板块管理员：本板块本月已提交 PM 列表
+      submittedPmSubmissions() {
         if (!this.isSectorAdmin) return [];
         const month = Store.reportingMonth;
         const subs = Store.pmSubmissions[month] || {};
+        const sectorPmNames = {};
+        this.scopedProjects.forEach(function (p) {
+          if (p.pm_name) sectorPmNames[p.pm_name] = true;
+        });
         return Object.entries(subs)
-          .filter(([, v]) => v.status === 'submitted')
-          .map(([pmName, v]) => ({ pmName, ...v }));
+          .filter(function (entry) {
+            const pmName = entry[0];
+            const v = entry[1];
+            if (!sectorPmNames[pmName]) return false;
+            if (!v || !v.snapshotVersion) return false;
+            return v.status === 'submitted' || v.status === 'received';
+          })
+          .map(function (entry) {
+            return Object.assign({ pmName: entry[0] }, entry[1]);
+          })
+          .sort(function (a, b) {
+            return String(b.submittedAt || '').localeCompare(String(a.submittedAt || ''));
+          });
+      },
+      canShowRefreshButton() {
+        return !this.isViewingSnapshot &&
+          (this.user.role === 'system_admin' || this.user.role === 'sector_admin');
       },
 
       // 通用：提交按钮是否显示（PM 和板块管理员；查看快照时隐藏）
@@ -2736,7 +2790,7 @@
         return this.isSystemAdmin && !this.isViewingSnapshot;
       },
       canSubmitArchive() {
-        return !Store.isCompanyArchived();
+        return this.isSystemAdmin && !this.isViewingSnapshot;
       },
       // 板块管理员提交审批是否可用
       canSubmit() {
@@ -2745,17 +2799,14 @@
         if (this.isSystemAdmin) return false;
         return this.isSectorAdmin
           && this.lockStatus === 'open'
-          && !this.reportingSubmitted
-          && !this.hasStockViolationsInScope;
+          && !this.reportingSubmitted;
       },
       submitButtonLabel() {
         if (this.isPm) {
-          if (this.hasStockViolationsInScope) return '存量合同额为负，请调减完成额';
-          if (this.pmLocked) return '已提交，待板块接收';
+          if (this.pmLocked) return '已提交';
           if (this.reportingSubmitted) return '板块已提交审批';
           return '提交';
         }
-        if (this.hasStockViolationsInScope) return '存量合同额为负，请调减完成额';
         return this.reportingSubmitted ? '已提交审批' : '提交审批';
       },
       isViewingSnapshot() {
@@ -2769,39 +2820,29 @@
       },
       editorSnapshotOptions() {
         const self = this;
-        const ORDER = ['Draft', 'Approve1', 'Approve2', 'J版'];
         const snaps = Store.snapshots || {};
-        const keys = Object.keys(snaps);
-        const pm = this.pmName;
-        let filtered = keys;
-        if (this.isPm) {
-          filtered = keys.filter(function (k) {
-            if (ORDER.indexOf(k) >= 0) return true;
-            return k.indexOf('PM:' + pm + ':') === 0;
-          });
-        }
-        const ordered = [];
-        ORDER.forEach(function (v) {
-          if (filtered.indexOf(v) >= 0) {
-            ordered.push({
-              value: v,
-              label: self.formatSnapshotOptionLabel(v, snaps[v])
-            });
+        const user = this.user;
+        const sector = user && user.sector;
+        const baseline = Store.baselineVersion;
+        const keys = Object.keys(snaps).filter(function (k) {
+          if (/^Month:/.test(k) || /^PM:/.test(k)) return false;
+          if (window.BaselineDiff && BaselineDiff.isModernSnapshotKey(k)) {
+            return BaselineDiff.isSnapshotVisibleToUser(k, user, sector);
           }
+          return k === 'J版' || /^Draft:/.test(k);
         });
-        filtered
-          .filter(function (k) { return ORDER.indexOf(k) < 0; })
+        return keys
           .sort(function (a, b) {
             return new Date(self.resolveSnapshotTime(b, snaps[b]) || 0) -
               new Date(self.resolveSnapshotTime(a, snaps[a]) || 0);
           })
-          .forEach(function (k) {
-            ordered.push({
-              value: k,
-              label: self.formatSnapshotOptionLabel(k, snaps[k])
-            });
+          .map(function (k) {
+            let label = self.formatSnapshotOptionLabel(k, snaps[k]);
+            if (baseline && k === baseline) {
+              label += ' · 变更基准';
+            }
+            return { value: k, label: label };
           });
-        return ordered;
       },
       snapshotViewMeta() {
         if (!this.isViewingSnapshot) return null;
@@ -2810,11 +2851,13 @@
           label: this.formatSnapshotOptionLabel(this.viewingVersion, snap)
         };
       },
-      isFinance() { return this.user.role === 'finance'; },
+      isExecutiveViewer() {
+        return window.DataScope && DataScope.isExecutiveViewer(this.user);
+      },
       canEdit() {
         if (this.isViewingSnapshot) return false;
         const role = this.user.role;
-        if (role === 'finance') return false;
+        if (role === 'executive_viewer') return false;
         if (role === 'system_admin') return true;
         // PM：个人锁定或板块正式提交后均不可编辑
         if (this.isPm) {
@@ -2828,6 +2871,9 @@
       // 按角色过滤后的项目（PM 只看自己的）
       scopedProjects() {
         let list = this.tableProjects;
+        if (window.DataScope) {
+          return DataScope.filterProjects(this.user, list, Store.groupRegistry);
+        }
         if (this.isPm) {
           const pm = this.pmName;
           list = list.filter(p => p.pm_name === pm);
@@ -2866,8 +2912,8 @@
       },
       lockBannerClass() {
         if (this.isSystemAdmin) return 'open';
-        if (this.isFinance && Store.financeReviewReminder) return 'finance-only';
-        if (this.isFinance) return 'open';
+        if (this.isExecutiveViewer && Store.financeReviewReminder) return 'finance-only';
+        if (this.isExecutiveViewer) return 'open';
         if (this.isPm && this.pmLocked) return 'locked';
         if (this.reportingSubmitted) return 'locked';
         if (Store.financeReviewReminder) return 'finance-only';
@@ -2875,14 +2921,18 @@
       },
       lockBannerText() {
         if (this.isSystemAdmin) return '系统管理员 — 可编辑全部项目数据';
-        if (this.isFinance) {
+        if (this.isExecutiveViewer) {
+          const scope = window.DataScope
+            ? DataScope.getScopeLabel(this.user, Store.groupRegistry, Store.sectorNames)
+            : '';
           if (Store.financeReviewReminder) {
-            return '财务核查提醒期（每月1-3日）— 请核对开票/回款等数据，表格为只读查看';
+            return '经营管理（只读）' + (scope ? ' · ' + scope : '') +
+              ' — 核查提醒期，请核对开票/回款等数据';
           }
-          return '财务审核 — 全公司数据只读查看（无期限限制）';
+          return '经营管理（只读）' + (scope ? ' · ' + scope : '') + ' — 汇总数据只读查看';
         }
         if (this.isPm && this.pmLocked) {
-          return '您已提交本月填报，等待板块管理员接收后可再次编辑';
+          return '您已提交本月填报（每月仅可提交一次）；如需修正请联系板块管理员';
         }
         if (this.reportingSubmitted) {
           if (this.isPm) return '板块已正式提交审批，本月填报已锁定';
@@ -2892,7 +2942,8 @@
           return '财务核查提醒期（1-3日）— 请财务完成上月数据核对，其他角色填报照常开放';
         }
         if (this.lockStatus === 'locked') {
-          return '数据已锁定（每月25日）— 仅管理员可临时解锁编辑';
+          var lockDay = (Store.periodConfig && Store.periodConfig.lockDay) || 25;
+          return '数据已锁定（每月' + lockDay + '日）— 请联系系统管理员临时解锁编辑';
         }
         return '填报窗口开放中 — 可正常填报';
       },

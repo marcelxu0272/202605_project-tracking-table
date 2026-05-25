@@ -30,10 +30,6 @@
     const AA = r.prev_year_invoice   || 0;                   // AA
     const AD = r.prev_year_payment   || 0;                   // AD
 
-    // ── 栏位 A: 新旧项目 ─────────────────────────────────
-    const signYear = r.sign_year || (r.start_date ? parseInt(r.start_date.slice(0, 4)) : SYSTEM_YEAR);
-    r.new_existing = (signYear >= SYSTEM_YEAR) ? '新项目' : '旧项目';
-
     // ── 栏位 L: 合同签署状态 ─────────────────────────────
     r.signed = (r.crb_status === '已确认' || r.signed === '已签署') ? '已签署' : '未签署';
 
@@ -101,65 +97,5 @@
     return parseInt(parts[1]) - 1;
   }
 
-  /**
-   * 汇总看板数据
-   */
-  function summarize(projects, monthIdx) {
-    const computed = computeAll(projects, monthIdx);
-
-    const totalContract   = computed.reduce((s, p) => s + (p.total_contract || 0), 0);
-    const currentMonth    = computed.reduce((s, p) => s + (p.current_completed || 0), 0);
-    const ytdCompleted    = computed.reduce((s, p) => s + (p.ytd_completed || 0), 0);
-    const totalWip        = computed.reduce((s, p) => s + Math.max(p.wip_incl_tax || 0, 0), 0);
-    const totalCumInvoice = computed.reduce((s, p) => s + (p.cum_invoice || 0), 0);
-    const invoiceRate     = totalContract > 0 ? totalCumInvoice / totalContract : 0;
-
-    // 月度完成趋势 (1-12月)
-    const monthlyTotals = Array(12).fill(0).map((_, i) =>
-      computed.reduce((s, p) => s + ((p.monthly_completion || [])[i] || 0), 0)
-    );
-
-    // 月度开票/回款趋势
-    const monthlyInvoice = Array(12).fill(0).map((_, i) =>
-      computed.reduce((s, p) => s + ((p.monthly_invoice || [])[i] || 0), 0)
-    );
-    const monthlyPayment = Array(12).fill(0).map((_, i) =>
-      computed.reduce((s, p) => s + ((p.monthly_payment || [])[i] || 0), 0)
-    );
-
-    // WIP 账龄分布（按项目 WIP 金额与账龄分类简化分配）
-    const wipByAge = { lt1m: 0, m1to3: 0, m3to6: 0, m6to12: 0, y1to2: 0, y2to3: 0, gt3y: 0 };
-    computed.forEach(p => {
-      const wip = p.wip_incl_tax || 0;
-      if (wip <= 0) return;
-      // 简化：根据项目 WIP 形成原因和开始时间粗略分配
-      const cause = p.wip_cause || '';
-      if (cause.startsWith('A')) wipByAge.lt1m += wip * 0.6;
-      else if (cause.startsWith('B')) wipByAge.m1to3 += wip * 0.7;
-      else if (cause.startsWith('C')) wipByAge.m3to6 += wip;
-      else wipByAge.m6to12 += wip;
-    });
-
-    // WIP 预警（WIP > 合同额 50%）
-    const wipAlerts = computed
-      .filter(p => p.wip_incl_tax > 0 && p.total_contract > 0 &&
-                   p.wip_incl_tax / p.total_contract > 0.5)
-      .map(p => ({
-        id: p.project_no,
-        name: p.project_name,
-        wip: p.wip_incl_tax,
-        contract: p.total_contract,
-        ratio: p.wip_incl_tax / p.total_contract
-      }))
-      .sort((a, b) => b.ratio - a.ratio);
-
-    return {
-      totalContract, currentMonth, ytdCompleted,
-      totalWip, totalCumInvoice, invoiceRate,
-      monthlyTotals, monthlyInvoice, monthlyPayment,
-      wipByAge, wipAlerts, computed
-    };
-  }
-
-  window.FormulaEngine = { compute, computeAll, getMonthIdx, summarize };
+  window.FormulaEngine = { compute, computeAll, getMonthIdx };
 })(window);

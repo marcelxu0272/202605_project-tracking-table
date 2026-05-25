@@ -75,6 +75,9 @@
         if (f.category != null) parts.push(f.category);
         if (f.monthIdx != null && f.monthIdx >= 0) parts.push(MONTH_LABELS[f.monthIdx]);
         return parts.join(' · ');
+      },
+      hasCostData: function () {
+        return !!(this.stats && !this.stats.empty);
       }
     },
     watch: {
@@ -104,6 +107,10 @@
           .then(function (data) {
             self.stats = data;
             self.loading = false;
+            if (!data || data.empty) {
+              self.detailVisible = false;
+              self.detailFilter = null;
+            }
           })
           .catch(function () {
             self.loadError = '成本数据加载失败';
@@ -149,103 +156,107 @@
     },
     template: `
       <div class="drawer-cost-aux">
-        <div class="drawer-cost-toolbar">
-          <button
-            type="button"
-            class="drawer-timesheet-detail-link"
-            :disabled="!stats || stats.empty"
-            @click="openDetail(null)"
-          >
-            <i class="el-icon-tickets" aria-hidden="true"></i>
-            <span>查看明细</span>
-          </button>
-        </div>
-
-        <div class="drawer-cost-subtitle">{{ subtitle }}</div>
-
         <div v-if="loading" class="drawer-cost-empty">
           <i class="el-icon-loading"></i> 加载成本数据…
         </div>
         <div v-else-if="loadError" class="drawer-cost-empty">{{ loadError }}</div>
-        <div v-else-if="stats" class="drawer-cost-table-wrap">
-          <el-table
-            :data="matrixRows"
-            size="mini"
-            border
-            max-height="260"
-            class="drawer-cost-table drawer-timesheet-table drawer-timesheet-table--cost"
-            :row-class-name="rowClassName"
-            :header-cell-style="{ background: '#f8fafc', fontWeight: '600', fontSize: '11px', padding: '4px 0' }"
-            :cell-style="{ padding: '2px 6px', fontSize: '11px', whiteSpace: 'nowrap' }"
-          >
-            <el-table-column
-              label="成本项"
-              prop="key"
-              fixed
-              min-width="108"
-              show-overflow-tooltip
-            >
-              <template slot-scope="{ row }">
-                <span :class="{ 'drawer-cost-item--total': row.isTotal }">{{ row.key }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column
-              v-for="(ml, mi) in monthLabels"
-              :key="'cm-' + mi"
-              :label="ml"
-              :min-width="84"
-              align="right"
-              class-name="drawer-ts-col-month"
-            >
-              <template slot-scope="{ row }">
-                <span
-                  class="drawer-ts-cell"
-                  :class="{ 'drawer-ts-cell--clickable': cellHasValue(row, mi) }"
-                  @click="openDetailFromCell(row, mi)"
-                >{{ cellValue(row, mi) }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column
-              label="合计"
-              :min-width="100"
-              align="right"
-              fixed="right"
-              class-name="drawer-ts-col-total"
-            >
-              <template slot-scope="{ row }">
-                <span class="drawer-ts-cell drawer-ts-cell--total">{{ totalValue(row) }}</span>
-              </template>
-            </el-table-column>
-          </el-table>
+        <div v-else-if="!hasCostData" class="drawer-cost-empty">
+          本年度暂无成本记录
         </div>
-
-        <el-dialog
-          :visible.sync="detailVisible"
-          :title="'成本明细 · ' + projectNo"
-          width="720px"
-          append-to-body
-          custom-class="drawer-cost-detail-dialog"
-        >
-          <div v-if="detailFilterLabel" class="drawer-ts-detail-filter">
-            <el-tag size="small" closable @close="clearDetailFilter">{{ detailFilterLabel }}</el-tag>
-            <span class="drawer-ts-detail-count">共 {{ filteredDetails.length }} 条</span>
+        <template v-else>
+          <div class="drawer-cost-toolbar">
+            <button
+              type="button"
+              class="drawer-timesheet-detail-link"
+              @click="openDetail(null)"
+            >
+              <i class="el-icon-tickets" aria-hidden="true"></i>
+              <span>查看明细</span>
+            </button>
           </div>
-          <el-table
-            :data="filteredDetails"
-            size="small"
-            border
-            max-height="420"
-            :header-cell-style="{ background: '#f8fafc', fontWeight: '600', fontSize: '12px' }"
+
+          <div class="drawer-cost-subtitle">{{ subtitle }}</div>
+
+          <div class="drawer-cost-table-wrap">
+            <el-table
+              :data="matrixRows"
+              size="mini"
+              border
+              max-height="260"
+              class="drawer-cost-table drawer-timesheet-table drawer-timesheet-table--cost"
+              :row-class-name="rowClassName"
+              :header-cell-style="{ background: '#f8fafc', fontWeight: '600', fontSize: '11px', padding: '4px 0' }"
+              :cell-style="{ padding: '2px 6px', fontSize: '11px', whiteSpace: 'nowrap' }"
+            >
+              <el-table-column
+                label="成本项"
+                prop="key"
+                fixed
+                min-width="108"
+                show-overflow-tooltip
+              >
+                <template slot-scope="{ row }">
+                  <span :class="{ 'drawer-cost-item--total': row.isTotal }">{{ row.key }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column
+                v-for="(ml, mi) in monthLabels"
+                :key="'cm-' + mi"
+                :label="ml"
+                :min-width="84"
+                align="right"
+                class-name="drawer-ts-col-month"
+              >
+                <template slot-scope="{ row }">
+                  <span
+                    class="drawer-ts-cell"
+                    :class="{ 'drawer-ts-cell--clickable': cellHasValue(row, mi) }"
+                    @click="openDetailFromCell(row, mi)"
+                  >{{ cellValue(row, mi) }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="合计"
+                :min-width="100"
+                align="right"
+                fixed="right"
+                class-name="drawer-ts-col-total"
+              >
+                <template slot-scope="{ row }">
+                  <span class="drawer-ts-cell drawer-ts-cell--total">{{ totalValue(row) }}</span>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+
+          <el-dialog
+            :visible.sync="detailVisible"
+            :title="'成本明细 · ' + projectNo"
+            width="720px"
+            append-to-body
+            custom-class="drawer-cost-detail-dialog"
           >
-            <el-table-column label="月份" prop="costMonth" width="120" sortable>
-              <template slot-scope="{ row }">{{ formatDetailMonth(row.costMonth) }}</template>
-            </el-table-column>
-            <el-table-column label="成本项" prop="category" min-width="140" show-overflow-tooltip sortable></el-table-column>
-            <el-table-column label="金额" width="120" align="right" sortable :sort-method="(a,b)=>a.amount-b.amount">
-              <template slot-scope="{ row }">{{ formatDetailAmount(row.amount) }}</template>
-            </el-table-column>
-          </el-table>
-        </el-dialog>
+            <div v-if="detailFilterLabel" class="drawer-ts-detail-filter">
+              <el-tag size="small" closable @close="clearDetailFilter">{{ detailFilterLabel }}</el-tag>
+              <span class="drawer-ts-detail-count">共 {{ filteredDetails.length }} 条</span>
+            </div>
+            <el-table
+              :data="filteredDetails"
+              size="small"
+              border
+              max-height="420"
+              :header-cell-style="{ background: '#f8fafc', fontWeight: '600', fontSize: '12px' }"
+            >
+              <el-table-column label="月份" prop="costMonth" width="120" sortable>
+                <template slot-scope="{ row }">{{ formatDetailMonth(row.costMonth) }}</template>
+              </el-table-column>
+              <el-table-column label="成本项" prop="category" min-width="140" show-overflow-tooltip sortable></el-table-column>
+              <el-table-column label="金额" width="120" align="right" sortable :sort-method="(a,b)=>a.amount-b.amount">
+                <template slot-scope="{ row }">{{ formatDetailAmount(row.amount) }}</template>
+              </el-table-column>
+            </el-table>
+          </el-dialog>
+        </template>
       </div>
     `
   };

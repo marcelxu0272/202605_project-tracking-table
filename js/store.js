@@ -104,10 +104,13 @@
     /** PM 提交状态 { '2026-05': { '何孝刚': { status, submittedAt, snapshotVersion, projectNos } } } */
     pmSubmissions: {},
     snapshots: {},
-    /** 与本月对比的「上月归档」快照版本键，如 Month:2026-04 */
-    priorMonthSnapshotVersion: null,
+    baselineVersion: null,
+    latestIVersion: null,
+    latestJVersion: null,
     systemDataSyncedAt: null,
     systemDataSyncMeta: null,
+    users: [],
+    groupRegistry: {},
     auditLog: [],
     sidebarCollapsed: !!lsGet(LS_KEY_SIDEBAR, false),
     editorViewMode: 'all',
@@ -137,9 +140,16 @@
     Store.sectorRegistry = d.sectorRegistry || [];
     Store.sectorNames = d.sectorNames || Store.sectorNames || {};
     Store.companyFlow = d.companyFlow || { archiveStatus: 'pending', archivedAt: null };
-    Store.priorMonthSnapshotVersion = d.priorMonthSnapshotVersion || null;
+    Store.baselineVersion = d.baselineVersion || null;
+    Store.latestIVersion = d.latestIVersion || null;
+    Store.latestJVersion = d.latestJVersion || null;
     Store.systemDataSyncedAt = d.systemDataSyncedAt || null;
     Store.systemDataSyncMeta = d.systemDataSyncMeta || null;
+    Store.users = d.users || [];
+    Store.groupRegistry = d.groupRegistry || {};
+    if (Store.currentUser && Store.currentUser.role !== 'system_admin') {
+      Store.auditLog.splice(0, Store.auditLog.length);
+    }
     Store._hydrated = true;
   }
 
@@ -184,20 +194,6 @@
     await Store.init();
   };
 
-  /** 生成上一报告月对比快照（演示新增项目高亮） */
-  Store.seedPriorMonthSnapshot = async function (removeCount) {
-    const user = Store.currentUser || { name: '系统', role: 'system_admin' };
-    const body = {
-      removeCount: removeCount != null ? removeCount : 5,
-      userName: user.name,
-      role: user.role
-    };
-    const d = await apiFetch('/admin/seed-prior-month-snapshot', { method: 'POST', body });
-    if (d && d.state) applyBootstrap(d.state);
-    else await Store.init();
-    return d;
-  };
-
   /** 开发测试：流程、配置与项目数据恢复为初始默认 */
   Store.resetDevEnvironment = async function () {
     const d = await apiFetch('/admin/reset-dev', { method: 'POST' });
@@ -209,6 +205,16 @@
   Store.login = function (user) {
     Store.currentUser = user;
     lsSet(LS_KEY_USER, user);
+    if (user.role !== 'system_admin') {
+      Store.auditLog.splice(0, Store.auditLog.length);
+    }
+  };
+
+  Store.saveUsersConfig = async function (payload) {
+    const d = await apiFetch('/admin/users', { method: 'PATCH', body: payload });
+    if (d && d.state) applyBootstrap(d.state);
+    else await Store.init();
+    return d;
   };
 
   Store.logout = function () {
@@ -279,10 +285,13 @@
     Store.reportingSubmitted = d.reportingSubmitted === true;
     const snaps = d.snapshots || {};
     Object.keys(snaps).forEach(function (k) {
-      if (k.indexOf('PM:') === 0 || k.indexOf(':') > 0 || k === 'J版') {
+      if (/^(I|D|J):\d{8}:/.test(k) || k.indexOf('PM:') === 0 || k === 'J版' || /^Draft:/.test(k)) {
         Vue.set(Store.snapshots, k, snaps[k]);
       }
     });
+    Store.baselineVersion = d.baselineVersion || Store.baselineVersion;
+    Store.latestIVersion = d.latestIVersion || Store.latestIVersion;
+    Store.latestJVersion = d.latestJVersion || Store.latestJVersion;
   };
 
   /** 按版本名获取快照（先读内存，缺失时从服务端拉取） */
@@ -329,6 +338,16 @@
       body: { userName: user.name, role: user.role }
     });
     applyStateFromApi(d);
+    if (d && d.version && d.snapshot) {
+      Vue.set(Store.snapshots, d.version, d.snapshot);
+    }
+    if (d && d.state && d.state.latestJVersion) {
+      Store.latestJVersion = d.state.latestJVersion;
+      Store.baselineVersion = d.state.baselineVersion;
+    } else if (d && d.version) {
+      Store.latestJVersion = d.version;
+      Store.baselineVersion = d.version;
+    }
     return d;
   };
 
@@ -351,10 +370,10 @@
     return (Store.pmSubmissions[month] || {})[pmName] || null;
   };
 
-  /** 该 PM 是否处于「已提交待接收」锁定状态 */
+  /** 该 PM 本月是否已提交（提交后锁定，不可再改） */
   Store.isPmLocked = function (pmName) {
     const sub = Store.getPmSubmission(pmName);
-    return !!(sub && sub.status === 'submitted');
+    return !!(sub && (sub.status === 'submitted' || sub.status === 'received'));
   };
 
   /** 该 PM 是否可提交（板块未正式提交 且 自身不处于锁定中） */
@@ -364,55 +383,7 @@
     return !Store.isPmLocked(pmName);
   };
 
-  /** PM 进入填报前确保有基准快照（本轮编辑起点，用于提交后 diff） */
-  Store.ensurePmBaseline = async function (pmName, projectsSnapshot) {
-    const user = Store.currentUser || {};
-    const name = pmName || user.pmName || user.name;
-    if (!name) return null;
-    const sub = Store.getPmSubmission(name);
-    if (sub && sub.baselineSnapshotVersion) return sub.baselineSnapshotVersion;
-    if (!Store.canPmSubmit(name)) return null;
-
-    const body = {
-      pmName: name,
-      reportingMonth: Store.reportingMonth,
-      userName: user.name
-    };
-    if (projectsSnapshot && projectsSnapshot.length) {
-      body.projects = projectsSnapshot;
-    }
-
-    const result = await apiFetch('/pm-submissions/ensure-baseline', {
-      method: 'POST',
-      body
-    });
-    if (!Store.pmSubmissions[Store.reportingMonth]) {
-      Vue.set(Store.pmSubmissions, Store.reportingMonth, {});
-    }
-    const prev = Store.pmSubmissions[Store.reportingMonth][name] || {};
-    Vue.set(Store.pmSubmissions[Store.reportingMonth], name, Object.assign({}, prev, {
-      baselineSnapshotVersion: result.baselineSnapshotVersion
-    }));
-    if (result.snapshot && result.baselineSnapshotVersion) {
-      Vue.set(Store.snapshots, result.baselineSnapshotVersion, result.snapshot);
-    }
-    return result.baselineSnapshotVersion;
-  };
-
-  /** 将当前 Store 中该 PM 名下项目全部写入 SQLite（提交前兜底同步） */
-  Store.syncPmProjectsToServer = async function (pmName, monthIdx) {
-    if (!pmName) return;
-    const idx = monthIdx != null ? monthIdx : Store.getMonthIdx();
-    const list = FormulaEngine.computeAll(
-      Store.projects.filter(function (p) { return p.pm_name === pmName; }),
-      idx
-    );
-    for (let i = 0; i < list.length; i++) {
-      await Store.updateProject(list[i]);
-    }
-  };
-
-  /** PM 提交：生成个人子集快照，写 pmSubmissions */
+  /** PM 提交：仅写 pmSubmissions 状态，不生成快照 */
   Store.submitPmReporting = async function () {
     const user = Store.currentUser || {};
     const pmName = user.pmName || user.name;
@@ -432,43 +403,31 @@
     Vue.set(Store.pmSubmissions[Store.reportingMonth], pmName, {
       status: 'submitted',
       submittedAt: new Date().toISOString(),
-      snapshotVersion: result.snapshotVersion,
-      baselineSnapshotVersion: result.baselineSnapshotVersion || prev.baselineSnapshotVersion,
-      submissionBaselineSnapshotVersion: result.submissionBaselineSnapshotVersion
-        || result.baselineSnapshotVersion
-        || prev.baselineSnapshotVersion,
       projectCount: result.projectCount
     });
-
-    if (result.snapshot && result.snapshotVersion) {
-      Vue.set(Store.snapshots, result.snapshotVersion, result.snapshot);
-    }
 
     return result;
   };
 
-  /** 板块管理员确认接收某 PM 提交，解除其锁定 */
-  Store.receivePmSubmission = async function (pmName) {
-    const user = Store.currentUser || {};
-    const result = await apiFetch('/pm-submissions/receive', {
-      method: 'POST',
-      body: { pmName, reportingMonth: Store.reportingMonth, userName: user.name }
-    });
-    const month = Store.reportingMonth;
-    if (Store.pmSubmissions[month] && Store.pmSubmissions[month][pmName]) {
-      const entry = Store.pmSubmissions[month][pmName];
-      entry.status = 'received';
-      entry.receivedAt = new Date().toISOString();
-      if (result && result.baselineSnapshotVersion) {
-        entry.baselineSnapshotVersion = result.baselineSnapshotVersion;
-        if (result.baselineSnapshot) {
-          Vue.set(Store.snapshots, result.baselineSnapshotVersion, result.baselineSnapshot);
-        }
-      }
+  /** 将当前 Store 中该 PM 名下项目全部写入 SQLite（提交前兜底同步） */
+  Store.syncPmProjectsToServer = async function (pmName, monthIdx) {
+    if (!pmName) return;
+    const idx = monthIdx != null ? monthIdx : Store.getMonthIdx();
+    const list = FormulaEngine.computeAll(
+      Store.projects.filter(function (p) { return p.pm_name === pmName; }),
+      idx
+    );
+    for (let i = 0; i < list.length; i++) {
+      await Store.updateProject(list[i]);
     }
   };
 
-  /** 板块管理员：提交本板块审批，生成 Draft:{sector} */
+  /** @deprecated 已取消确认接收 */
+  Store.receivePmSubmission = async function () {
+    throw new Error('已废弃：PM 提交后无需板块确认接收');
+  };
+
+  /** 板块管理员：提交本板块审批，生成 D 版快照 */
   Store.submitForApproval = async function () {
     const user = Store.currentUser || {};
     const code = user.sector || 'S520';
@@ -477,6 +436,9 @@
       body: { userName: user.name, role: user.role }
     });
     applyStateFromApi(d);
+    if (d && d.version && d.snapshot) {
+      Vue.set(Store.snapshots, d.version, d.snapshot);
+    }
     return d;
   };
 
@@ -494,22 +456,28 @@
   Store.savePeriodConfig = async function (cfg) {
     Object.assign(Store.periodConfig, cfg);
     Store.reportingMonth = Store.periodConfig.reportingMonth;
-    await apiFetch('/meta', {
+    const d = await apiFetch('/meta', {
       method: 'PATCH',
       body: {
         periodConfig: Store.periodConfig,
         reportingMonth: Store.reportingMonth
       }
     });
+    applyBootstrap(d);
   };
 
   Store.syncPlatformData = async function () {
+    return Store.refreshEditorData();
+  };
+
+  /** 系统/板块管理员：刷新工程平台引用 + 重载库内项目与 PM 提交状态 */
+  Store.refreshEditorData = async function () {
     const user = Store.currentUser || {};
-    const d = await apiFetch('/admin/sync-platform-data', {
+    const d = await apiFetch('/editor/refresh-data', {
       method: 'POST',
       body: {
         user: {
-          id: user.id,
+          id: user.id || user.role,
           name: user.name,
           role: user.role
         }
@@ -525,10 +493,6 @@
 
   Store.getMonthIdx = function () {
     return FormulaEngine.getMonthIdx(Store.reportingMonth);
-  };
-
-  Store.getSummary = function () {
-    return FormulaEngine.summarize(Store.projects, Store.getMonthIdx());
   };
 
   window.Store = Store;

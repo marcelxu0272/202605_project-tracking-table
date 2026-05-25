@@ -5,7 +5,6 @@
   "description": "项目执行跟踪平台 — Express + SQLite API",
   "scripts": {
     "start": "node server/index.js",
-    "seed:prior-month": "node server/seed-prior-month-snapshot.js",
     "patch:init-alerts": "node server/patch-init-xlsx-alerts.js",
     "export:init-xlsx": "node server/export-init-xlsx.js"
   },

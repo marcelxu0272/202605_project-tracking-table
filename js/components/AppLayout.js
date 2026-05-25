@@ -6,7 +6,7 @@
 
   const ROLE_LABELS = {
     system_admin:     '系统管理员',
-    finance:          '财务审核',
+    executive_viewer: '经营管理（只读）',
     sector_admin:     '板块管理员',
     pm:               '项目经理',
     sector_director:  '板块总监',
@@ -16,10 +16,9 @@
   const APPROVAL_ONLY_ROLES = ['sector_director', 'group_leader'];
 
   const NAV_ITEMS = [
-    { path: '/dashboard', icon: 'el-icon-s-home',        label: '数据看板'  },
     { path: '/editor',    icon: 'el-icon-s-grid',        label: '填报表格', hideForRoles: APPROVAL_ONLY_ROLES },
-    { path: '/approval',  icon: 'el-icon-s-check',       label: '审批流程', hideForRoles: ['pm'] },
-    { path: '/audit',     icon: 'el-icon-document',      label: '审计日志', hideForRoles: ['pm'].concat(APPROVAL_ONLY_ROLES) },
+    { path: '/approval',  icon: 'el-icon-s-check',       label: '审批流程', hideForRoles: ['pm', 'executive_viewer'] },
+    { path: '/audit',     icon: 'el-icon-document',      label: '审计日志', auditOnly: true },
     { path: '/admin',     icon: 'el-icon-setting',       label: '管理设置', adminOnly: true }
   ];
 
@@ -36,11 +35,19 @@
     computed: {
       store()     { return window.Store; },
       user()      { return Store.currentUser || {}; },
-      roleName()  { return ROLE_LABELS[this.user.role] || this.user.role || '—'; },
+      roleName()  {
+        const base = ROLE_LABELS[this.user.role] || this.user.role || '—';
+        if (this.user.role === 'executive_viewer' && window.DataScope) {
+          const scope = DataScope.getScopeLabel(this.user, Store.groupRegistry, Store.sectorNames);
+          return scope ? base + ' · ' + scope : base;
+        }
+        return base;
+      },
       navItems()  {
         const role = this.user.role;
         return NAV_ITEMS.filter(item => {
           if (item.adminOnly && role !== 'system_admin') return false;
+          if (item.auditOnly && role !== 'system_admin') return false;
           if (item.hideForRoles && item.hideForRoles.includes(role)) return false;
           return true;
         });
@@ -51,11 +58,11 @@
       lockInfo()  { return LOCK_INFO[Store.lockStatus] || LOCK_INFO.open; },
       periodBannerInfo() {
         if (Store.financeReviewReminder) {
-          if (this.user.role === 'finance') {
+          if (this.user.role === 'executive_viewer') {
             return {
               text: '核查提醒',
               type: 'finance-only',
-              tip: '每月1-3日请核对开票/回款等数据（表格只读）'
+              tip: '每月1-3日请核对开票/回款等数据（只读查看）'
             };
           }
           return {
@@ -66,7 +73,10 @@
         }
         return this.lockInfo;
       },
-      activePath(){ return this.$route ? this.$route.path : '/dashboard'; },
+      activePath() {
+        if (this.$route && this.$route.path) return this.$route.path;
+        return window.AppHomePath ? AppHomePath(this.user.role) : '/editor';
+      },
       pageTitle() {
         const item = NAV_ITEMS.find(n => this.activePath === n.path);
         return item ? item.label : '项目执行跟踪平台';
@@ -90,9 +100,9 @@
           '将执行以下操作且不可撤销：\n\n' +
           '· 从「初始数据.xlsx」重新导入全部项目\n' +
           '· 审批状态恢复为「草稿」，清除已提交标记\n' +
-          '· 清空审计日志与全部版本快照\n' +
+          '· 清空审计日志与全部版本快照，写入新 I 版导入快照\n' +
           '· 填报周期配置恢复默认值（报告月 2026-05）\n' +
-          '· 自动生成上月归档快照 Month:2026-04，并固定 5 条「五月新增」演示项目\n' +
+          '· 固定 5 条「新增项目」演示（相对 I 版 baseline 高亮）\n' +
           '· 锁定状态恢复为按日期自动计算\n\n' +
           '仅用于开发测试，确认继续？',
           '重置为初始状态',
@@ -107,8 +117,8 @@
         }).then((r) => {
           let msg = '已恢复初始状态' + (r && r.count ? '（' + r.count + ' 条项目）' : '');
           if (r && r.devSeed && r.devSeed.demoNewProjectNos) {
-            msg += '；已生成 ' + (r.devSeed.priorSnapshot && r.devSeed.priorSnapshot.version || '上月快照');
-            msg += '，五月新增演示 ' + r.devSeed.demoNewProjectNos.length + ' 条';
+            msg += '；导入快照 ' + ((r.importSnapshot && r.importSnapshot.version) || (r.devSeed.importSnapshot && r.devSeed.importSnapshot.version) || 'I版');
+            msg += '，新增演示 ' + r.devSeed.demoNewProjectNos.length + ' 条';
           }
           this.$message.success(msg);
           window.location.reload();

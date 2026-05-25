@@ -6,9 +6,9 @@
   'use strict';
 
   var CHANGED_FIELD_STYLE = {
-    bg: '#fff7ed',
-    text: '#b45309',
-    border: '#f59e0b'
+    bg: '#ffedd5',
+    text: '#9a3412',
+    border: '#ea580c'
   };
 
   var EDITABLE_FIELD_STYLE = {
@@ -21,6 +21,7 @@
     sector_director: '板块总监',
     group_leader: '群主',
     finance: '财务',
+    executive_viewer: '经营管理',
     system_admin: '系统管理员'
   };
 

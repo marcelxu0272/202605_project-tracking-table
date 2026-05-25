@@ -1,16 +1,17 @@
 /**
  * field-config.js — 基于 fields-data.js 扩展角色权限矩阵
  *
- * 角色列表：system_admin | finance | sector_admin | pm | sector_director | group_leader
+ * 角色列表：system_admin | executive_viewer | sector_admin | pm | sector_director | group_leader
  * 来源类型：system_sync | auto_calc | manual_input
  *
  * 权限规则：
- *  - system_sync / auto_calc：所有人只读
+ *  - auto_calc：所有人只读
+ *  - system_sync / 报告月 MI·MP：工程平台引用列；默认只读，system_admin 可覆盖
  *  - manual_input：
  *      月度完成（AV–BG）：报告月当月及之后可写（含系统管理员）
- *      月度开票/回款（BH–CE）：仅报告月**之后**可写（当月为财务系统实际值，只读）
+ *      月度开票/回款（BH–CE）：仅报告月**之后**可写（当月为工程平台引用，只读）
  *      其他手工列：按角色 + lockStatus；system_admin 在 locked 期仍可写
- *      finance：始终只读
+ *      sector_director / group_leader / executive_viewer：始终只读
  */
 (function (window) {
   'use strict';
@@ -76,6 +77,23 @@
   }
 
   /**
+   * 工程平台引用列（system_sync + 报告月当月 MI/MP）
+   */
+  function isSystemRefField(field, reportingMonthIdx) {
+    if (!field) return false;
+    if (field.source_type === 'system_sync') return true;
+    if (reportingMonthIdx == null || reportingMonthIdx < 0) return false;
+    return field.col === MI_COLS[reportingMonthIdx] || field.col === MP_COLS[reportingMonthIdx];
+  }
+
+  function canEditSystemRef(field, role, lockStatus, reportingMonthIdx) {
+    if (field.col === 'F') return false;
+    if (role !== 'system_admin') return false;
+    if (!isSystemRefField(field, reportingMonthIdx)) return false;
+    return true;
+  }
+
+  /**
    * 判断某字段在当前角色和锁定状态下是否可编辑
    * @param {Object} field  - field config 对象（含 source_type, col）
    * @param {string} role   - 当前用户角色
@@ -84,20 +102,18 @@
    * @returns {boolean}
    */
   function canEdit(field, role, lockStatus, reportingMonthIdx) {
-    // 系统同步/自动计算 — 永远只读
+    if (field.col === 'F') return false;
+    if (canEditSystemRef(field, role, lockStatus, reportingMonthIdx)) return true;
     if (field.source_type === 'system_sync' || field.source_type === 'auto_calc') {
       return false;
     }
-    if (role === 'finance') return false;
-    // 月度完成/开票/回款的时间窗（含 system_admin）
+    if (role === 'executive_viewer') return false;
     if (!isMonthlyFieldEditable(field, reportingMonthIdx)) {
       return false;
     }
     if (role === 'system_admin') return true;
     if (lockStatus === 'locked') return false;
-    if (role === 'sector_director' || role === 'group_leader') {
-      return SECTOR_ADMIN_EDITABLE_COLS.has(field.col);
-    }
+    if (role === 'sector_director' || role === 'group_leader') return false;
     if (lockStatus === 'open') {
       if (role === 'pm') return PM_EDITABLE_COLS.has(field.col);
       if (role === 'sector_admin') return SECTOR_ADMIN_EDITABLE_COLS.has(field.col);
@@ -217,6 +233,8 @@
 
   window.FieldConfig = {
     canEdit,
+    canEditSystemRef,
+    isSystemRefField,
     buildFieldConfig,
     colToIdx,
     idxToCol,

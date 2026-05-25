@@ -9,6 +9,7 @@
   --color-brand-active: #004842;
   --color-brand-light:  rgba(0, 112, 105, 0.1);
   --color-brand-tint-5: rgba(0, 112, 105, 0.05);
+  --color-system-ref-override-bg: #e8f4fd;
   --color-brand-tint-3: rgba(0, 112, 105, 0.03);
   --color-brand-border: rgba(0, 112, 105, 0.3);
   --color-new-project-bg: #d9e7d8;
@@ -21,9 +22,9 @@
   --color-warning:      #f59e0b;
   --color-warning-bg:   rgba(245, 158, 11, 0.1);
   /* 本月有变更字段（与 Luckysheet 单元格高亮一致） */
-  --color-changed-field-bg:     #fff7ed;
-  --color-changed-field-text:   #b45309;
-  --color-changed-field-border: #f59e0b;
+  --color-changed-field-bg:     #ffedd5;
+  --color-changed-field-text:   #9a3412;
+  --color-changed-field-border: #ea580c;
   --color-stock-warning-bg:     #fee2e2;
   --color-stock-warning-text:   #dc2626;
   --color-danger:       #ef4444;
@@ -40,6 +41,7 @@
   --color-border:       #e5e7eb;
   --color-border-dark:  #d1d5db;
   --color-readonly-bg:  #f9fafb;
+  --color-sheet-toolbar-bg: #f8fafc;
   --color-sidebar-dark: #233845;
   --sidebar-width:          220px;
   --sidebar-width-collapsed:  64px;
@@ -410,11 +412,13 @@ body {
   background: rgba(245, 158, 11, 0.1);
   color: #d97706;
   border: 1px solid rgba(245, 158, 11, 0.3);
+  padding: 4px 10px;
 }
 .period-banner.locked {
   background: rgba(100, 116, 139, 0.1);
   color: #475569;
   border: 1px solid rgba(100, 116, 139, 0.3);
+  padding: 4px 10px;
 }
 .period-dot {
   width: 7px;
@@ -482,64 +486,64 @@ body {
   font-weight: 600;
 }
 
-/* 填报页图例色块（与 Luckysheet 变更格一致） */
+/* 填报页图例色块（统一尺寸纯色块，底色与 sheet-toolbar 一致） */
 .editor-diff-hint {
-  padding: 4px 12px;
-  background: #fffbeb;
-  border-bottom: 1px solid #fde68a;
+  padding: 3px 12px;
+  min-height: 30px;
+  background: var(--color-sheet-toolbar-bg);
+  border-bottom: 1px solid var(--color-border);
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   font-size: 12px;
-  color: #92400e;
+  color: var(--color-text-secondary);
   flex-shrink: 0;
 }
 .editor-legend-item {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  line-height: 1;
 }
 .editor-legend-swatch {
   display: inline-block;
+  width: 14px;
+  height: 14px;
   vertical-align: middle;
   border-radius: 2px;
   flex-shrink: 0;
+  box-sizing: border-box;
 }
 .editor-legend-swatch--new {
-  width: 12px;
-  height: 12px;
   background: var(--color-new-project-bg);
 }
 .editor-legend-swatch--changed {
-  width: 28px;
-  height: 18px;
   background: var(--color-changed-field-bg);
-  color: var(--color-changed-field-text);
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 16px;
-  text-align: center;
-  box-sizing: border-box;
 }
 .editor-legend-swatch--readonly {
-  width: 12px;
-  height: 12px;
   background: var(--color-readonly-bg);
-  border: 1px solid var(--color-border);
 }
 .editor-legend-swatch--editable {
-  width: 28px;
-  height: 18px;
   background: var(--color-editable-cell-bg);
-  border: 1px solid #fde68a;
-  box-sizing: border-box;
 }
+.editor-legend-swatch--system-ref {
+  background: var(--color-system-ref-override-bg);
+}
+
+.drawer-field-row--system-ref-override {
+  background: var(--color-system-ref-override-bg, #e8f4fd);
+}
+
+.drawer-field-row--system-ref-override .drawer-field-label::after {
+  content: '引用已覆盖';
+  margin-left: 6px;
+  font-size: 10px;
+  color: #2563eb;
+  font-weight: 500;
+}
+
 .editor-legend-swatch--warning {
-  width: 28px;
-  height: 18px;
   background: var(--color-stock-warning-bg);
-  border: 1px solid #fecaca;
-  box-sizing: border-box;
 }
 
 /* ── 填报工具栏 ────────────────────────────────────────── */
@@ -559,7 +563,7 @@ body {
   gap: 8px;
   padding: 3px 10px;
   min-height: 30px;
-  background: #f8fafc;
+  background: var(--color-sheet-toolbar-bg);
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
   flex-wrap: wrap;
@@ -1380,8 +1384,8 @@ body {
   margin-right: 6px;
   vertical-align: -2px;
   border-radius: 3px;
-  background: var(--color-editable-month-bg);
-  border: 1px solid rgba(0, 112, 105, 0.15);
+  background: var(--color-editable-cell-bg);
+  border: 1px solid rgba(180, 83, 9, 0.12);
 }
 
 /* 摘要描述表 */
@@ -1515,12 +1519,16 @@ body {
   background: #fff;
 }
 .project-drawer-collapse .drawer-section--editable-bg .drawer-field-input .el-input__inner,
-.project-drawer-collapse .drawer-section--editable-bg .drawer-field-input .el-textarea__inner {
-  background: var(--color-editable-month-bg);
-  border-color: rgba(0, 112, 105, 0.15);
+.project-drawer-collapse .drawer-section--editable-bg .drawer-field-input .el-textarea__inner,
+.drawer-field-row--editable .drawer-field-input .el-input__inner,
+.drawer-field-row--editable .drawer-field-input .el-textarea__inner {
+  background: var(--color-editable-cell-bg);
+  border-color: rgba(180, 83, 9, 0.12);
 }
 .project-drawer-collapse .drawer-section--editable-bg .drawer-field-input .el-input__inner:focus,
-.project-drawer-collapse .drawer-section--editable-bg .drawer-field-input .el-textarea__inner:focus {
+.project-drawer-collapse .drawer-section--editable-bg .drawer-field-input .el-textarea__inner:focus,
+.drawer-field-row--editable .drawer-field-input .el-input__inner:focus,
+.drawer-field-row--editable .drawer-field-input .el-textarea__inner:focus {
   background: #fff;
   border-color: #007069;
 }
@@ -1586,8 +1594,11 @@ body {
   transition: border-color 0.15s;
 }
 .drawer-month-cell.is-editable-month {
-  background: var(--color-editable-month-bg);
-  border-color: rgba(0, 112, 105, 0.15);
+  background: var(--color-editable-cell-bg);
+  border-color: rgba(180, 83, 9, 0.12);
+}
+.drawer-month-cell.is-editable-month .drawer-month-input .el-input__inner {
+  background: transparent;
 }
 .drawer-month-cell-hd {
   font-size: 10px;
@@ -1651,6 +1662,56 @@ body {
   font-weight: 600;
 }
 
+/* 完成额填报辅助 Popover */
+.drawer-completion-aux-popover {
+  padding: 0 !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12) !important;
+}
+.drawer-completion-aux {
+  min-width: 240px;
+  padding: 10px 12px;
+}
+.drawer-completion-aux-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 8px;
+  letter-spacing: 0.02em;
+}
+.drawer-completion-aux-list {
+  margin: 0;
+  padding: 0;
+}
+.drawer-completion-aux-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px dashed #f1f5f9;
+}
+.drawer-completion-aux-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.drawer-completion-aux-item dt {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+  flex: 1 1 auto;
+}
+.drawer-completion-aux-item dd {
+  margin: 0;
+  font-size: 12px;
+  color: #1e293b;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
 /* Drawer 项目预警区 */
 .project-drawer-alerts {
   border-color: #fecaca !important;
@@ -1682,34 +1743,7 @@ body {
   font-size: 13px;
 }
 
-/* 辅助区占位 */
-.project-drawer-aux {
-  border-color: #e2e8f0 !important;
-  background: #fafbfc !important;
-}
-.project-drawer-aux .project-drawer-section-label {
-  color: #64748b;
-}
-.drawer-aux-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 10px 16px 14px;
-}
-.drawer-aux-panel {
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 10px 12px 12px;
-  background: #fff;
-  width: 100%;
-  box-sizing: border-box;
-}
-.drawer-aux-panel--timesheet {
-  min-width: 0;
-}
-.drawer-aux-panel--cost {
-  background: #fff;
-}
+/* 工时 / 成本辅助（内容在 collapse 内，样式与「其他跟踪数据」一致） */
 .drawer-cost-aux {
   min-width: 0;
 }
@@ -1745,15 +1779,6 @@ body {
 }
 .drawer-cost-table .drawer-cost-row--total td {
   background: #f8fafc;
-}
-.drawer-aux-panel-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: #007069;
-  margin-bottom: 8px;
-}
-.drawer-aux-panel-title--muted {
-  color: #94a3b8;
 }
 .drawer-timesheet-aux {
   min-width: 0;
@@ -1889,6 +1914,14 @@ body {
   justify-content: flex-end;
   gap: 10px;
   background: #fff;
+}
+
+/* Luckysheet 数据验证：隐藏选中格时的提示框与角标（金额列改由 cellUpdateBefore 校验） */
+.luckysheet-editor-wrap #luckysheet-dataVerification-showHintBox,
+.luckysheet-editor-wrap #approval-luckysheet-mount #luckysheet-dataVerification-showHintBox {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 /* Luckysheet 底部缩放条（缩放控件在 .luckysheet-sta-c 内，不可隐藏该容器） */

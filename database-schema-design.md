@@ -84,13 +84,13 @@
 
 | 类型 | 格式 | 示例 |
 |---|---|---|
-| 板块 Draft | `Draft:<sector_code>` | `Draft:SAS520` |
-| 板块 Approve1 | `Approve1:<sector_code>` | `Approve1:SAS520` |
-| 板块 Approve2 | `Approve2:<sector_code>` | `Approve2:SAS520` |
-| 公司 J 版 | `J版` | `J版` |
-| 月度归档 | `Month:YYYY-MM` | `Month:2026-04` |
-| PM 提交 | `PM:<姓名>:YYYY-MM:<ts>` | `PM:何孝刚:2026-05:1716249600` |
-| 填报基准 | `:baseline:` 标记 | `PM:何孝刚:2026-05:1716249600:baseline` |
+| 导入 I 版 | `I:YYYYMMDD:ALL:NN` | `I:20260501:ALL:01` |
+| 板块 D 版 | `D:YYYYMMDD:SASxxx:NN` | `D:20260520:SAS550:01` |
+| 公司 J 版 | `J:YYYYMMDD:ALL:NN` | `J:20260525:ALL:02` |
+
+**meta：** `baselineVersion`、`latestIVersion`、`latestJVersion`
+
+**遗留键（只读历史）：** `Draft:*`、`J版`、`Month:*`、`PM:*`
 
 ---
 

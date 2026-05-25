@@ -7,13 +7,13 @@
     "name_cn": "新、旧项目",
     "name_en": "New/Existing Project",
     "data_type": "分类",
-    "source_type": "auto_calc",
-    "calc_logic": "系统根据合同签署时间自动判定（当年签署=新项目）",
+    "source_type": "system_sync",
+    "calc_logic": "系统判定是否为报告年度新增项目；平台同步新增默认为新项目；年末自动 rollover 为旧项目",
     "enum_values": [
       "新项目",
       "旧项目"
     ],
-    "description": "系统根据合同签署时间自动判定：当年内首次签署合同则为新项目，否则为旧项目。"
+    "description": "工程平台引用列。系统判定是否为当年新增项目：正式上线后平台自动入库的项目默认为「新项目」；跨报告年度初全部 rollover 为「旧项目」。特殊情况可由系统管理员覆盖显示值（§2.2.2）。"
   },
   {
     "id": 2,
@@ -116,15 +116,8 @@
     "data_type": "分类",
     "source_type": "system_sync",
     "calc_logic": "",
-    "enum_values": [
-      "国有企业",
-      "民营企业",
-      "外资企业",
-      "政府机关",
-      "事业单位",
-      "其他"
-    ],
-    "description": "取自 CRB，只读。客户的企业性质分类。"
+    "enum_values": [],
+    "description": "取自 CRB，只读。客户的企业性质分类（自由文本，非枚举约束）。"
   },
   {
     "id": 10,
@@ -339,12 +332,8 @@
     "data_type": "比率",
     "source_type": "system_sync",
     "calc_logic": "",
-    "enum_values": [
-      "6%",
-      "9%",
-      "13%"
-    ],
-    "description": "取自 CRB 合同条款，系统同步。适用税率影响不含税金额计算。"
+    "enum_values": [],
+    "description": "取自 CRB 合同条款，系统同步。适用税率影响不含税金额计算（自由文本，非枚举约束）。"
   },
   {
     "id": 26,
