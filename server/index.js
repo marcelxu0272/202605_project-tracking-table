@@ -16,6 +16,7 @@ const timesheetStats = require('./timesheet-stats');
 const costImport = require('./cost-import');
 const costStats = require('./cost-stats');
 const alertDemo = require('./alert-demo-seed');
+const fieldDict = require('./fields/dictionary');
 
 const ROOT = path.join(__dirname, '..');
 const PORT = Number(process.env.PTRACK_PORT) || 3000;
@@ -91,7 +92,18 @@ app.get('/api/bootstrap', (_req, res) => {
   try {
     snapSvc.maintainSnapshotStore(db);
     const state = dbm.getBootstrapState(db);
+    state.fieldDictionary = fieldDict.readFields();
     res.json(state);
+  } catch (e) {
+    res.status(500).json({ error: String(e.message) });
+  }
+});
+
+/** 字段字典只读（与项目追踪表同源） */
+app.get('/api/fields', (_req, res) => {
+  try {
+    const fields = fieldDict.readFields();
+    res.json({ fields, count: fields.length });
   } catch (e) {
     res.status(500).json({ error: String(e.message) });
   }
@@ -186,10 +198,12 @@ app.put('/api/snapshots/:version', (req, res) => {
 app.patch('/api/meta', (req, res) => {
   try {
     const body = req.body || {};
+    const periodChanged = body.periodConfig != null || body.reportingMonth != null;
     if (body.periodConfig != null) dbm.setMeta(db, 'periodConfig', body.periodConfig);
     if (body.reportingMonth != null) dbm.setMeta(db, 'reportingMonth', body.reportingMonth);
     if (body.approvalStatus != null) dbm.setMeta(db, 'approvalStatus', body.approvalStatus);
     if (body.lockStatus !== undefined) dbm.setMeta(db, 'lockStatus', body.lockStatus);
+    if (periodChanged && body.lockStatus === undefined) dbm.resetLockStatus(db);
     // reportingSubmitted 只允许 sector_admin / system_admin 通过此接口置 true
     // PM 的提交由专用端点处理
     if (body.reportingSubmitted !== undefined) {
@@ -301,8 +315,12 @@ app.post('/api/sectors/:code/submit-approval', (req, res) => {
     );
     const versionKey = snapResult.version;
     const snap = snapResult.snap;
+    const normalizedSector = sw.normalizeSectorCode(sectorCode);
+    const sectorAdmins = dbm.getMeta(db, 'sectorAdmins', dbm.DEFAULT_SECTOR_ADMINS);
+    const adminConfig = (sectorAdmins && sectorAdmins[normalizedSector]) || {};
+    const skipDirectorApproval = adminConfig.skipDirectorApproval === true;
     sw.setSectorFlow(db, dbm.setMeta, dbm.getMeta, sectorCode, {
-      approvalStatus: 'draft',
+      approvalStatus: skipDirectorApproval ? 'approve1' : 'draft',
       reportingSubmitted: true
     });
     const registry = sw.getSectorRegistry(db, dbm.getMeta, allProjects);
@@ -317,7 +335,7 @@ app.post('/api/sectors/:code/submit-approval', (req, res) => {
       fieldName: 'sector_submit',
       fieldCN: '板块提交审批',
       oldVal: '',
-      newVal: versionKey,
+      newVal: skipDirectorApproval ? versionKey + '（跳过总监初审）' : versionKey,
       userId: role || 'sector_admin',
       userName: userName || '板块管理员'
     });
@@ -462,7 +480,7 @@ function applyDevSeedAfterImport(reportingMonth, sourceFile) {
 }
 
 function resetWorkflowMeta(db) {
-  dbm.clearLockOverride(db);
+  dbm.resetLockStatus(db);
   dbm.setMeta(db, 'approvalStatus', 'draft');
   dbm.setMeta(db, 'reportingSubmitted', false);
   dbm.setMeta(db, 'pmSubmissions', {});
@@ -635,6 +653,7 @@ app.get('/api/admin/users', (_req, res) => {
     res.json({
       users: dbm.getMeta(db, 'users', dbm.DEFAULT_USERS),
       groupRegistry: dbm.getMeta(db, 'groupRegistry', dbm.DEFAULT_GROUP_REGISTRY),
+      sectorAdmins: dbm.getMeta(db, 'sectorAdmins', dbm.DEFAULT_SECTOR_ADMINS),
       sectorRegistry: dbm.getBootstrapState(db).sectorRegistry
     });
   } catch (e) {
@@ -655,23 +674,72 @@ app.patch('/api/admin/users', (req, res) => {
     if (body.groupRegistry != null) {
       dbm.setMeta(db, 'groupRegistry', body.groupRegistry);
     }
+    if (body.sectorAdmins != null) {
+      if (!body.sectorAdmins || typeof body.sectorAdmins !== 'object' || Array.isArray(body.sectorAdmins)) {
+        res.status(400).json({ error: 'sectorAdmins 必须为对象' });
+        return;
+      }
+      dbm.setMeta(db, 'sectorAdmins', body.sectorAdmins);
+    }
     const actor = body.user || {};
+    const sectorAdminCount = body.sectorAdmins ? Object.keys(body.sectorAdmins).length : 0;
     dbm.pushAudit(db, {
       id: Date.now() + '_users_' + Math.random().toString(36).slice(2, 6),
       timestamp: new Date().toISOString(),
       operation_type: 'user_config',
       projectNo: '—',
       projectName: '用户权限',
-      fieldName: 'users',
-      fieldCN: '用户与权限配置',
+      fieldName: body.sectorAdmins ? 'sectorAdmins' : 'users',
+      fieldCN: body.sectorAdmins ? '板块管理员配置' : '用户与权限配置',
       oldVal: '—',
-      newVal: (body.users && body.users.length) ? body.users.length + ' 用户' : '群配置更新',
+      newVal: body.sectorAdmins
+        ? sectorAdminCount + ' 个板块配置'
+        : ((body.users && body.users.length) ? body.users.length + ' 用户' : '群配置更新'),
       userId: actor.role || 'system_admin',
       userName: actor.name || '系统管理员'
     });
     res.json({ ok: true, state: dbm.getBootstrapState(db) });
   } catch (e) {
     res.status(500).json({ error: String(e.message) });
+  }
+});
+
+/** 字段字典：读写 fields.json + 同步 fields-data.js（仅系统管理员） */
+app.get('/api/admin/fields', (_req, res) => {
+  try {
+    const fields = fieldDict.readFields();
+    res.json({ fields, count: fields.length });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message) });
+  }
+});
+
+app.put('/api/admin/fields', (req, res) => {
+  try {
+    const body = req.body || {};
+    const fields = body.fields;
+    if (!Array.isArray(fields)) {
+      res.status(400).json({ error: 'fields 必须为数组' });
+      return;
+    }
+    const result = fieldDict.writeFields(fields);
+    const actor = body.user || {};
+    dbm.pushAudit(db, {
+      id: Date.now() + '_fields_' + Math.random().toString(36).slice(2, 6),
+      timestamp: new Date().toISOString(),
+      operation_type: 'field_dictionary',
+      projectNo: '—',
+      projectName: '字段字典',
+      fieldName: 'fields.json',
+      fieldCN: '字段字典',
+      oldVal: '—',
+      newVal: result.count + ' 个字段',
+      userId: actor.role || 'system_admin',
+      userName: actor.name || '系统管理员'
+    });
+    res.json({ ok: true, count: result.count, fields: fieldDict.readFields() });
+  } catch (e) {
+    res.status(e.status || 400).json({ error: String(e.message) });
   }
 });
 

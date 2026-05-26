@@ -22,6 +22,7 @@
     reminderDay:  19,
     lockDay:      25,
     unlockDay:    9,
+    autoUnlockEnabled: false,
     reportingMonth: '2026-05',
     systemYear: 2026
   };
@@ -45,8 +46,14 @@
     const year = now.getFullYear();
     const month = now.getMonth() + 1;
     const [ry, rm] = (config.reportingMonth || '2026-05').split('-').map(Number);
-    const isCurrentMonth = (year === ry && month === rm);
-    if (isCurrentMonth && day >= config.lockDay) return 'locked';
+    const nowMonthIndex = year * 12 + month;
+    const reportingMonthIndex = ry * 12 + rm;
+    if (nowMonthIndex === reportingMonthIndex) {
+      return day >= config.lockDay ? 'locked' : 'open';
+    }
+    if (nowMonthIndex === reportingMonthIndex + 1) {
+      return config.autoUnlockEnabled === true && day >= config.unlockDay ? 'open' : 'locked';
+    }
     return 'open';
   }
 
@@ -111,6 +118,9 @@
     systemDataSyncMeta: null,
     users: [],
     groupRegistry: {},
+    sectorAdmins: {},
+    /** 83 字段字典（与项目追踪表同源，bootstrap 加载） */
+    fieldDictionary: [],
     auditLog: [],
     sidebarCollapsed: !!lsGet(LS_KEY_SIDEBAR, false),
     editorViewMode: 'all',
@@ -147,11 +157,82 @@
     Store.systemDataSyncMeta = d.systemDataSyncMeta || null;
     Store.users = d.users || [];
     Store.groupRegistry = d.groupRegistry || {};
+    Store.sectorAdmins = d.sectorAdmins || {};
+    if (d.fieldDictionary && d.fieldDictionary.length) {
+      Store.applyFieldDictionary(d.fieldDictionary);
+    }
     if (Store.currentUser && Store.currentUser.role !== 'system_admin') {
       Store.auditLog.splice(0, Store.auditLog.length);
     }
     Store._hydrated = true;
   }
+
+  /** 更新全局字段字典（项目追踪表与表头配置页共用） */
+  Store.applyFieldDictionary = function (fields) {
+    const copy = JSON.parse(JSON.stringify(fields || []));
+    Store.fieldDictionary.splice(0, Store.fieldDictionary.length, ...copy);
+    window.FIELD_DICTIONARY = copy;
+  };
+
+  /** 静态资源根路径（与 Express 静态托管一致） */
+  function staticBase() {
+    return window.PTRACK_API_BASE != null ? window.PTRACK_API_BASE : '';
+  }
+
+  /**
+   * 确保字段字典已加载（bootstrap → API → 静态 fields.json / fields-data.js）
+   * 兼容未重启的旧版服务端（无 fieldDictionary / 无 /api/fields）
+   */
+  Store.ensureFieldDictionary = async function () {
+    if (Store.fieldDictionary.length) return Store.fieldDictionary;
+
+    const apiPaths = ['/fields', '/admin/fields'];
+    for (let i = 0; i < apiPaths.length; i++) {
+      try {
+        const fd = await apiFetch(apiPaths[i]);
+        if (fd && fd.fields && fd.fields.length) {
+          Store.applyFieldDictionary(fd.fields);
+          return Store.fieldDictionary;
+        }
+      } catch (e) { /* try next */ }
+    }
+
+    const base = staticBase();
+    try {
+      const r = await fetch(base + '/config/fields/fields.json');
+      if (r.ok) {
+        const fields = await r.json();
+        if (Array.isArray(fields) && fields.length) {
+          Store.applyFieldDictionary(fields);
+          return Store.fieldDictionary;
+        }
+      }
+    } catch (e) { /* fallback below */ }
+
+    await new Promise(function (resolve, reject) {
+      if (window.FIELD_DICTIONARY && window.FIELD_DICTIONARY.length) {
+        Store.applyFieldDictionary(window.FIELD_DICTIONARY);
+        resolve();
+        return;
+      }
+      const s = document.createElement('script');
+      s.src = base + '/config/fields/fields-data.js';
+      s.onload = function () {
+        if (window.FIELD_DICTIONARY && window.FIELD_DICTIONARY.length) {
+          Store.applyFieldDictionary(window.FIELD_DICTIONARY);
+          resolve();
+        } else {
+          reject(new Error('fields-data.js 未导出 FIELD_DICTIONARY'));
+        }
+      };
+      s.onerror = function () {
+        reject(new Error('无法加载 config/fields/fields-data.js'));
+      };
+      document.head.appendChild(s);
+    });
+
+    return Store.fieldDictionary;
+  };
 
   function applyStateFromApi(d) {
     if (!d) return;
@@ -187,6 +268,10 @@
   Store.init = async function () {
     const d = await apiFetch('/bootstrap');
     applyBootstrap(d);
+    await Store.ensureFieldDictionary();
+    if (!Store.fieldDictionary.length) {
+      throw new Error('字段字典加载失败，请重启 npm start 并确认 config/fields/fields.json 存在');
+    }
   };
 
   Store.reseedFromInit = async function () {
@@ -493,6 +578,23 @@
 
   Store.getMonthIdx = function () {
     return FormulaEngine.getMonthIdx(Store.reportingMonth);
+  };
+
+  Store.fetchFieldDictionary = async function () {
+    if (Store.fieldDictionary.length) {
+      return { fields: JSON.parse(JSON.stringify(Store.fieldDictionary)), count: Store.fieldDictionary.length };
+    }
+    return apiFetch('/fields');
+  };
+
+  Store.saveFieldDictionary = async function (fields, user) {
+    const d = await apiFetch('/admin/fields', {
+      method: 'PUT',
+      body: { fields: fields, user: user || Store.currentUser }
+    });
+    const fresh = (d && d.fields) ? d.fields : (await apiFetch('/fields')).fields;
+    if (fresh && fresh.length) Store.applyFieldDictionary(fresh);
+    return d;
   };
 
   window.Store = Store;

@@ -1,5 +1,5 @@
 /**
- * Login.js — 角色卡片选择登录页
+ * Login.js — 原型演示登录页；上线后由平台统一鉴权并带入角色权限
  */
 (function (window) {
   'use strict';
@@ -9,7 +9,7 @@
       id: 'system_admin',
       name: '系统管理员',
       icon: 'el-icon-s-tools',
-      desc: '全字段编辑 · 锁定/解锁 · 用户管理',
+      desc: '全字段编辑 · 锁定/解锁 · 系统配置',
       color: '#007069'
     },
     {
@@ -139,8 +139,9 @@
 
         <transition name="el-fade-in" v-if="step === 1">
           <div>
-            <div style="color:rgba(255,255,255,0.45);font-size:13px;text-align:center;margin-bottom:24px;">
-              请选择您的角色身份进入系统
+            <div style="color:rgba(255,255,255,0.45);font-size:13px;text-align:center;margin-bottom:24px;line-height:1.7;">
+              原型演示：请选择身份进入系统<br>
+              上线后将由平台统一登录与全局权限自动识别，无需在本系统切换角色
             </div>
             <div class="role-grid">
               <div

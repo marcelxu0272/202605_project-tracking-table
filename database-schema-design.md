@@ -1,6 +1,6 @@
 # 数据库表结构设计说明
 
-> **关联文档：** [database-schema.sql](./database-schema.sql) | [线上化需求.md](./线上化需求.md) | [字段字典](../fields.json)
+> **关联文档：** [database-schema.sql](./database-schema.sql) | [线上化需求.md](./docs/需求文档/线上化需求.md) | [字段字典](./config/fields/fields.json)
 > **版本：** v1.0 (2026-05-20)
 > **数据库：** SQLite 3 (ptrack.sqlite)
 

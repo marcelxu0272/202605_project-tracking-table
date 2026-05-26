@@ -229,7 +229,7 @@
           <i class="el-icon-document-checked"></i>
           <div>暂无操作日志</div>
           <div style="font-size:12px;color:#94a3b8;margin-top:4px;">
-            在填报表格中进行数据修改后，操作记录将自动显示于此
+            在项目追踪表中进行数据修改后，操作记录将自动显示于此
           </div>
         </div>
       </div>

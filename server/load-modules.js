@@ -8,6 +8,7 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
+const fieldDict = require('./fields/dictionary');
 
 function loadBrowserScripts() {
   const ctx = { console };
@@ -15,7 +16,7 @@ function loadBrowserScripts() {
   vm.createContext(ctx);
 
   const files = [
-    path.join(ROOT, 'fields-data.js'),
+    fieldDict.FIELDS_DATA_JS,
     path.join(ROOT, 'js', 'formula-engine.js'),
     path.join(ROOT, 'js', 'field-config.js'),
     path.join(ROOT, 'js', 'system-ref-meta.js'),

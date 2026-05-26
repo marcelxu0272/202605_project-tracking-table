@@ -20,7 +20,7 @@
       key: 'approve1',
       label: 'Approve1',
       title: '板块总监初审',
-      desc: '板块总监审核通过，生成 Approve1 版快照',
+      desc: '板块总监审核通过；若板块管理员同时为总监，则此节点自动跳过',
       role: ['sector_director'],
       action: '初审通过',
       icon: '2'
@@ -29,7 +29,7 @@
       key: 'approve2',
       label: 'Approve2',
       title: '项目群群主复审',
-      desc: '项目群群主审核确认，生成 Approve2 版快照',
+      desc: '项目群群主审核确认后，本板块审批完成',
       role: ['group_leader'],
       action: '复审通过',
       icon: '3'

@@ -5,8 +5,10 @@
   "description": "项目执行跟踪平台 — Express + SQLite API",
   "scripts": {
     "start": "node server/index.js",
+    "test": "node --test \"test/**/*.test.js\"",
     "patch:init-alerts": "node server/patch-init-xlsx-alerts.js",
-    "export:init-xlsx": "node server/export-init-xlsx.js"
+    "export:init-xlsx": "node server/export-init-xlsx.js",
+    "sync:fields": "python config/fields/sync-fields.py"
   },
   "dependencies": {
     "better-sqlite3": "^11.7.0",

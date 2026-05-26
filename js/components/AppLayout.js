@@ -16,9 +16,10 @@
   const APPROVAL_ONLY_ROLES = ['sector_director', 'group_leader'];
 
   const NAV_ITEMS = [
-    { path: '/editor',    icon: 'el-icon-s-grid',        label: '填报表格', hideForRoles: APPROVAL_ONLY_ROLES },
+    { path: '/editor',    icon: 'el-icon-s-grid',        label: '项目追踪表', hideForRoles: APPROVAL_ONLY_ROLES },
     { path: '/approval',  icon: 'el-icon-s-check',       label: '审批流程', hideForRoles: ['pm', 'executive_viewer'] },
     { path: '/audit',     icon: 'el-icon-document',      label: '审计日志', auditOnly: true },
+    { path: '/fields',    icon: 'el-icon-s-grid',        label: '表头配置', adminOnly: true },
     { path: '/admin',     icon: 'el-icon-setting',       label: '管理设置', adminOnly: true }
   ];
 

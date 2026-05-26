@@ -118,7 +118,7 @@
     if (companyArchived) return '公司已归档';
     const f = flow || defaultSectorFlow();
     if (f.approvalStatus === 'approve2') return '已完成审批';
-    if (f.approvalStatus === 'approve1') return FLOW_LABELS.approve1 + ' 进行中';
+    if (f.approvalStatus === 'approve1') return FLOW_LABELS.approve2 + ' 进行中';
     if (f.reportingSubmitted) return '总监初审 进行中';
     return FLOW_LABELS.draft + ' 进行中';
   }

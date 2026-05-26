@@ -63,6 +63,7 @@ const DEFAULT_PERIOD_CONFIG = {
   reminderDay: 19,
   lockDay: 25,
   unlockDay: 9,
+  autoUnlockEnabled: false,
   reportingMonth: '2026-05',
   systemYear: 2026,
   platformSyncHour: 2
@@ -74,6 +75,8 @@ const DEFAULT_GROUP_REGISTRY = {
     sectors: ['SAS520', 'SAS560', 'SAS550', 'SAS530']
   }
 };
+
+const DEFAULT_SECTOR_ADMINS = {};
 
 const DEFAULT_USERS = [
   { id: 'u_admin', name: '管理员 Admin', role: 'system_admin', status: 'active' },
@@ -121,8 +124,14 @@ function _calcLockStatus(periodConfig) {
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
   const [ry, rm] = (periodConfig.reportingMonth || '2026-05').split('-').map(Number);
-  const isCurrentMonth = (year === ry && month === rm);
-  if (isCurrentMonth && day >= periodConfig.lockDay) return 'locked';
+  const nowMonthIndex = year * 12 + month;
+  const reportingMonthIndex = ry * 12 + rm;
+  if (nowMonthIndex === reportingMonthIndex) {
+    return day >= periodConfig.lockDay ? 'locked' : 'open';
+  }
+  if (nowMonthIndex === reportingMonthIndex + 1) {
+    return periodConfig.autoUnlockEnabled === true && day >= periodConfig.unlockDay ? 'open' : 'locked';
+  }
   return 'open';
 }
 
@@ -148,6 +157,9 @@ function ensureDefaultMeta(db) {
   }
   if (getMeta(db, 'groupRegistry', null) === null) {
     setMeta(db, 'groupRegistry', DEFAULT_GROUP_REGISTRY);
+  }
+  if (getMeta(db, 'sectorAdmins', null) === null) {
+    setMeta(db, 'sectorAdmins', DEFAULT_SECTOR_ADMINS);
   }
   if (getMeta(db, 'newExistingClassYear', null) === null) {
     const rm = getMeta(db, 'reportingMonth') || DEFAULT_PERIOD_CONFIG.reportingMonth;
@@ -183,11 +195,11 @@ function getBootstrapState(db) {
   ensureDefaultMeta(db);
   const periodConfig = Object.assign({}, DEFAULT_PERIOD_CONFIG, getMeta(db, 'periodConfig') || {});
   const reportingMonth = getMeta(db, 'reportingMonth') || periodConfig.reportingMonth;
-  const lockOverride = getMeta(db, 'lockStatus', null);
-  const lockStatus = lockOverride != null
-    ? _normalizeLockStatus(lockOverride, periodConfig)
+  const storedLockStatus = getMeta(db, 'lockStatus', null);
+  const lockStatus = storedLockStatus != null
+    ? _normalizeLockStatus(storedLockStatus, periodConfig)
     : _calcLockStatus(periodConfig);
-  if (lockOverride === 'finance_only') {
+  if (storedLockStatus === 'finance_only') {
     setMeta(db, 'lockStatus', 'open');
   }
   const financeReviewReminder = _isFinanceReviewReminder(periodConfig);
@@ -248,7 +260,8 @@ function getBootstrapState(db) {
     systemDataSyncedAt: getMeta(db, 'systemDataSyncedAt', null),
     systemDataSyncMeta: getMeta(db, 'systemDataSyncMeta', null),
     users: getMeta(db, 'users', DEFAULT_USERS),
-    groupRegistry: getMeta(db, 'groupRegistry', DEFAULT_GROUP_REGISTRY)
+    groupRegistry: getMeta(db, 'groupRegistry', DEFAULT_GROUP_REGISTRY),
+    sectorAdmins: getMeta(db, 'sectorAdmins', DEFAULT_SECTOR_ADMINS)
   };
 }
 
@@ -286,7 +299,7 @@ function clearAudit(db) {
   db.prepare('DELETE FROM audit_log').run();
 }
 
-function clearLockOverride(db) {
+function resetLockStatus(db) {
   db.prepare('DELETE FROM meta WHERE key = ?').run('lockStatus');
 }
 
@@ -295,7 +308,7 @@ function resetDevMeta(db) {
   const pc = Object.assign({}, DEFAULT_PERIOD_CONFIG);
   setMeta(db, 'periodConfig', pc);
   setMeta(db, 'reportingMonth', pc.reportingMonth);
-  clearLockOverride(db);
+  resetLockStatus(db);
   clearAudit(db);
   clearSnapshots(db);
   ['baselineVersion', 'latestIVersion', 'latestJVersion', 'priorMonthSnapshotVersion', 'sectorLatestDVersion']
@@ -316,9 +329,9 @@ function resetDevMeta(db) {
 function getEffectiveLockStatus(db) {
   ensureDefaultMeta(db);
   const periodConfig = Object.assign({}, DEFAULT_PERIOD_CONFIG, getMeta(db, 'periodConfig') || {});
-  const lockOverride = getMeta(db, 'lockStatus', null);
-  return lockOverride != null
-    ? _normalizeLockStatus(lockOverride, periodConfig)
+  const storedLockStatus = getMeta(db, 'lockStatus', null);
+  return storedLockStatus != null
+    ? _normalizeLockStatus(storedLockStatus, periodConfig)
     : _calcLockStatus(periodConfig);
 }
 
@@ -446,12 +459,13 @@ module.exports = {
   putSnapshot,
   clearSnapshots,
   clearAudit,
-  clearLockOverride,
+  resetLockStatus,
   resetDevMeta,
   ensureDefaultMeta,
   DEFAULT_PERIOD_CONFIG,
   DEFAULT_USERS,
   DEFAULT_GROUP_REGISTRY,
+  DEFAULT_SECTOR_ADMINS,
   _calcLockStatus,
   countTimesheetEntries,
   replaceProjectTimesheet,

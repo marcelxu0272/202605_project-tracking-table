@@ -124,12 +124,20 @@
   /**
    * 构建增强后的字段配置列表（含权限信息 + 列索引）
    */
+  function getFieldDictionary() {
+    if (window.Store && Store.fieldDictionary && Store.fieldDictionary.length) {
+      return Store.fieldDictionary;
+    }
+    return window.FIELD_DICTIONARY || [];
+  }
+
   function buildFieldConfig() {
-    if (!window.FIELD_DICTIONARY) {
-      console.error('field-config: FIELD_DICTIONARY 未加载');
+    const dict = getFieldDictionary();
+    if (!dict.length) {
+      console.error('field-config: 字段字典未加载');
       return [];
     }
-    return window.FIELD_DICTIONARY.map((f, idx) => {
+    return dict.map((f, idx) => {
       const isManual = f.source_type === 'manual_input';
       const isAmount = f.data_type === '金额';
       return Object.assign({}, f, {

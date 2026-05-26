@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "hooks": {
+    "postToolUse": [
+      {
+        "command": "node .cursor/hooks/remind-requirements-docs.js postToolUse"
+      }
+    ],
+    "stop": [
+      {
+        "command": "node .cursor/hooks/remind-requirements-docs.js stop",
+        "loop_limit": 1
+      }
+    ]
+  }
+}

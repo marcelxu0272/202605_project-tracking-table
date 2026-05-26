@@ -1,5 +1,5 @@
 /**
- * ProjectEditor.js — 填报表格（Luckysheet 默认；经典 HTML 表格代码保留，UI 已隐藏）
+ * ProjectEditor.js — 项目追踪表（Luckysheet 默认；经典 HTML 表格代码保留，UI 已隐藏）
  * 权限控制 + diff高亮 + 视图筛选 + 公式联动
  */
 (function (window) {
@@ -80,6 +80,7 @@
         importLoading: false,
         exportLoading: false,
         syncLoading: false,
+        clearCompletionLoading: false,
         showDiffHint: true,
         viewingVersion: '__current__',
         snapshotLoading: false,
@@ -110,12 +111,15 @@
     },
     mounted() {
       const self = this;
-      this.tableFields = FieldConfig.buildFieldConfig();
-      this.buildTableData();
-      if (self.activeTab === 'luckysheet') {
-        self.$nextTick(function () { self.initLuckysheet(); });
-      }
-      this.$nextTick(function () { this.setupLuckysheetResizeObserver(); }.bind(this));
+      this._unwatchFields = this.$watch(
+        function () { return Store.fieldDictionary; },
+        function () {
+          if (!Store.fieldDictionary.length) return;
+          self.syncEditorFromFieldDictionary(!self.luckysheetReady);
+        },
+        { deep: true }
+      );
+      this.syncEditorFromFieldDictionary(true);
       this._unwatchSidebar = this.$watch(
         function () { return Store.sidebarCollapsed; },
         function () { this.resizeLuckysheetLayout(); }.bind(this)
@@ -155,6 +159,10 @@
         this._unwatchSidebar();
         this._unwatchSidebar = null;
       }
+      if (this._unwatchFields) {
+        this._unwatchFields();
+        this._unwatchFields = null;
+      }
       this.destroyLuckysheet();
     },
     watch: {
@@ -181,6 +189,22 @@
       },
     },
     methods: {
+      /** 字段字典就绪后重建表格 / Luckysheet（避免空表头） */
+      syncEditorFromFieldDictionary: function (initLuckysheet) {
+        if (!Store.fieldDictionary.length) return;
+        this.tableFields = FieldConfig.buildFieldConfig();
+        this.buildTableData();
+        if (this.activeTab !== 'luckysheet') return;
+        var self = this;
+        this.$nextTick(function () {
+          if (initLuckysheet || !self.luckysheetReady) {
+            self.initLuckysheet();
+          } else {
+            self.refreshLuckysheet();
+          }
+          self.setupLuckysheetResizeObserver();
+        });
+      },
       buildTableData() {
         const source = (this.isViewingSnapshot && this.snapshotProjects)
           ? this.snapshotProjects
@@ -1155,6 +1179,88 @@
           }
         }).finally(function () {
           self.syncLoading = false;
+        });
+      },
+
+      currentMonthCompletionField() {
+        const col = FieldConfig.MC_COLS[this.monthIdx];
+        if (!col) return null;
+        return this.tableFields.find(function (field) { return field.col === col; }) || null;
+      },
+
+      async handleClearCurrentMonthCompletion() {
+        if (!this.canClearCurrentMonthCompletion) return;
+        const field = this.currentMonthCompletionField();
+        if (!field) return;
+        const self = this;
+        const buildCandidates = function () {
+          return self.scopedProjects.map(function (p) { return self.getStoreProject(p.project_no) || p; }).filter(function (p) {
+            const flat = FieldConfig.arraysToFlat(p);
+            const key = FieldConfig.COL_TO_KEY[field.col];
+            const val = Number(flat[key] || 0);
+            return Math.abs(val) > 1e-6;
+          });
+        };
+        const candidates = buildCandidates();
+        if (!candidates.length) {
+          this.$message.info('当前可编辑范围内，当月完成额已为 0');
+          return;
+        }
+        this.$confirm(
+          '将把当前可编辑范围内 ' + candidates.length + ' 个项目的「' + field.name_cn + '」清零。该批量操作会合并为一条审计记录，是否继续？',
+          '清零当月完成额确认',
+          { confirmButtonText: '确认清零', cancelButtonText: '取消', type: 'warning' }
+        ).then(function () {
+          self.clearCompletionLoading = true;
+          return self.flushLuckysheetToStore()
+            .then(function () {
+              var chain = Promise.resolve();
+              var changedCount = 0;
+              var oldTotal = 0;
+              const key = FieldConfig.COL_TO_KEY[field.col];
+              buildCandidates().forEach(function (project) {
+                chain = chain.then(function () {
+                  const fresh = self.getStoreProject(project.project_no) || project;
+                  const flat = FieldConfig.arraysToFlat(fresh);
+                  const oldVal = Number(flat[key] || 0);
+                  if (Math.abs(oldVal) <= 1e-6) return null;
+                  oldTotal += oldVal;
+                  changedCount += 1;
+                  flat[key] = 0;
+                  const updated = FieldConfig.flatToArrays(flat);
+                  const recomputed = FormulaEngine.compute(updated, self.monthIdx);
+                  recomputed._field_change_log = fresh._field_change_log || {};
+                  recomputed._changed_fields = (fresh._changed_fields || []).slice();
+                  if (recomputed._changed_fields.indexOf(field.col) < 0) {
+                    recomputed._changed_fields.push(field.col);
+                  }
+                  return Store.updateProject(recomputed);
+                });
+              });
+              return chain.then(function () {
+                if (!changedCount) return null;
+                return Store.addAuditLog({
+                  projectNo: '—',
+                  projectName: '批量清零当月完成额',
+                  fieldName: 'clear_current_month_completion',
+                  fieldCN: field.name_cn,
+                  oldVal: changedCount + ' 个项目，合计 ' + Formatters.formatAmount(oldTotal),
+                  newVal: '0',
+                  userId: self.user.role,
+                  userName: self.user.name
+                });
+              });
+            });
+        }).then(function () {
+          self.buildTableData();
+          self.$nextTick(function () { self.refreshLuckysheet(); });
+          self.$message.success('已清零当前范围内的当月完成额');
+        }).catch(function (e) {
+          if (e !== 'cancel' && e !== 'close') {
+            self.$message.error('清零失败：' + (e.message || e));
+          }
+        }).finally(function () {
+          self.clearCompletionLoading = false;
         });
       },
       getRowClass(project) {
@@ -2418,6 +2524,14 @@
               :loading="exportLoading"
               @click="handleExport"
             >导出 Excel</el-button>
+            <el-button
+              v-if="canShowClearCompletionButton"
+              size="small"
+              icon="el-icon-delete"
+              :loading="clearCompletionLoading"
+              :disabled="!canClearCurrentMonthCompletion"
+              @click="handleClearCurrentMonthCompletion"
+            >清零当月完成额</el-button>
             <template v-if="canImport">
               <input
                 ref="importFileInput"
@@ -2779,6 +2893,16 @@
       canShowRefreshButton() {
         return !this.isViewingSnapshot &&
           (this.user.role === 'system_admin' || this.user.role === 'sector_admin');
+      },
+      canShowClearCompletionButton() {
+        if (this.isViewingSnapshot) return false;
+        return ['system_admin', 'sector_admin', 'pm'].indexOf(this.user.role) >= 0;
+      },
+      canClearCurrentMonthCompletion() {
+        if (!this.canShowClearCompletionButton) return false;
+        if (!this.canEdit) return false;
+        const field = this.currentMonthCompletionField();
+        return !!(field && this.canEditField(field));
       },
 
       // 通用：提交按钮是否显示（PM 和板块管理员；查看快照时隐藏）
