@@ -1,7 +1,7 @@
 import openpyxl
 import re
 
-file_path = r"C:\Work\1_Projects\202605_项目追踪表线上化\S520_金山中心_项目执行跟踪详细数据2026年05月.xlsx"
+file_path = r"C:\Work\1_Projects\202605_项目追踪表线上化\S520_金山中心_项目执行追踪详细数据2026年05月.xlsx"
 wb = openpyxl.load_workbook(file_path)
 ws = wb.active
 

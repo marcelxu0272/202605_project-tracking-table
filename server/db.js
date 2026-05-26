@@ -282,6 +282,27 @@ function upsertProject(db, project) {
     .run(project.project_no, JSON.stringify(project));
 }
 
+function clearProjectChangeTracking(db) {
+  const rows = db.prepare('SELECT project_no, payload FROM projects').all();
+  const update = db.prepare('UPDATE projects SET payload = ? WHERE project_no = ?');
+  const run = db.transaction(function () {
+    rows.forEach(function (row) {
+      let project;
+      try {
+        project = JSON.parse(row.payload);
+      } catch {
+        return;
+      }
+      delete project._field_change_log;
+      project._changed_fields = [];
+      project._added_this_month = false;
+      project._added_since_baseline = false;
+      update.run(JSON.stringify(project), row.project_no);
+    });
+  });
+  run();
+}
+
 function pushAudit(db, record) {
   db.prepare('INSERT INTO audit_log (id, payload) VALUES (?, ?)').run(record.id, JSON.stringify(record));
 }
@@ -477,6 +498,7 @@ module.exports = {
   getEffectiveLockStatus,
   replaceAllProjects,
   upsertProject,
+  clearProjectChangeTracking,
   pushAudit,
   putSnapshot,
   clearSnapshots,

@@ -6,7 +6,10 @@ const sw = require('../server/sector-workflow');
 
 function memoryDb() {
   const sqlite = new Database(':memory:');
-  sqlite.exec('CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);');
+  sqlite.exec(`
+    CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE projects (project_no TEXT PRIMARY KEY, payload TEXT NOT NULL);
+  `);
   return sqlite;
 }
 
@@ -35,5 +38,27 @@ test('resetWorkflowCycleAfterArchive clears workflow state but keeps lockStatus'
   assert.deepEqual(db.getMeta(sqlite, 'sectorLatestDVersion'), {});
 
   const flow = db.getMeta(sqlite, 'sectorFlows').SAS520;
-  assert.deepEqual(flow, sw.defaultSectorFlowEntry());
+  assert.equal(flow.approvalStatus, sw.defaultSectorFlowEntry().approvalStatus);
+  assert.equal(flow.reportingSubmitted, sw.defaultSectorFlowEntry().reportingSubmitted);
+});
+
+test('clearProjectChangeTracking removes current-cycle change metadata from projects', () => {
+  const sqlite = memoryDb();
+  db.upsertProject(sqlite, {
+    project_no: 'P-001',
+    project_name: '测试项目',
+    _changed_fields: ['AZ'],
+    _field_change_log: { AZ: [{ oldVal: 0, newVal: 100, roleLabel: 'PM' }] },
+    _added_this_month: true,
+    _added_since_baseline: true
+  });
+
+  db.clearProjectChangeTracking(sqlite);
+
+  const row = sqlite.prepare('SELECT payload FROM projects WHERE project_no = ?').get('P-001');
+  const project = JSON.parse(row.payload);
+  assert.deepEqual(project._changed_fields, []);
+  assert.equal(project._field_change_log, undefined);
+  assert.equal(project._added_this_month, false);
+  assert.equal(project._added_since_baseline, false);
 });

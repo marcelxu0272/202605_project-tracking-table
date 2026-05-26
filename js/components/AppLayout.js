@@ -80,7 +80,7 @@
       },
       pageTitle() {
         const item = NAV_ITEMS.find(n => this.activePath === n.path);
-        return item ? item.label : '项目执行跟踪平台';
+        return item ? item.label : '项目执行追踪平台';
       },
       reportingMonth() { return Store.reportingMonth; },
       sidebarCollapsed() { return Store.sidebarCollapsed; }
@@ -136,9 +136,9 @@
         <aside class="app-sidebar" :class="{ 'is-collapsed': sidebarCollapsed }">
           <div class="sidebar-logo">
             <div v-if="!sidebarCollapsed" class="sidebar-logo-text">
-              金山中心<br><span>项目执行跟踪</span>
+              项目执行追踪
             </div>
-            <div v-else class="sidebar-logo-mark" title="金山中心 · 项目执行跟踪">金</div>
+            <div v-else class="sidebar-logo-mark" title="项目执行追踪">项</div>
           </div>
           <div class="sidebar-nav">
             <el-menu

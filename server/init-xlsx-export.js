@@ -14,7 +14,7 @@ function resolveInitXlsxCandidates() {
   return [
     env && path.isAbsolute(env) ? env : env && path.join(ROOT, env),
     DEFAULT_INIT_XLSX,
-    path.join(ROOT, 'S520_金山中心_项目执行跟踪详细数据2026年05月.xlsx')
+    path.join(ROOT, 'S520_金山中心_项目执行追踪详细数据2026年05月.xlsx')
   ].filter(Boolean);
 }
 

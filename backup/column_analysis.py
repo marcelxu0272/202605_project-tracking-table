@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
 
-xlsx_path = r"C:\Work\1_Projects\202605_项目追踪表线上化\S520_金山中心_项目执行跟踪详细数据2026年05月.xlsx"
+xlsx_path = r"C:\Work\1_Projects\202605_项目追踪表线上化\S520_金山中心_项目执行追踪详细数据2026年05月.xlsx"
 output_path = r"C:\Work\1_Projects\202605_项目追踪表线上化\column_analysis.txt"
 
 df = pd.read_excel(xlsx_path, sheet_name='S520', header=None)

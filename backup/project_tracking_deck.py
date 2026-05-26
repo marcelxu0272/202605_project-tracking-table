@@ -112,7 +112,7 @@ def main():
 
     # 1. Cover
     s = blank_slide(prs)
-    add_text(s, "项目执行跟踪表线上化方案", Inches(1), Inches(2.2), Inches(11.33), Inches(1.5),
+    add_text(s, "项目执行追踪表线上化方案", Inches(1), Inches(2.2), Inches(11.33), Inches(1.5),
              font=SERIF, size=44, color=NEAR_BLACK, align=PP_ALIGN.CENTER)
     add_line(s, Inches(6.17), Inches(4.0), Inches(1), weight_pt=1.5)
     add_text(s, "多角色协同 · 审批闭环 · 动态管控", Inches(1), Inches(4.3), Inches(11.33), Inches(0.8),

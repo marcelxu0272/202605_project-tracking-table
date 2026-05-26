@@ -2,7 +2,7 @@
   "name": "project-track-platform",
   "private": true,
   "version": "1.0.0",
-  "description": "项目执行跟踪平台 — Express + SQLite API",
+  "description": "项目执行追踪平台 — Express + SQLite API",
   "scripts": {
     "start": "node server/index.js",
     "test": "node --test \"test/**/*.test.js\"",

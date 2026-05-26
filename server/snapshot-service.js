@@ -18,6 +18,17 @@ function cloneProjectsForSnapshot(projects) {
   return (projects || []).map(stripEphemeralMeta);
 }
 
+function stripViewOnlyMeta(p) {
+  const copy = JSON.parse(JSON.stringify(p));
+  copy._added_this_month = false;
+  copy._added_since_baseline = false;
+  return copy;
+}
+
+function cloneProjectsForBusinessSnapshot(projects) {
+  return (projects || []).map(stripViewOnlyMeta);
+}
+
 function formatDateYmd(date) {
   const d = date instanceof Date ? date : new Date(date || Date.now());
   const y = d.getFullYear();
@@ -116,7 +127,7 @@ function createDraftSnapshot(db, sectorCode, projects, user) {
     sector: code,
     scope: { kind: 'sector', code },
     label: buildLabel(STAGE.DRAFT, dateYmd, code, seq),
-    projects: cloneProjectsForSnapshot(subset)
+    projects: cloneProjectsForBusinessSnapshot(subset)
   };
   putSnapshotRecord(db, snap);
   const latestBySector = dbm.getMeta(db, 'sectorLatestDVersion', {}) || {};
@@ -138,7 +149,7 @@ function createFinalSnapshot(db, projects, user) {
     reportingMonth,
     scope: { kind: 'company', code: 'ALL' },
     label: buildLabel(STAGE.FINAL, dateYmd, 'ALL', seq),
-    projects: cloneProjectsForSnapshot(projects)
+    projects: cloneProjectsForBusinessSnapshot(projects)
   };
   putSnapshotRecord(db, snap);
   dbm.setMeta(db, 'latestJVersion', version);
@@ -266,6 +277,7 @@ module.exports = {
   STAGE,
   stripEphemeralMeta,
   cloneProjectsForSnapshot,
+  cloneProjectsForBusinessSnapshot,
   buildVersionKey,
   createImportSnapshot,
   createDraftSnapshot,

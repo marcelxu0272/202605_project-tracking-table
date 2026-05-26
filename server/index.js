@@ -425,6 +425,7 @@ app.post('/api/company/archive', (req, res) => {
       role: role || 'system_admin'
     });
     const snap = result.snap;
+    dbm.clearProjectChangeTracking(db);
     dbm.resetWorkflowCycleAfterArchive(db);
     dbm.pushAudit(db, {
       id: Date.now() + '_' + Math.random().toString(36).slice(2, 6),
