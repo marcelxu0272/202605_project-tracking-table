@@ -326,6 +326,28 @@ function resetDevMeta(db) {
   setMeta(db, 'sectorRegistry', registry);
 }
 
+/** J 版归档成功后：流程态归零进入新一轮（不改 lockStatus，不清快照/项目） */
+function resetWorkflowCycleAfterArchive(db) {
+  ensureDefaultMeta(db);
+  setMeta(db, 'approvalStatus', 'draft');
+  setMeta(db, 'reportingSubmitted', false);
+  setMeta(db, 'pmSubmissions', {});
+  setMeta(db, 'companyFlow', { archiveStatus: 'pending', archivedAt: null });
+  setMeta(db, 'sectorLatestDVersion', {});
+  db.prepare('DELETE FROM meta WHERE key = ?').run('priorMonthSnapshotVersion');
+  const registry = getMeta(db, 'sectorRegistry', null);
+  const codes = Array.isArray(registry) && registry.length
+    ? registry.slice()
+    : sw.DEFAULT_SECTOR_REGISTRY.slice();
+  const flows = {};
+  codes.forEach(function (code) {
+    if (code && !String(code).startsWith('_')) {
+      flows[code] = sw.defaultSectorFlowEntry();
+    }
+  });
+  setMeta(db, 'sectorFlows', flows);
+}
+
 function getEffectiveLockStatus(db) {
   ensureDefaultMeta(db);
   const periodConfig = Object.assign({}, DEFAULT_PERIOD_CONFIG, getMeta(db, 'periodConfig') || {});
@@ -460,6 +482,7 @@ module.exports = {
   clearSnapshots,
   clearAudit,
   resetLockStatus,
+  resetWorkflowCycleAfterArchive,
   resetDevMeta,
   ensureDefaultMeta,
   DEFAULT_PERIOD_CONFIG,
