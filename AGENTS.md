@@ -1,7 +1,7 @@
 # 📁 项目追踪表线上化 — 目录说明
 
 > **项目目标：** 将项目执行追踪 Excel 表的填写、汇总、统计与展示线上化  
-> **最后更新：** 2026-05-26
+> **最后更新：** 2026-05-27
 
 ---
 
@@ -63,6 +63,12 @@ npm run sync:fields
 | `PTRACK_PLATFORM_API_URL` | — | 平台同步真实 API（未实现时勿配置，使用 stub） |
 | `PTRACK_TIMESHEET_DIR` | `docs/参考数据` | 工时 xlsx 导入目录 |
 | `PTRACK_COST_DIR` | 同左 | 成本 xlsx 导入目录 |
+| `PTRACK_SMTP_HOST` | — | SMTP 服务器地址（空则不启用邮件提醒） |
+| `PTRACK_SMTP_PORT` | `587` | SMTP 端口 |
+| `PTRACK_SMTP_SECURE` | `false` | SMTP 是否使用 TLS |
+| `PTRACK_SMTP_USER` | — | SMTP 发件账号 |
+| `PTRACK_SMTP_PASS` | — | SMTP 发件密码或应用专用密码 |
+| `PTRACK_SMTP_FROM` | 取 `PTRACK_SMTP_USER` | 发件人显示名 + 地址 |
 
 ### 重置与重导数据
 
@@ -127,6 +133,8 @@ npm run sync:fields
 | `server/dev-reset-seed.js` | 🔧 开发重置 | ~3KB | 重置后写 I 版 baseline（排除 demo 新增项目号）；预警演示数据。 |
 | `server/alert-demo-seed.js` | 🔧 预警演示 | ~3KB | 重导/重置后为 4 条项目注入 R/S、完成额 vs 工时预警场景及演示工时。 |
 | `server/patch-init-xlsx-alerts.js` | 🔧 初始化补丁 | ~2KB | `npm run patch:init-alerts` 将预警演示字段写回 `初始数据.xlsx`。 |
+| `server/mailer.js` | 📧 SMTP 传输层 | ~3KB | nodemailer 封装；懒初始化 transporter；`isEmailEnabled` / `sendMail`。 |
+| `server/email-reminder.js` | 📧 邮件提醒 | ~10KB | 填报提醒日 + 锁定倒计时邮件；板块数据聚合；模板生成；审计记录。 |
 | `server/fields/dictionary.js` | 📄 字段字典 | ~2KB | 读写 `config/fields/fields.json` 并同步 `fields-data.js`。 |
 
 ### `css/` 样式
@@ -167,13 +175,17 @@ npm run sync:fields
 | `js/views/Approval.js` | ✅ 审批流程 | ~15KB | 流程进度时间轴；总监/群主/其他角色差异化视图。 |
 | `js/views/AuditLog.js` | 📋 审计日志 | ~9KB | 多维筛选 + 导出。 |
 | `js/field-dictionary/FieldManager.js` | 📄 表头配置 | ~12KB | 竖向字段列表；仅 `name_cn` 可编辑（`system_admin`）。 |
-| `js/views/AdminSettings.js` | ⚙️ 管理设置 | ~18KB | 周期、锁定、导入、用户列表。 |
+| `js/views/AdminSettings.js` | ⚙️ 管理设置 | ~18KB | 周期、锁定、导入、板块管理员配置（平台用户下拉）。 |
 
 ### `test/` 测试
 
 | 文件 | 类型 | 说明 |
 |---|---|---|
 | `test/lock-status.test.js` | ✅ Node 测试 | 覆盖月度锁定与可选自动解锁规则（默认关闭，开启后按解禁日开放）。 |
+| `test/archive-workflow-reset.test.js` | ✅ Node 测试 | 覆盖 J 版归档后流程态归零、当前周期变更元数据清理。 |
+| `test/snapshot-change-log.test.js` | ✅ Node 测试 | 覆盖 D/J 快照保留变更记录、I 版快照清理临时变更标记。 |
+| `test/sector-admin-skip-director.test.js` | ✅ Node 测试 | 覆盖板块管理员兼任总监时由平台用户权限自动跳过总监初审。 |
+| `test/email-reminder.test.js` | ✅ Node 测试 | 覆盖邮件提醒场景判断、收件人解析、防重逻辑、板块数据聚合。 |
 
 ### `docs/` 文档（已整理）
 
@@ -190,6 +202,7 @@ npm run sync:fields
 | `docs/设计文档/DESIGN.md` | 🎨 设计系统 | Wood 工程平台视觉语言、品牌色 `#007069`、组件与布局原则。 |
 | `docs/设计文档/LIST_FORM.md` | 📋 列表表单规范 | 筛选、表格、分页、表单弹窗交互标准。 |
 | `docs/设计文档/DASHBOARD.md` | 📊 看板规范（归档） | 原数据看板设计参考；**当前版本已移除看板页**，运营看板另立项目。 |
+| `docs/设计文档/EMAIL_REMINDER.md` | 📧 邮件提醒设计 | 邮件提醒功能设计文档：SMTP 集成、定时任务、邮件模板、审计集成、配置扩展。 |
 | **会议记录/** | 📝 | 业务讨论原始记录 |
 | `docs/会议记录/产值报告线上化讨论_精修版.md` | 📝 会议记录 | 产值报告线上化讨论精修全文。 |
 
@@ -321,5 +334,8 @@ docs/
 **可不更新需求文档的情况：** 纯文案/样式微调、依赖升级、注释、测试脚本、与本系统功能无关的文档整理。
 
 **自动化提醒：** 项目已配置 Cursor Hook（`.cursor/hooks.json`）——编辑业务代码后 Agent 会收到同步提醒；会话结束前若两文档未随代码一起更新，会追加 follow-up。详见 `.cursor/hooks/remind-requirements-docs.js`。
+
+---
+---
 
 ---

@@ -1,0 +1,942 @@
+# 邮件提醒功能设计文档
+
+> **功能状态：** 待实现（设计文档，上线后由开发团队完成）  
+> **最后更新：** 2026-05-27  
+> **关联需求：** 需求文档_产品版 §月度时间窗节点、需求文档_开发版 §月度节奏
+
+---
+
+## 目录
+
+1. [功能概述](#1-功能概述)
+2. [技术方案 — 模块架构](#2-技术方案--模块架构)
+3. [Nodemailer 集成与 SMTP 配置](#3-nodemailer-集成与-smtp-配置)
+4. [定时任务设计](#4-定时任务设计)
+5. [邮件内容模板](#5-邮件内容模板)
+6. [数据聚合 — 板块维度统计](#6-数据聚合--板块维度统计)
+7. [收件人解析](#7-收件人解析)
+8. [配置扩展](#8-配置扩展)
+9. [审计日志集成](#9-审计日志集成)
+10. [错误处理与重试策略](#10-错误处理与重试策略)
+11. [测试验证方案](#11-测试验证方案)
+12. [文件变更清单](#12-文件变更清单)
+
+---
+
+## 1. 功能概述
+
+### 1.1 场景描述
+
+系统在月度填报周期内自动发送邮件提醒给各板块管理员，覆盖两个场景：
+
+| 场景 | 触发条件 | 默认日期 | 说明 |
+|---|---|---|---|
+| **填报提醒** | 当日 = `periodConfig.reminderDay` 且填报开放 | 每月 19 日 | 通知板块管理员督促 PM 完成填报 |
+| **锁定倒计时** | 当日 = `periodConfig.lockDay` − `lockCountdownDaysBefore` | 每月 22 日（锁定日 25 − 3 天） | 针对**未完成审批的板块**，根据审批流当前位置通知对应角色（板块管理员/总监/群主） |
+
+### 1.2 约束边界
+
+- **发送渠道**：仅 SMTP 邮件，不含钉钉/企业微信等即时通讯
+- **接收人**：
+  - **场景一（填报提醒）**：仅为各板块配置的板块管理员（`meta.sectorAdmins` 中对应用户）
+  - **场景二（锁定倒计时）**：仅针对**未完成审批流程的板块**，根据审批流当前位置通知对应角色（详见 §7）：
+    - `draft`（未提交）→ 板块管理员
+    - `approve1`（总监审批中）→ 板块总监
+    - `approve2`（群主审批中）→ 项目群群主
+    - 已完成审批 → 不发送
+- **触发方式**：仅系统自动定时触发，不含手动触发（"一键催办"为独立功能，不在本文档范围）
+- **前端界面**：无。首版纯后端实现，通过环境变量与数据库 meta 配置
+
+### 1.3 用户故事
+
+> 作为**板块管理员**，我希望在每月填报提醒日收到一封邮件，告诉我所负责板块的项目填报进度和预警情况，以便我及时督促未填报的项目经理完成数据提交。
+>
+> 作为**板块管理员**，我希望在月度锁定日前收到倒计时提醒邮件，让我知道距离数据冻结还有多少天，以便我抓紧完成板块汇总和审批提交。
+>
+> 作为**板块总监**，我希望在月度锁定日前收到倒计时提醒邮件（当我的板块处于总监审批阶段时），提醒我尽快完成审批。
+>
+> 作为**项目群群主**，我希望在月度锁定日前收到倒计时提醒邮件（当我的板块处于群主审批阶段时），提醒我尽快完成终审。
+
+---
+
+## 2. 技术方案 — 模块架构
+
+### 2.1 新增模块
+
+在 `server/` 下新增两个模块，与现有 `platform-sync.js` 平级：
+
+```
+server/
+├── mailer.js              ← 新建：SMTP 传输层（nodemailer 封装）
+├── email-reminder.js      ← 新建：邮件提醒业务逻辑（场景判断 + 数据聚合 + 模板 + 审计）
+├── index.js               ← 修改：新增 scheduleEmailReminder() 定时任务
+├── db.js                  ← 修改：DEFAULT_PERIOD_CONFIG 补充字段
+├── load-modules.js        ← 修改：扩展 vm 加载列表
+└── ...（其他不变）
+```
+
+### 2.2 调用链路
+
+```
+scheduleEmailReminder()（server/index.js — 定时任务入口）
+  │
+  ├─ resolveTodayScenario(now, periodConfig, lockStatus)
+  │    → 返回 null | 'reminder' | 'lock_countdown'
+  │
+  ├─ checkLastSent(db, dbm, scenario, reportingMonth, today)
+  │    → 读取 meta.emailReminderLastSent，防止重启后重复发送
+  │
+  ├─ if (!mailer.isEmailEnabled())
+  │    → 写审计日志 skipped，return
+  │
+  ├─ resolveRecipients(db, dbm, scenario)
+  │    → 场景一：匹配所有板块管理员邮箱
+  │    → 场景二：仅匹配**未完成审批板块**的当前审批位置对应角色邮箱
+  │      （draft→板块管理员 / approve1→板块总监 / approve2→群主）
+  │
+  ├─ for each recipient:
+  │    ├─ buildSectorDigest(db, dbm, modules, sectorCode, reportingMonth)
+  │    │    → 聚合板块项目统计（项目数/PM提交率/预警数）
+  │    ├─ buildEmailContent(scenario, sectorDigest, globalDigest)
+  │    │    → 生成邮件 HTML + 纯文本
+  │    └─ mailer.sendMail(transporter, { to, subject, html, text })
+  │         → 返回 { accepted, rejected, messageId }
+  │
+  └─ dbm.pushAudit(db, auditRecord)
+       → 记录发送结果（含每个收件人的 accepted/rejected 状态）
+```
+
+### 2.3 模块职责划分
+
+| 模块 | 职责 | 依赖 |
+|---|---|---|
+| `server/mailer.js` | nodemailer 实例化、SMTP 配置解析、`sendMail`、`isEmailEnabled` | nodemailer、环境变量 |
+| `server/email-reminder.js` | 场景判断、场景感知收件人解析（填报提醒→板块管理员；锁定倒计时→按审批流位置匹配角色）、板块数据聚合、邮件模板生成（按角色差异）、审计记录写入 | mailer、db.js、load-modules.js |
+| `server/index.js` | 定时任务调度（`scheduleEmailReminder`）| email-reminder |
+
+---
+
+## 3. Nodemailer 集成与 SMTP 配置
+
+### 3.1 依赖
+
+`package.json` 新增唯一运行时依赖：
+
+```json
+"nodemailer": "^6.9.0"
+```
+
+### 3.2 `server/mailer.js` 接口设计
+
+```javascript
+module.exports = {
+  isEmailEnabled,       // () → boolean：PTRACK_SMTP_HOST 是否已配置
+  createTransporter,    // (smtpConfig?) → nodemailer.Transporter（懒初始化）
+  sendMail,             // async (transporter, mailOptions) → { accepted, rejected, messageId }
+  verifyConnection      // async (transporter) → boolean：SMTP 连通性验证
+};
+```
+
+**懒初始化**：transporter 在首次调用 `createTransporter()` 时创建，而非模块加载时。SMTP 未配置时 `isEmailEnabled()` 返回 `false`，`createTransporter()` 返回 `null`。
+
+### 3.3 SMTP 环境变量
+
+| 环境变量 | 说明 | 默认值 |
+|---|---|---|
+| `PTRACK_SMTP_HOST` | SMTP 服务器地址 | 空（不启用邮件功能） |
+| `PTRACK_SMTP_PORT` | SMTP 端口 | `587` |
+| `PTRACK_SMTP_SECURE` | 是否使用 TLS（`true`/`false`） | `false`（STARTTLS on 587） |
+| `PTRACK_SMTP_USER` | 发件账号 | 空 |
+| `PTRACK_SMTP_PASS` | 发件密码或应用专用密码 | 空 |
+| `PTRACK_SMTP_FROM` | 发件人显示名 + 地址 | 取 `PTRACK_SMTP_USER` |
+
+示例（`.env` 或启动命令）：
+```bash
+PTRACK_SMTP_HOST=smtp.exmail.qq.com
+PTRACK_SMTP_PORT=465
+PTRACK_SMTP_SECURE=true
+PTRACK_SMTP_USER=ptrack@wood.cn
+PTRACK_SMTP_PASS=your_app_password
+PTRACK_SMTP_FROM="项目追踪平台 <ptrack@wood.cn>"
+```
+
+### 3.4 核心设计原则
+
+**当 `PTRACK_SMTP_HOST` 为空时，整个邮件功能静默禁用。**
+
+- 定时任务仍运行判断逻辑（场景识别、收件人解析）
+- 不实际调用 `sendMail`
+- 写审计日志标记为 `skipped`（`reason: 'SMTP not configured'`）
+- 不影响服务启动和其他功能
+
+这保证开发环境和无邮件需求的生产环境不受影响。
+
+### 3.5 超时保护
+
+在 transporter 配置中设置超时参数，防止 SMTP 服务器无响应导致定时任务阻塞：
+
+```javascript
+{
+  connectionTimeout: 10000,  // 10 秒连接超时
+  greetingTimeout: 10000,    // 10 秒握手超时
+  socketTimeout: 30000       // 30 秒通信超时
+}
+```
+
+---
+
+## 4. 定时任务设计
+
+### 4.1 调度策略
+
+完全复用 `scheduleDailyPlatformSync()` 的 `setInterval` + `lastRunDate` 防重模式（见 `server/index.js` 第 766–778 行）。
+
+在 `app.listen` 回调中，`scheduleDailyPlatformSync()` 之后新增调用 `scheduleEmailReminder()`：
+
+```javascript
+// server/index.js — app.listen 回调
+app.listen(PORT, () => {
+  console.log(`[ptrack] http://127.0.0.1:${PORT}/  | SQLite: ${dbm.DB_PATH}`);
+  scheduleDailyPlatformSync();
+  scheduleEmailReminder();     // ← 新增
+});
+```
+
+### 4.2 触发时间
+
+- 每 **60 秒** 检查一次（与平台同步一致）
+- 当 `now.getHours() === emailReminderHour` 时触发
+- `emailReminderHour` 默认取 `periodConfig.emailReminderHour`（默认 `3`），即凌晨 3 点
+- 设在平台同步（默认 2 点）之后 1 小时，确保平台数据已同步完成
+
+### 4.3 场景判断逻辑
+
+```javascript
+function resolveTodayScenario(now, periodConfig, lockStatus) {
+  const day = now.getDate();
+  const [ry, rm] = (periodConfig.reportingMonth || '').split('-').map(Number);
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+
+  // 仅报告月当月触发
+  if (year !== ry || month !== rm) return null;
+
+  // 场景一：填报提醒日
+  if (day === periodConfig.reminderDay && lockStatus === 'open') {
+    return 'reminder';
+  }
+
+  // 场景二：锁定倒计时
+  const countdownDay = periodConfig.lockDay - (periodConfig.lockCountdownDaysBefore || 3);
+  if (day === countdownDay) {
+    return 'lock_countdown';  // 无论锁定状态都发送
+  }
+
+  return null;
+}
+```
+
+**保护条件说明**：
+
+| 场景 | 已锁定时是否发送 | 理由 |
+|---|---|---|
+| 填报提醒 | 否 | 已锁定说明不需要再提醒填报 |
+| 锁定倒计时 | 是 | 即使已手动锁定，倒计时提醒仍有价值（让当前审批位置对应角色知道锁定日临近） |
+
+### 4.4 双重防重
+
+**进程级**：`lastRunDate` 变量（与平台同步一致），每次进程重启后重置。
+
+**数据库级**：`meta.emailReminderLastSent` 持久化记录，重启后仍有效。
+
+```javascript
+// meta.emailReminderLastSent 数据结构
+{
+  "reminder_2026-05": "2026-05-19",          // 填报提醒已在 5/19 发送
+  "lock_countdown_2026-05": "2026-05-22"     // 锁定倒计时已在 5/22 发送
+}
+```
+
+防重检查流程：
+1. `lastRunDate !== today` → 进程级通过
+2. `emailReminderLastSent[scenario + '_' + reportingMonth] !== today` → 数据库级通过
+3. 两者都通过后才执行发送
+4. 发送成功后立即更新 `emailReminderLastSent`
+
+---
+
+## 5. 邮件内容模板
+
+### 5.1 场景一：填报提醒日（默认 19 日）
+
+**邮件主题**：
+
+```
+[项目追踪] 月度填报提醒
+```
+
+**邮件正文**（HTML 版本）：
+
+```
+{adminName} 您好：
+
+本月度项目追踪表填报已开放，请于 25 日锁定前完成数据填报与汇总。
+
+请登录平台完成填报：
+{{填报功能链接}}
+
+—— 项目追踪平台自动发送
+```
+
+### 5.2 场景二：锁定倒计时（默认 22 日 = 锁定日 25 − 3 天）
+
+锁定倒计时邮件仅发送给**未完成审批流程的板块**的当前审批位置对应角色。根据收件人角色不同，邮件内容有所差异。
+
+**邮件主题**（所有角色统一）：
+
+```
+[项目追踪] 填报锁定倒计时 3 天
+```
+
+**邮件正文 — 板块管理员（approvalStatus = draft，未提交）**：
+
+```
+{adminName} 您好：
+
+您所负责的 {板块名称} 板块月度项目追踪表将于 25 日（周日）锁定。
+距今仅剩 3 天，您的板块尚未提交审批，请尽快完成数据汇总并提交。
+
+━━━━━━ 操作提醒 ━━━━━━
+
+  □ 督促未提交 PM 尽快填报
+  □ 处理预警项目（特别是存量合同为负的项目）
+  □ 完成板块汇总并提交审批
+
+平台地址：
+{{填报功能链接}}
+
+—— 项目追踪平台自动发送
+```
+
+**邮件正文 — 板块总监（approvalStatus = approve1，总监审批中）**：
+
+```
+{directorName} 您好：
+
+{板块名称} 板块月度项目追踪表将于 25 日（周日）锁定。
+距今仅剩 3 天，该板块已提交审批，正在等待您的审批。
+
+━━━━━━ 操作提醒 ━━━━━━
+
+  □ 登录平台完成总监审批
+
+平台地址：
+{{审批功能链接}}
+
+—— 项目追踪平台自动发送
+```
+
+**邮件正文 — 项目群群主（approvalStatus = approve2，群主审批中）**：
+
+```
+{leaderName} 您好：
+
+{板块名称} 板块月度项目追踪表将于 25 日（周日）锁定。
+距今仅剩 3 天，该板块已通过总监审批，正在等待您的终审。
+
+━━━━━━ 操作提醒 ━━━━━━
+
+  □ 登录平台完成群主终审
+
+平台地址：
+{{审批功能链接}}
+
+—— 项目追踪平台自动发送
+```
+
+### 5.3 模板实现方式
+
+- 在 `server/email-reminder.js` 内部用 **JS 模板字符串函数** 实现，不引入 Handlebars/Pug 等模板引擎
+- 场景二根据 `recipientRole` 选择不同模板函数（`buildAdminCountdownEmail` / `buildDirectorCountdownEmail` / `buildLeaderCountdownEmail`）
+- 输出 **HTML + 纯文本** 双版本（nodemailer 原生支持 `html` + `text` 字段）
+- HTML 使用内联样式，兼容主流邮件客户端（Outlook、Foxmail、Gmail 等）
+- 品牌色 `#007069`（来自 `docs/设计文档/DESIGN.md`）仅用于表头和重点数字高亮
+- 邮件主题前缀统一为 `[项目追踪]`，便于收件箱过滤规则
+
+### 5.4 全公司概要数据
+
+邮件中的全公司概要数据从以下来源聚合：
+
+| 数据项 | 来源 |
+|---|---|
+| 报告月份 | `meta.reportingMonth` |
+| 填报提醒日 / 锁定日 | `meta.periodConfig` |
+| 全公司项目总数 | `SELECT COUNT(*) FROM projects` |
+| 距锁定日天数 | `lockDay - today` 计算 |
+
+---
+
+## 6. 数据聚合 — 板块维度统计
+
+### 6.1 `buildSectorDigest` 函数
+
+```javascript
+function buildSectorDigest(db, dbm, modules, sectorCode, reportingMonth)
+```
+
+返回结构：
+
+```javascript
+{
+  sectorCode: 'SAS520',
+  sectorName: '金山中心',
+  totalProjects: 8,
+  pms: ['何孝刚', '宋建生'],
+  submittedPms: ['何孝刚'],
+  unsubmittedPms: ['宋建生'],
+  sectorFlow: {
+    approvalStatus: 'draft',        // draft | approve1 | approve2
+    reportingSubmitted: false
+  },
+  alerts: {
+    invoiceStockNeg: [{ projectNo, projectName }],
+    contractStockNeg: [{ projectNo, projectName }],
+    completionNoHours: [{ projectNo, projectName }],
+    hoursNoCompletion: [{ projectNo, projectName }]
+  },
+  alertCount: 3
+}
+```
+
+### 6.2 实现路径
+
+1. **板块项目过滤**：从 `projects` 表读取所有项目，按 `unit_code` 字段（板块编码）过滤出本板块项目
+2. **PM 提交状态**：从 `meta.pmSubmissions` 获取，结构为 `{ '2026-05': { '何孝刚': { submittedAt, projects } } }`
+3. **板块审批进度**：从 `meta.sectorFlows` 获取，结构为 `{ 'SAS520': { approvalStatus, submittedAt, ... } }`
+4. **预警计算**：复用前端预警逻辑（见下文 6.3）
+
+### 6.3 预警计算的服务端化
+
+当前 `js/stock-validation.js` 和 `js/project-alerts.js` 是浏览器 IIFE 脚本：
+
+```javascript
+// stock-validation.js
+(function(window) { 'use strict'; ... window.StockValidation = { ... }; })(window);
+
+// project-alerts.js
+(function(window) { 'use strict'; ... window.ProjectAlerts = { ... }; })(window);
+```
+
+**方案**：在 `server/load-modules.js` 的 `loadBrowserScripts()` 中追加加载这两个脚本。
+
+现有 `load-modules.js` 已加载 5 个前端脚本，其 vm 上下文设置了 `ctx.window = ctx`（第 15 行），因此 IIFE 中的 `window.StockValidation` 和 `window.ProjectAlerts` 可正常解析。
+
+**变更内容**（`server/load-modules.js`）：
+
+```javascript
+const files = [
+  fieldDict.FIELDS_DATA_JS,
+  path.join(ROOT, 'js', 'formula-engine.js'),
+  path.join(ROOT, 'js', 'field-config.js'),
+  path.join(ROOT, 'js', 'system-ref-meta.js'),
+  path.join(ROOT, 'js', 'new-existing-ref.js'),
+  path.join(ROOT, 'js', 'stock-validation.js'),   // ← 新增
+  path.join(ROOT, 'js', 'project-alerts.js')      // ← 新增
+];
+
+return {
+  FieldConfig: ctx.FieldConfig,
+  FormulaEngine: ctx.FormulaEngine,
+  SystemRefMeta: ctx.SystemRefMeta,
+  NewExistingRef: ctx.NewExistingRef,
+  FIELD_DICTIONARY: ctx.FIELD_DICTIONARY,
+  StockValidation: ctx.StockValidation,   // ← 新增
+  ProjectAlerts: ctx.ProjectAlerts         // ← 新增
+};
+```
+
+**注意**：`project-alerts.js` 中的 `getProjectAlerts()` 需要工时统计（`timesheetStats`）参数。在邮件提醒场景中，需要为每个项目调用 `server/timesheet-stats.js` 的 `buildTimesheetStats()` 获取工时数据，或传入 `timesheetReady: false` 跳过工时相关预警。建议首版采用后者（跳过工时预警），降低聚合复杂度，后续迭代中再补全。
+
+### 6.4 工时统计简化策略
+
+| 方案 | 描述 | 推荐 |
+|---|---|---|
+| 完整统计 | 为每个项目调用 `buildTimesheetStats(db, projectNo, year)` | 项目数多时性能开销大 |
+| **简化方案** | 调用 `getProjectAlerts(project, monthIdx, null, { timesheetReady: false })`，仅计算 R/S 存量预警 | **首版推荐** |
+
+简化方案下，邮件中仅展示 R/S 存量预警（2 类），工时相关预警（2 类）标记为"数据待平台加载"或不展示。
+
+---
+
+## 7. 收件人解析
+
+### 7.1 `resolveRecipients` 函数
+
+```javascript
+function resolveRecipients(db, dbm, scenario)
+```
+
+`scenario` 参数决定收件人解析策略：
+
+| 场景 | 策略 |
+|---|---|
+| `'reminder'` | 所有板块管理员（与 §1.1 场景一描述一致） |
+| `'lock_countdown'` | 仅未完成审批的板块，按审批流当前位置匹配对应角色 |
+
+### 7.2 场景一：填报提醒收件人解析
+
+1. 读取 `meta.sectorAdmins`（12 板块配置）：
+   ```javascript
+   { 'SAS520': { adminName: '周明', adminUserId: 'u_sa' }, ... }
+   ```
+2. 读取 `meta.users`（用户列表，见 `server/db.js` 第 81–91 行）
+3. 对每个板块，通过 `adminUserId` 在 users 中匹配找到对应用户
+4. 取用户的 `email` 字段
+5. 过滤掉无 email 的用户（静默跳过）
+6. 返回数组：
+   ```javascript
+   [{ sectorCode: 'SAS520', sectorName: '金山中心', recipientName: '周明', recipientEmail: 'zhou.ming@wood.cn', recipientRole: 'sector_admin' }, ...]
+   ```
+
+### 7.3 场景二：锁定倒计时收件人解析（按审批流位置）
+
+**核心逻辑**：读取 `meta.sectorFlows`，对每个板块检查 `approvalStatus`，仅对**未完成审批**的板块根据当前位置确定收件人角色，再从 `meta.users` 中匹配具体用户。
+
+**审批流位置 → 收件人映射**：
+
+| `approvalStatus` | 当前位置 | 收件人角色 | 匹配方式 |
+|---|---|---|---|
+| `draft` | 板块管理员（未提交） | `sector_admin` | 从 `meta.sectorAdmins[sectorCode].adminUserId` 匹配 users |
+| `approve1` | 板块总监审批中 | `sector_director` | 从 users 中找 `role: 'sector_director'` 且 `sector` 匹配的用户 |
+| `approve2` | 群主审批中 | `group_leader` | 从 users 中找 `role: 'group_leader'` 的用户（群主管全板块） |
+| ~~已完成~~ | — | — | 不发送提醒 |
+
+**伪代码**：
+
+```javascript
+function resolveLockCountdownRecipients(db, dbm) {
+  const sectorFlows = dbm.getMeta(db, 'sectorFlows') || {};
+  const sectorAdmins = dbm.getMeta(db, 'sectorAdmins') || {};
+  const users = dbm.getMeta(db, 'users') || [];
+  const recipients = [];
+  const skippedReasons = [];
+
+  for (const sectorCode of ALL_SECTOR_CODES) {
+    const flow = sectorFlows[sectorCode];
+    // 跳过已完成审批的板块
+    if (!flow || isApprovalCompleted(flow)) {
+      skippedReasons.push(`${sectorCode}: 审批已完成或无流程记录`);
+      continue;
+    }
+
+    const status = flow.approvalStatus; // 'draft' | 'approve1' | 'approve2'
+    let user = null;
+
+    if (status === 'draft') {
+      // 板块管理员
+      const admin = sectorAdmins[sectorCode];
+      if (admin) {
+        user = users.find(u => u.id === admin.adminUserId);
+      }
+    } else if (status === 'approve1') {
+      // 板块总监
+      user = users.find(u => u.role === 'sector_director' && normalizeSectorCode(u.sector) === sectorCode);
+    } else if (status === 'approve2') {
+      // 项目群群主
+      user = users.find(u => u.role === 'group_leader');
+    }
+
+    if (user && user.email) {
+      recipients.push({
+        sectorCode,
+        sectorName: SECTOR_NAMES[sectorCode],
+        recipientName: user.name,
+        recipientEmail: user.email,
+        recipientRole: user.role,
+        approvalStatus: status
+      });
+    } else {
+      skippedReasons.push(`${sectorCode}: ${status} 对应角色未配置或无email`);
+    }
+  }
+
+  return { recipients, skippedReasons };
+}
+```
+
+**"已完成审批"判定**：
+
+```javascript
+function isApprovalCompleted(flow) {
+  // sectorFlows 中 approvalStatus 走完 approve2 后，状态值待定
+  // 首版约定：reportingSubmitted === true 且 approvalStatus === 'approve2' 视为已完成
+  // 或由 sector-workflow.js 新增 isCompleted() 方法
+  return flow.reportingSubmitted === true && flow.approvalStatus === 'approve2';
+  // 注：如果后续增加了 'completed' 状态值，改为 flow.approvalStatus === 'completed'
+}
+```
+
+### 7.4 用户 email 字段扩展
+
+当前 `DEFAULT_USERS` 无 `email` 字段（`server/db.js` 第 81–91 行）。需扩展每个用户对象：
+
+```javascript
+{ id: 'u_sa', name: '运营总监 周明', role: 'sector_admin', sector: 'S520', status: 'active', email: '' }
+```
+
+所有 `DEFAULT_USERS` 成员增加 `email: ''` 默认值。
+
+**维护方式**：
+- **近期**：系统管理员在管理设置的用户配置中手动维护 email（`PATCH /api/admin/users` 的 body 中新增 email 字段）
+- **远期**：上线后从平台全局用户信息自动带入
+
+### 7.5 未配置收件人的板块
+
+若某板块在当前审批位置找不到对应用户（如总监角色未分配、板块管理员未配置），该板块跳过，不报错。审计日志中记录在 `skippedReasons` 中。
+
+---
+
+## 8. 配置扩展
+
+### 8.1 `periodConfig` 新增字段
+
+在 `server/db.js` 的 `DEFAULT_PERIOD_CONFIG`（第 62–70 行）中新增：
+
+```javascript
+const DEFAULT_PERIOD_CONFIG = {
+  reminderDay: 19,
+  lockDay: 25,
+  unlockDay: 9,
+  autoUnlockEnabled: false,
+  reportingMonth: '2026-05',
+  systemYear: 2026,
+  platformSyncHour: 2,
+  // —— 以下为新增字段 ——
+  emailReminderEnabled: true,       // 邮件提醒总开关
+  emailReminderHour: 3,             // 邮件发送小时（24h 制），默认凌晨 3 点
+  lockCountdownDaysBefore: 3        // 锁定日前 N 天发送倒计时提醒
+};
+```
+
+| 字段 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `emailReminderEnabled` | boolean | `true` | 邮件提醒总开关。设为 `false` 后定时任务跳过所有邮件发送 |
+| `emailReminderHour` | number | `3` | 邮件发送小时（0–23）。建议设在平台同步时间（`platformSyncHour`）之后 |
+| `lockCountdownDaysBefore` | number | `3` | 锁定日前 N 天发送倒计时提醒。不直接配置"倒计时日"，而是从 `lockDay` 动态计算 |
+
+### 8.2 前端管理设置（未来扩展）
+
+当前首版不提供前端配置界面。未来可在 `js/views/AdminSettings.js` 的「填报周期配置」卡片中新增：
+
+- 「邮件提醒开关」（`emailReminderEnabled`）：el-switch
+- 「邮件发送时间」（`emailReminderHour`）：el-input-number，0–23
+- 「锁定倒计时天数」（`lockCountdownDaysBefore`）：el-input-number，1–7
+
+这些与现有的「填报提醒日」「月度锁定日」配置项并列。
+
+### 8.3 环境变量汇总
+
+在现有环境变量基础上新增 SMTP 相关变量（见 §3.3）：
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `PTRACK_SMTP_HOST` | — | SMTP 服务器（空则不启用邮件） |
+| `PTRACK_SMTP_PORT` | `587` | SMTP 端口 |
+| `PTRACK_SMTP_SECURE` | `false` | TLS |
+| `PTRACK_SMTP_USER` | — | 发件账号 |
+| `PTRACK_SMTP_PASS` | — | 发件密码 |
+| `PTRACK_SMTP_FROM` | 取 `PTRACK_SMTP_USER` | 发件人显示名 |
+
+---
+
+## 9. 审计日志集成
+
+### 9.1 审计记录格式
+
+每次邮件发送行为都写入 `audit_log` 表，复用 `dbm.pushAudit()`（与平台同步、PM 提交等操作一致）。
+
+**场景一（填报提醒）发送成功**：
+
+```javascript
+{
+  id: '{timestamp}_email_reminder_{random}',
+  timestamp: '2026-05-19T03:00:00Z',
+  operation_type: 'email_reminder',
+  projectNo: '—',
+  projectName: '全局',
+  fieldName: 'email_reminder_sent',
+  fieldCN: '填报提醒邮件',
+  oldVal: '',
+  newVal: JSON.stringify({
+    scenario: 'reminder',
+    reportingMonth: '2026-05',
+    recipientCount: 10,
+    recipients: [
+      { sector: 'SAS520', name: '周明', role: 'sector_admin', email: 'zhou.ming@wood.cn', status: 'accepted' },
+      { sector: 'SAS560', name: '李华', role: 'sector_admin', email: 'li.hua@wood.cn', status: 'accepted' },
+      { sector: 'SAS680', name: '王芳', role: 'sector_admin', email: 'invalid@', status: 'rejected', error: '...' }
+    ],
+    skippedReasons: ['SAS170: 管理员未配置email']
+  }),
+  userId: 'system',
+  userName: '定时任务'
+}
+```
+
+**场景二（锁定倒计时）发送成功**：
+
+```javascript
+{
+  id: '{timestamp}_email_reminder_{random}',
+  timestamp: '2026-05-22T03:00:00Z',
+  operation_type: 'email_reminder',
+  projectNo: '—',
+  projectName: '全局',
+  fieldName: 'email_lock_countdown_sent',
+  fieldCN: '锁定倒计时邮件',
+  oldVal: '',
+  newVal: JSON.stringify({
+    scenario: 'lock_countdown',
+    reportingMonth: '2026-05',
+    recipientCount: 5,
+    recipients: [
+      { sector: 'SAS520', name: '周明', role: 'sector_admin', approvalStatus: 'draft', email: 'zhou.ming@wood.cn', status: 'accepted' },
+      { sector: 'SAS560', name: '张伟', role: 'sector_director', approvalStatus: 'approve1', email: 'zhang.wei@wood.cn', status: 'accepted' },
+      { sector: 'SAS680', name: '刘强', role: 'group_leader', approvalStatus: 'approve2', email: 'liu.qiang@wood.cn', status: 'accepted' }
+    ],
+    skippedReasons: [
+      'SAS170: 审批已完成',
+      'SAS610: 审批已完成',
+      'SAS650: draft 对应角色未配置email'
+    ]
+  }),
+  userId: 'system',
+  userName: '定时任务'
+}
+```
+
+**SMTP 未配置/跳过**：
+
+```javascript
+{
+  fieldName: 'email_reminder_skipped',
+  fieldCN: '填报提醒邮件（跳过）',
+  newVal: JSON.stringify({
+    scenario: 'reminder',
+    reason: 'SMTP not configured'            // 或 'emailReminderEnabled is false'
+  })
+}
+```
+
+**发送失败**：
+
+```javascript
+{
+  fieldName: 'email_reminder_failed',
+  fieldCN: '填报提醒邮件（失败）',
+  newVal: JSON.stringify({
+    scenario: 'reminder',
+    error: 'connect ETIMEDOUT ...',
+    recipientCount: 0
+  })
+}
+```
+
+### 9.2 审计日志查询
+
+系统管理员可在审计日志页（`/#/audit`）通过 `operation_type: 'email_reminder'` 筛选查看所有邮件发送历史，包括：
+
+- 每次发送的时间、场景、收件人数
+- 每个收件人的发送状态（accepted/rejected）
+- 跳过原因和失败原因
+
+---
+
+## 10. 错误处理与重试策略
+
+### 10.1 错误分级
+
+| 级别 | 场景 | 处理方式 |
+|---|---|---|
+| **静默跳过** | SMTP 未配置（`PTRACK_SMTP_HOST` 为空） | 写审计日志 `skipped`，不重试，不报错 |
+| **开关关闭** | `emailReminderEnabled === false` | 写审计日志 `skipped`，不发送 |
+| **警告跳过** | 当前审批位置对应角色未配置 email | 该收件人跳过，其他人正常发送，审计日志记录 `skippedReasons` |
+| **已完成跳过** | 锁定倒计时场景：板块已完成审批 | 该板块不发送，审计日志记录 `skippedReasons` |
+| **单条失败** | nodemailer 对某收件人返回 rejected | 继续发送其他收件人，审计日志记录每个收件人的 accepted/rejected 状态 |
+| **全局失败** | SMTP 连接失败、transporter 初始化异常 | catch 后写审计日志 `failed`，`console.warn`，当次不重试 |
+
+### 10.2 重试策略
+
+**首版不做自动重试。** 理由：
+
+- 邮件是提醒性质，非关键业务路径
+- 月度周期仅触发 2 次（提醒日 + 倒计时日），重试收益低
+- 审计日志已完整记录失败原因，系统管理员可手动排查
+- 下一月度周期会自动触发新一轮发送
+
+**未来扩展**：可在 `emailReminderLastSent` 中增加 `retryCount` 字段，配合下一个 60 秒检查周期实现有限重试（最多 3 次，间隔 1 小时）。
+
+### 10.3 日志输出
+
+所有邮件相关日志统一使用 `[ptrack:email]` 前缀，与现有 `[ptrack]` 前缀保持层级关系：
+
+```
+[ptrack:email] 填报提醒邮件发送完成：10 accepted, 1 rejected, 1 skipped
+[ptrack:email] 锁定倒计时邮件发送完成：5 accepted, 0 rejected, 7 skipped (审批已完成)
+[ptrack:email] SMTP 未配置，跳过邮件发送
+[ptrack:email] 板块 SAS170 管理员未配置 email，跳过
+[ptrack:email] 板块 SAS610 审批已完成，跳过倒计时提醒
+```
+
+---
+
+## 11. 测试验证方案
+
+### 11.1 单元测试
+
+新建 `test/email-reminder.test.js`，遵循现有测试模式（`node:test` + `node:assert/strict` + 内存 SQLite，与 `test/lock-status.test.js` 一致）。
+
+**测试用例**：
+
+| 编号 | 测试项 | 验证点 |
+|---|---|---|
+| T1 | `resolveTodayScenario` — 提醒日 | `reminderDay=19`，日期 5/19，月份匹配 → `'reminder'` |
+| T2 | `resolveTodayScenario` — 非提醒日 | 日期 5/18 → `null` |
+| T3 | `resolveTodayScenario` — 已锁定时的提醒日 | 日期 5/19 但 `lockStatus='locked'` → `null` |
+| T4 | `resolveTodayScenario` — 锁定倒计时 | `lockDay=25`，`lockCountdownDaysBefore=3`，日期 5/22 → `'lock_countdown'` |
+| T5 | `resolveTodayScenario` — 锁定倒计时（自定义天数） | `lockCountdownDaysBefore=5`，日期 5/20 → `'lock_countdown'` |
+| T6 | `resolveTodayScenario` — 锁定日当天 | 日期 5/25 → `null`（不发倒计时） |
+| T7 | `resolveTodayScenario` — 月份不匹配 | 日期 6/19 但 `reportingMonth='2026-05'` → `null` |
+| T8 | `resolveRecipients(reminder)` — 正常匹配 | 板块管理员有 email → 包含在返回列表，`recipientRole: 'sector_admin'` |
+| T9 | `resolveRecipients(reminder)` — 无 email | 板块管理员 email 为空 → 跳过，不报错 |
+| T10 | `resolveRecipients(reminder)` — userId 未找到 | `adminUserId` 在 users 中无匹配 → 跳过 |
+| T11 | `resolveRecipients(reminder)` — sectorAdmins 为空 | 返回空数组 |
+| T12 | 防重逻辑 | `emailReminderLastSent` 已有当天记录 → 不重复发送 |
+| T13 | `buildSectorDigest` — 板块统计 | 给定内存 SQLite 数据，验证项目数、PM 列表、预警数正确 |
+| T14 | `resolveRecipients(lock_countdown)` — draft 板块 | `sectorFlows.SAS520.approvalStatus = 'draft'` → 收件人为板块管理员，`recipientRole: 'sector_admin'` |
+| T15 | `resolveRecipients(lock_countdown)` — approve1 板块 | `sectorFlows.SAS560.approvalStatus = 'approve1'` → 收件人为该板块总监，`recipientRole: 'sector_director'` |
+| T16 | `resolveRecipients(lock_countdown)` — approve2 板块 | `sectorFlows.SAS680.approvalStatus = 'approve2'` → 收件人为群主，`recipientRole: 'group_leader'` |
+| T17 | `resolveRecipients(lock_countdown)` — 已完成审批 | `sectorFlows.SAS170` 已完成 → 不包含在收件人列表，记入 `skippedReasons` |
+| T18 | `resolveRecipients(lock_countdown)` — 对应角色无 email | 总监角色无 email → 跳过该板块，记入 `skippedReasons` |
+| T19 | `resolveRecipients(lock_countdown)` — 全部已完成 | 12 板块全部完成审批 → 返回空数组，不发送邮件 |
+
+### 11.2 SMTP 集成验证
+
+使用 **Ethereal Email**（nodemailer 官方提供的假 SMTP 服务）在开发环境验证完整发送链路：
+
+```bash
+PTRACK_SMTP_HOST=smtp.ethereal.email
+PTRACK_SMTP_PORT=587
+PTRACK_SMTP_USER=your_test@ethereal.email
+PTRACK_SMTP_PASS=your_test_password
+```
+
+Ethereal 会接收邮件但不投递到真实邮箱，可通过 `nodemailer.getTestMessageUrl(info)` 获取预览链接。
+
+### 11.3 验证矩阵
+
+| 验证项 | 方法 | 预期结果 |
+|---|---|---|
+| SMTP 未配置时静默跳过 | 不设环境变量，等待触发时间 | 审计日志 `skipped` |
+| 单收件人发送失败 | 配一个无效 email | 其他人正常，审计日志记录 rejected |
+| 板块无项目时仍发送 | 新建空板块 | 邮件中显示 0 项目、0 PM |
+| 已锁定时不发填报提醒 | 手动锁定后到提醒日 | 不触发 |
+| 倒计时不受锁定影响 | 手动锁定后到倒计时日 | 仍触发 |
+| 重启后不重复发送 | 触发后重启 `npm start` | `emailReminderLastSent` 阻止重复 |
+| 邮件开关关闭 | `emailReminderEnabled=false` | 不发送，审计日志 `skipped` |
+| 倒计时仅通知未完成板块 | 设 3 个板块分别为 draft/approve1/已完成 | 仅前 2 个板块收到邮件，已完成板块跳过 |
+| draft 板块通知管理员 | 板块 approvalStatus=draft | 收件人为板块管理员，角色 `sector_admin` |
+| approve1 板块通知总监 | 板块 approvalStatus=approve1 | 收件人为该板块总监，角色 `sector_director` |
+| approve2 板块通知群主 | 板块 approvalStatus=approve2 | 收件人为群主，角色 `group_leader` |
+
+### 11.4 手动触发（可选扩展，首版不实现）
+
+未来可增加 `POST /api/admin/test-email` 端点，让系统管理员手动触发一封测试邮件（发送到自己的邮箱），用于验证 SMTP 配置是否正确。
+
+---
+
+## 12. 文件变更清单
+
+### 12.1 新增文件
+
+| 文件 | 说明 | 估计行数 |
+|---|---|---|
+| `server/mailer.js` | SMTP 传输层封装（nodemailer 初始化、sendMail、isEmailEnabled、verifyConnection） | ~80 行 |
+| `server/email-reminder.js` | 邮件提醒业务逻辑（场景判断、场景感知收件人解析、板块聚合、多角色模板生成、审计记录） | ~350 行 |
+| `test/email-reminder.test.js` | 单元测试（场景判断、场景一/二收件人解析、防重、板块数据聚合） | ~200 行 |
+
+### 12.2 修改文件
+
+| 文件 | 变更内容 | 影响行数 |
+|---|---|---|
+| `package.json` | `dependencies` 新增 `"nodemailer": "^6.9.0"` | +1 行 |
+| `server/index.js` | 引入 `email-reminder` 模块；`app.listen` 回调中新增 `scheduleEmailReminder()` 调用 | ~5 行 |
+| `server/db.js` | `DEFAULT_PERIOD_CONFIG` 新增 3 个字段；`DEFAULT_USERS` 各用户新增 `email: ''` | ~15 行 |
+| `server/load-modules.js` | `files` 数组追加 `stock-validation.js` 和 `project-alerts.js`；返回值扩展 | ~5 行 |
+| `AGENTS.md` | 文件清单新增 `server/mailer.js` 和 `server/email-reminder.js`；环境变量表新增 SMTP 条目 | ~10 行 |
+
+### 12.3 不变文件
+
+- 前端全部文件（首版无前端界面）
+- `server/snapshot-service.js`、`server/sector-workflow.js`（仅读取其输出）
+- `server/platform-sync.js`（独立功能，不交叉）
+- `server/alert-demo-seed.js`、`js/project-alerts.js`（仅被 load-modules.js 引用，自身不修改）
+- `database-schema.sql`（邮件记录走审计日志，无需新表）
+
+### 12.4 实现顺序
+
+```
+Step 1: package.json 添加 nodemailer 依赖 → npm install
+    ↓
+Step 2: server/mailer.js — SMTP 封装（无外部依赖，可独立测试）
+    ↓
+Step 3: server/db.js — DEFAULT_PERIOD_CONFIG 和 DEFAULT_USERS 扩展
+    ↓
+Step 4: server/load-modules.js — 扩展 vm 加载列表
+    ↓
+Step 5: server/email-reminder.js — 核心业务逻辑
+    ├── 依赖 Step 2 (mailer)
+    ├── 依赖 Step 3 (periodConfig 新字段)
+    └── 依赖 Step 4 (modules.StockValidation / ProjectAlerts)
+    ↓
+Step 6: server/index.js — 接入定时任务
+    ↓
+Step 7: test/email-reminder.test.js — 单元测试
+    ↓
+Step 8: AGENTS.md + 需求文档更新
+```
+
+---
+
+## 附录 A：与现有预警系统的关系
+
+当前项目预警系统（`js/project-alerts.js`、`js/stock-validation.js`）围绕 4 类预警规则运作：
+
+| 预警类型 | ID | 检测条件 |
+|---|---|---|
+| 存量开票为负 | `invoice_stock_negative` | R = P − AC < 0 |
+| 存量合同为负 | `contract_stock_negative` | S = P − U < 0 |
+| 有完成额无工时 | `completion_no_hours` | 月度完成额 > EPS 且月度工时 < EPS |
+| 有工时无完成额 | `hours_no_completion` | 月度工时 > EPS 且月度完成额 < EPS |
+
+邮件提醒功能**复用**这些预警规则的计算结果（通过 `load-modules.js` 在服务端调用 `ProjectAlerts.getProjectAlerts()`），将预警统计作为邮件内容的一部分发送给板块管理员。邮件提醒**不修改**预警规则本身。
+
+## 附录 B：与现有定时任务的对比
+
+| 特性 | 平台数据同步 | 邮件提醒 |
+|---|---|---|
+| 入口函数 | `scheduleDailyPlatformSync()` | `scheduleEmailReminder()` |
+| 触发时间 | `platformSyncHour`（默认 02:00） | `emailReminderHour`（默认 03:00） |
+| 检查频率 | 每 60 秒 | 每 60 秒 |
+| 防重机制 | `lastRunDate`（进程级） | `lastRunDate` + `emailReminderLastSent`（进程级 + 数据库级） |
+| 锁定期行为 | 暂停同步 | 填报提醒不发送；锁定倒计时仍发送 |
+| 审计日志 | `operation_type: 'platform_sync'` | `operation_type: 'email_reminder'` |
+
+## 附录 C：潜在风险与缓解
+
+| 风险 | 影响 | 缓解措施 |
+|---|---|---|
+| 企业 SMTP 需要 NTLM/Kerberos 认证 | nodemailer 默认仅支持 PLAIN/LOGIN | 环境变量方案兼容标准 SMTP；企业 Exchange NTLM 需额外 `nodemailer-ntlm-auth`，首版不处理 |
+| 邮件被企业邮箱过滤为垃圾邮件 | 板块管理员收不到提醒 | 建议发件域配置 SPF/DKIM；邮件主题包含 `[项目追踪]` 前缀便于设置过滤规则 |
+| 服务部署在非 UTC 时区 | `now.getHours()` 可能不是预期时间 | 与平台同步一致使用服务器本地时间，文档注明 |
+| `loadBrowserScripts` 加载前端脚本缺少 `window` 方法 | `StockValidation` 内部可能调用 `window.FormulaEngine` | `load-modules.js` 的 `vm.createContext` 已设 `ctx.window = ctx`，IIFE 中可正常解析 |

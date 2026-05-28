@@ -318,7 +318,8 @@ app.post('/api/sectors/:code/submit-approval', (req, res) => {
     const normalizedSector = sw.normalizeSectorCode(sectorCode);
     const sectorAdmins = dbm.getMeta(db, 'sectorAdmins', dbm.DEFAULT_SECTOR_ADMINS);
     const adminConfig = (sectorAdmins && sectorAdmins[normalizedSector]) || {};
-    const skipDirectorApproval = adminConfig.skipDirectorApproval === true;
+    const users = dbm.getMeta(db, 'users', dbm.DEFAULT_USERS);
+    const skipDirectorApproval = sw.shouldSkipDirectorApproval(adminConfig, users, normalizedSector);
     sw.setSectorFlow(db, dbm.setMeta, dbm.getMeta, sectorCode, {
       approvalStatus: skipDirectorApproval ? 'approve1' : 'draft',
       reportingSubmitted: true
@@ -676,7 +677,15 @@ app.patch('/api/admin/users', (req, res) => {
         res.status(400).json({ error: 'sectorAdmins 必须为对象' });
         return;
       }
-      dbm.setMeta(db, 'sectorAdmins', body.sectorAdmins);
+      const sanitized = {};
+      Object.keys(body.sectorAdmins).forEach(function (code) {
+        const cfg = body.sectorAdmins[code] || {};
+        sanitized[sw.normalizeSectorCode(code)] = {
+          adminName: String(cfg.adminName || '').trim(),
+          adminUserId: String(cfg.adminUserId || '').trim()
+        };
+      });
+      dbm.setMeta(db, 'sectorAdmins', sanitized);
     }
     const actor = body.user || {};
     const sectorAdminCount = body.sectorAdmins ? Object.keys(body.sectorAdmins).length : 0;

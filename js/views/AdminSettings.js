@@ -34,6 +34,22 @@
           return { value: code, label: (Store.sectorNames && Store.sectorNames[code]) || code };
         });
       },
+      platformUserOptions() {
+        const seen = {};
+        return (Store.users || []).filter(function (u) {
+          return u && u.status !== 'disabled' && (u.id || u.name);
+        }).map(function (u) {
+          const id = u.id || u.name;
+          if (seen[id]) return null;
+          seen[id] = true;
+          return {
+            value: id,
+            label: u.name || id,
+            role: u.role || (Array.isArray(u.roles) ? u.roles.join(',') : ''),
+            sector: u.sector || u.sectorCode || ''
+          };
+        }).filter(Boolean);
+      },
       sectorAdminRows() {
         const config = this.sectorAdmins || {};
         return this.sectorOptions.map(function (o) {
@@ -42,8 +58,7 @@
             code: o.value,
             label: o.label,
             adminName: cfg.adminName || '',
-            adminUserId: cfg.adminUserId || '',
-            skipDirectorApproval: cfg.skipDirectorApproval === true
+            adminUserId: cfg.adminUserId || ''
           };
         });
       }
@@ -64,11 +79,31 @@
         const current = Object.assign({}, this.sectorAdmins[code] || {});
         Vue.set(this.sectorAdmins, code, Object.assign(current, patch || {}));
       },
+      selectSectorAdmin(code, userId) {
+        const hit = (Store.users || []).find(function (u) {
+          return String(u.id || u.name || '') === String(userId || '');
+        });
+        this.updateSectorAdmin(code, {
+          adminUserId: userId || '',
+          adminName: hit ? (hit.name || '') : ''
+        });
+      },
+      buildSectorAdminPayload() {
+        const payload = {};
+        Object.keys(this.sectorAdmins || {}).forEach(function (code) {
+          const cfg = this.sectorAdmins[code] || {};
+          payload[code] = {
+            adminName: cfg.adminName || '',
+            adminUserId: cfg.adminUserId || ''
+          };
+        }, this);
+        return payload;
+      },
       persistUsersConfig() {
         if (!this.isAdmin) return;
         this.userSaving = true;
         Store.saveUsersConfig({
-          sectorAdmins: this.sectorAdmins,
+          sectorAdmins: this.buildSectorAdminPayload(),
           user: this.user
         }).then(function () {
           this.$message.success('板块管理员配置已保存');
@@ -343,44 +378,37 @@
               </div>
               <div style="font-size:12px;color:#64748b;line-height:1.7;margin-bottom:12px;">
                 上线后，项目经理、经营管理、板块总监、项目群群主等角色由平台全局权限自动带入；本系统只维护各项目执行板块的板块管理员。
-                若某板块管理员同时具备该板块总监权限，则该板块提交审批后默认跳过总监初审，直接进入群主复审。
+                板块管理员从平台用户中选择；若所选用户同时具备该板块总监权限，系统在提交审批时自动跳过总监初审，直接进入群主复审。
               </div>
               <el-table :data="sectorAdminRows" size="mini" border style="width:100%;">
                 <el-table-column label="板块" prop="label" min-width="140"></el-table-column>
-                <el-table-column label="板块管理员" min-width="160">
+                <el-table-column label="板块管理员" min-width="220">
                   <template slot-scope="{row}">
-                    <el-input
+                    <el-select
                       size="mini"
-                      :disabled="!isAdmin"
-                      :value="row.adminName"
-                      placeholder="输入平台用户姓名"
-                      @input="updateSectorAdmin(row.code, { adminName: $event })"
-                    ></el-input>
-                  </template>
-                </el-table-column>
-                <el-table-column label="平台用户ID（可选）" min-width="150">
-                  <template slot-scope="{row}">
-                    <el-input
-                      size="mini"
+                      filterable
+                      clearable
+                      style="width:100%;"
                       :disabled="!isAdmin"
                       :value="row.adminUserId"
-                      placeholder="上线后可由平台用户ID填充"
-                      @input="updateSectorAdmin(row.code, { adminUserId: $event })"
-                    ></el-input>
-                  </template>
-                </el-table-column>
-                <el-table-column label="跳过总监初审" width="130">
-                  <template slot-scope="{row}">
-                    <el-switch
-                      :disabled="!isAdmin"
-                      :value="row.skipDirectorApproval"
-                      @change="updateSectorAdmin(row.code, { skipDirectorApproval: $event })"
-                    ></el-switch>
+                      placeholder="请选择平台用户"
+                      @change="selectSectorAdmin(row.code, $event)"
+                    >
+                      <el-option
+                        v-for="u in platformUserOptions"
+                        :key="u.value"
+                        :label="u.label"
+                        :value="u.value"
+                      >
+                        <span>{{ u.label }}</span>
+                        <span style="float:right;color:#94a3b8;font-size:12px;">{{ u.role }} {{ u.sector }}</span>
+                      </el-option>
+                    </el-select>
                   </template>
                 </el-table-column>
               </el-table>
               <div style="font-size:11px;color:#94a3b8;margin-top:10px;line-height:1.6;">
-                项目群、经营管理范围、总监/群主等权限不在本系统维护，沿用平台原有组织与权限配置。
+                上线后该下拉选项来自平台全量用户信息。项目群、经营管理范围、总监/群主等权限不在本系统维护，沿用平台原有组织与权限配置；是否跳过总监初审由系统按平台权限自动判断。
               </div>
             </div>
           </div>

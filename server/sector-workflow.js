@@ -229,6 +229,30 @@ function allSectorsReadyForArchive(sectorFlows, registry) {
   });
 }
 
+function userHasRole(user, role) {
+  if (!user) return false;
+  if (user.role === role) return true;
+  return Array.isArray(user.roles) && user.roles.indexOf(role) !== -1;
+}
+
+function userSector(user) {
+  return normalizeSectorCode(user && (user.sector || user.sectorCode));
+}
+
+function shouldSkipDirectorApproval(adminConfig, users, sectorCode) {
+  if (!adminConfig) return false;
+  const targetSector = normalizeSectorCode(sectorCode);
+  const adminUserId = String(adminConfig.adminUserId || '').trim();
+  const adminName = String(adminConfig.adminName || '').trim();
+  if (!adminUserId && !adminName) return false;
+  const matched = (users || []).find(function (user) {
+    if (!user) return false;
+    if (adminUserId && String(user.id || '').trim() === adminUserId) return true;
+    return adminName && String(user.name || '').trim() === adminName;
+  });
+  return userHasRole(matched, 'sector_director') && userSector(matched) === targetSector;
+}
+
 function getSectorFlow(sectorFlows, code) {
   const c = normalizeSectorCode(code);
   if (sectorFlows && sectorFlows[c]) return sectorFlows[c];
@@ -267,6 +291,7 @@ module.exports = {
   getCompanyFlow,
   syncLegacyMetaFromFlows,
   allSectorsReadyForArchive,
+  shouldSkipDirectorApproval,
   getSectorFlow,
   setSectorFlow
 };
