@@ -67,6 +67,7 @@
       var c = {};
       if (window.SystemAdminSectorDock) c.SystemAdminSectorDock = window.SystemAdminSectorDock;
       if (window.ProjectDetailDrawer) c.ProjectDetailDrawer = window.ProjectDetailDrawer;
+      if (window.AlertsDrawer) c.AlertsDrawer = window.AlertsDrawer;
       return c;
     })(),
     data() {
@@ -106,6 +107,7 @@
         projectDrawerProject: null,
         projectDrawerRowIndex: null,
         projectDrawerSaving: false,
+        alertsDrawerVisible: false,
         _lsProjectNoMouseUp: null,
       };
     },
@@ -1182,6 +1184,29 @@
         });
       },
 
+      handleOpenAlertsDrawer() {
+        this.alertsDrawerVisible = true;
+      },
+      handleAlertOpenProject(projectNo) {
+        this.alertsDrawerVisible = false;
+        var list = this.filteredProjects;
+        var idx = -1;
+        for (var i = 0; i < list.length; i++) {
+          if (list[i].project_no === projectNo) { idx = i; break; }
+        }
+        if (idx >= 0) {
+          this.openProjectDrawer(projectNo, idx);
+        } else {
+          var all = Store.projects;
+          for (var j = 0; j < all.length; j++) {
+            if (all[j].project_no === projectNo) {
+              this.openProjectDrawer(projectNo, -1);
+              break;
+            }
+          }
+        }
+      },
+
       currentMonthCompletionField() {
         const col = FieldConfig.MC_COLS[this.monthIdx];
         if (!col) return null;
@@ -1693,6 +1718,13 @@
         }
         if (this.isFieldChanged(project, field)) return '#ffedd5';
         if (
+          field.col === 'F' &&
+          window.SystemRefMeta &&
+          SystemRefMeta.isUnmatchedProject(project)
+        ) {
+          return SystemRefMeta.UNMATCHED_BG;
+        }
+        if (
           window.SystemRefMeta &&
           SystemRefMeta.isOverriddenField(project, field, this.monthIdx)
         ) {
@@ -1756,6 +1788,13 @@
 
       applyLuckysheetSystemRefDecor(cell, project, field) {
         if (!window.SystemRefMeta) return cell;
+        // 未匹配项目 F 列：浅琥珀色 + 批注
+        if (field.col === 'F' && SystemRefMeta.isUnmatchedProject(project)) {
+          const text = '该项目号未在工程平台注册\n数据来源：初始化导入表';
+          cell.ps = SystemRefMeta.buildLuckysheetCommentPs(text);
+          cell.bg = SystemRefMeta.UNMATCHED_BG;
+          return cell;
+        }
         if (!SystemRefMeta.isOverriddenField(project, field, this.monthIdx)) return cell;
         const text = SystemRefMeta.formatRefComment(project, field, this.monthIdx);
         if (text) cell.ps = SystemRefMeta.buildLuckysheetCommentPs(text);
@@ -2512,6 +2551,12 @@
 
           <div class="editor-toolbar-group">
             <el-button
+              v-if="canShowAlertsButton"
+              size="small"
+              icon="el-icon-bell"
+              @click="handleOpenAlertsDrawer"
+            >项目预警</el-button>
+            <el-button
               v-if="canShowRefreshButton"
               size="small"
               icon="el-icon-refresh"
@@ -2591,7 +2636,7 @@
             <span class="editor-legend-swatch editor-legend-swatch--new"></span>新增项目
           </span>
           <span class="editor-legend-item">
-            <span class="editor-legend-swatch editor-legend-swatch--changed"></span>本月有变更字段
+            <span class="editor-legend-swatch editor-legend-swatch--changed"></span>有变更字段
           </span>
           <span class="editor-legend-item">
             <span class="editor-legend-swatch editor-legend-swatch--system-ref"></span>系统引用已覆盖
@@ -2824,6 +2869,13 @@
           @nav-prev="navigateProjectDrawer(-1)"
           @nav-next="navigateProjectDrawer(1)"
         />
+
+        <alerts-drawer
+          :visible="alertsDrawerVisible"
+          :month-idx="monthIdx"
+          @close="alertsDrawerVisible = false"
+          @open-project="handleAlertOpenProject"
+        />
       </div>
     `,
     // 计算分区列表（用于表头分组）
@@ -2893,6 +2945,9 @@
       canShowRefreshButton() {
         return !this.isViewingSnapshot &&
           (this.user.role === 'system_admin' || this.user.role === 'sector_admin');
+      },
+      canShowAlertsButton() {
+        return this.isSystemAdmin && !this.isViewingSnapshot;
       },
       canShowClearCompletionButton() {
         if (this.isViewingSnapshot) return false;

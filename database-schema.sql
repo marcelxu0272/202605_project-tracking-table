@@ -283,4 +283,49 @@ CREATE TABLE IF NOT EXISTS snapshots (
     sector_code     TEXT,                           -- 所属板块 (NULL 表示全公司)
     report_month    TEXT    NOT NULL,               -- 报告月
     snapshot_data   TEXT    NOT NULL,               -- JSON: 快照项目数据
-    operator        TEXT    NOT NULL,               -- 触
+    operator        TEXT    NOT NULL,               -- 触发操作人
+    created_at      TEXT DEFAULT (datetime('now', 'localtime'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_snapshots_type   ON snapshots (snapshot_type);
+CREATE INDEX IF NOT EXISTS idx_snapshots_sector ON snapshots (sector_code);
+CREATE INDEX IF NOT EXISTS idx_snapshots_month  ON snapshots (report_month);
+
+-- ============================================================================
+-- 7. 项目预警记录表 (project_alerts)
+-- 持久化存储项目预警，支持 active/resolved 状态流转
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS project_alerts (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_no        TEXT    NOT NULL,               -- 关联项目号
+    project_name      TEXT    NOT NULL DEFAULT '',    -- 项目名称（冗余，展示用）
+    sector_code       TEXT    NOT NULL DEFAULT '',    -- 板块代码
+    sector_name       TEXT    NOT NULL DEFAULT '',    -- 板块名称
+    alert_type        TEXT    NOT NULL,               -- 预警类型标识
+    alert_label       TEXT    NOT NULL DEFAULT '',    -- 预警中文标签
+    detail            TEXT    NOT NULL DEFAULT '',    -- 预警详情（数值描述）
+    year              INTEGER NOT NULL,               -- 系统年份
+    month_idx         INTEGER NOT NULL,               -- 报告月索引 0-11
+    status            TEXT    NOT NULL DEFAULT 'active', -- active | resolved
+    first_detected_at TEXT    NOT NULL DEFAULT '',    -- 首次检测时间 ISO 8601
+    resolved_at       TEXT    NOT NULL DEFAULT '',    -- 消除时间
+    last_seen_at      TEXT    NOT NULL DEFAULT '',    -- 最近活跃时间
+
+    UNIQUE(project_no, alert_type, year, month_idx)
+);
+
+CREATE INDEX IF NOT EXISTS idx_alerts_status  ON project_alerts(status);
+CREATE INDEX IF NOT EXISTS idx_alerts_project ON project_alerts(project_no);
+
+-- ============================================================================
+-- 8. 预警永久忽略记录表 (project_alert_dismissals)
+-- 系统管理员手动消除预警后，该项目该类型预警在任何月份不再出现
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS project_alert_dismissals (
+    project_no   TEXT NOT NULL,               -- 关联项目号
+    alert_type   TEXT NOT NULL,               -- 预警类型标识
+    dismissed_at TEXT NOT NULL,               -- 操作时间 ISO 8601
+    dismissed_by TEXT NOT NULL DEFAULT '',     -- 操作人标识
+
+    PRIMARY KEY (project_no, alert_type)
+);

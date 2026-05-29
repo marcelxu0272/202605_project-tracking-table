@@ -17,6 +17,7 @@ const costImport = require('./cost-import');
 const costStats = require('./cost-stats');
 const alertDemo = require('./alert-demo-seed');
 const fieldDict = require('./fields/dictionary');
+const alertService = require('./alert-service');
 
 const ROOT = path.join(__dirname, '..');
 const PORT = Number(process.env.PTRACK_PORT) || 3000;
@@ -25,6 +26,21 @@ const modules = loadBrowserScripts();
 
 function resolveInitXlsx() {
   return require('./init-xlsx-export').findExistingInitXlsx();
+}
+
+/** 初始化导入后与平台数据合并（Excel 值优先） */
+function mergeWithPlatformAfterImport(projects, reportingMonth) {
+  try {
+    const platformProjects = platformSync.fetchPlatformSnapshot(db, modules, reportingMonth);
+    const { projects: merged, stats } = platformSync.mergeInitialImportWithPlatform(
+      projects, platformProjects, reportingMonth, modules
+    );
+    console.log('[ptrack] 初始化平台合并:', JSON.stringify(stats));
+    return { projects: merged, stats };
+  } catch (e) {
+    console.warn('[ptrack] 初始化平台合并失败（继续使用 Excel 数据）:', e.message);
+    return { projects, stats: null };
+  }
 }
 
 function seedFromXlsxIfEmpty(db) {
@@ -45,9 +61,10 @@ function seedFromXlsxIfEmpty(db) {
     console.warn('[ptrack] 初始化文件未解析出有效项目:', xlsxPath);
     return { seeded: false, count: 0 };
   }
-  dbm.replaceAllProjects(db, projects);
+  const { projects: mergedProjects, stats: mergeStats } = mergeWithPlatformAfterImport(projects, reportingMonth);
+  dbm.replaceAllProjects(db, mergedProjects);
   dbm.setMeta(db, 'systemDataSyncedAt', new Date().toISOString());
-  dbm.setMeta(db, 'systemDataSyncMeta', { trigger: 'seed', at: new Date().toISOString() });
+  dbm.setMeta(db, 'systemDataSyncMeta', { trigger: 'seed', at: new Date().toISOString(), mergeStats });
   let devSeed = null;
   let importSnapshot = null;
   try {
@@ -460,11 +477,13 @@ function importProjectsFromInitXlsx(reportingMonth) {
     err.status = 400;
     throw err;
   }
-  dbm.replaceAllProjects(db, normalizeProjects(projects));
+  const { projects: mergedProjects, stats: mergeStats } = mergeWithPlatformAfterImport(projects, reportingMonth);
+  dbm.replaceAllProjects(db, normalizeProjects(mergedProjects));
   return {
-    count: projects.length,
+    count: mergedProjects.length,
     file: path.basename(xlsxPath),
-    xlsxGenerated: ensured.generated
+    xlsxGenerated: ensured.generated,
+    mergeStats
   };
 }
 
@@ -705,6 +724,48 @@ app.patch('/api/admin/users', (req, res) => {
       userName: actor.name || '系统管理员'
     });
     res.json({ ok: true, state: dbm.getBootstrapState(db) });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message) });
+  }
+});
+
+/** 项目预警聚合：计算全部预警并持久化同步（仅系统管理员） */
+app.get('/api/admin/alerts', (req, res) => {
+  try {
+    let year = req.query.year != null ? Number(req.query.year) : dbm.resolveSystemYear(db);
+    if (!year || isNaN(year)) year = dbm.resolveSystemYear(db);
+    let monthIdx = req.query.monthIdx != null ? Number(req.query.monthIdx) : null;
+    if (monthIdx == null) {
+      const rm = dbm.getMeta(db, 'reportingMonth', null);
+      monthIdx = rm ? parseInt(String(rm).slice(5, 7), 10) - 1 : new Date().getMonth();
+    }
+    const result = alertService.collectAllAlerts(db, modules, dbm, timesheetStats, monthIdx, year);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: String(e.message) });
+  }
+});
+
+/** 永久忽略预警：系统管理员手动消除（仅系统管理员） */
+app.post('/api/admin/alerts/:id/dismiss', (req, res) => {
+  try {
+    const alertId = Number(req.params.id);
+    if (!alertId || isNaN(alertId)) return res.status(400).json({ error: '无效的预警 ID' });
+    const dismissedBy = (req.body && req.body.dismissedBy) || 'system_admin';
+    const dismissal = alertService.dismissAlertById(db, dbm, alertId, dismissedBy);
+    dbm.pushAudit(db, {
+      id: Date.now() + '_alert_dismiss_' + Math.random().toString(36).slice(2, 6),
+      timestamp: new Date().toISOString(),
+      projectNo: dismissal.projectNo,
+      projectName: '预警管理',
+      fieldName: 'alert_dismiss',
+      fieldCN: '预警消除',
+      oldVal: 'active',
+      newVal: 'dismissed（永久忽略）',
+      userId: dismissedBy,
+      userName: dismissedBy
+    });
+    res.json({ ok: true, dismissal });
   } catch (e) {
     res.status(500).json({ error: String(e.message) });
   }

@@ -21,7 +21,7 @@
   --color-editable-cell-bg:       #fefce8;
   --color-warning:      #f59e0b;
   --color-warning-bg:   rgba(245, 158, 11, 0.1);
-  /* 本月有变更字段（与 Luckysheet 单元格高亮一致） */
+  /* 有变更字段（与 Luckysheet 单元格高亮一致） */
   --color-changed-field-bg:     #ffedd5;
   --color-changed-field-text:   #9a3412;
   --color-changed-field-border: #ea580c;
@@ -1956,4 +1956,200 @@ body {
   position: relative;
   overflow: visible;
 }
+
+/* ==========================================================================
+   AlertsDrawer — 项目预警总览抽屉
+   ========================================================================== */
+.alerts-drawer .el-drawer__header {
+  background: linear-gradient(135deg, #004d47 0%, #007069 100%);
+  margin-bottom: 0;
+  padding: 0;
+}
+.alerts-drawer-header {
+  padding: 18px 52px 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.alerts-drawer-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+}
+.alerts-drawer-summary-bar {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.78);
+}
+.alerts-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px 20px;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+/* 筛选工具栏 */
+.alerts-drawer-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 12px 16px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+/* 统计条 */
+.alerts-drawer-stat-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.alerts-stat-chip {
+  display: inline-flex;
+  align-items: center;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: #374151;
+}
+/* 卡片列表 */
+.alerts-drawer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 200px;
+}
+.alerts-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.alerts-card:hover {
+  border-color: #007069;
+  box-shadow: 0 1px 6px rgba(0, 112, 105, 0.12);
+}
+.alerts-card.is-resolved {
+  opacity: 0.55;
+  cursor: default;
+}
+.alerts-card.is-resolved:hover {
+  border-color: #e2e8f0;
+  box-shadow: none;
+}
+.alerts-card.is-dismissed {
+  opacity: 0.35;
+  cursor: default;
+  background: #f9fafb;
+  text-decoration: line-through;
+}
+.alerts-card.is-dismissed:hover {
+  border-color: #e2e8f0;
+  box-shadow: none;
+}
+.alerts-card-actions {
+  display: inline-flex;
+  align-items: center;
+}
+.alerts-card-action--dismissed {
+  color: #9ca3af;
+  font-size: 12px;
+  font-style: italic;
+}
+.alerts-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.alerts-card-type-tag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.alerts-card-type-tag--danger {
+  color: #b91c1c;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+}
+.alerts-card-type-tag--warning {
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+}
+.alerts-card-sector {
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+}
+.alerts-card-body {
+  margin-top: 8px;
+}
+.alerts-card-project {
+  font-size: 13px;
+  color: #374151;
+}
+.alerts-card-project strong {
+  font-weight: 600;
+  color: #111827;
+}
+.alerts-card-detail {
+  font-size: 13px;
+  color: #374151;
+  margin-top: 4px;
+}
+.alerts-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.alerts-card-time {
+  color: #9ca3af;
+}
+.alerts-card-action {
+  color: #007069;
+  font-weight: 500;
+}
+.alerts-card-action--resolved {
+  color: #9ca3af;
+  font-weight: 400;
+}
+/* 空状态 */
+.alerts-drawer-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #9ca3af;
+  font-size: 14px;
+}
+/* 分页 */
+.alerts-drawer-pagination {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 0 0;
+  border-top: 1px solid #e2e8f0;
+}
+/* 底部 */
+.alerts-drawer-footer {
+  padding: 12px 20px;
+  border-top: 1px solid #e2e8f0;
+  text-align: right;
+  background: #fff;
+}
+
 

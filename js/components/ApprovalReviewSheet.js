@@ -139,7 +139,7 @@
       '<motion-placeholder v-if="showDiffHint" class="editor-diff-hint">',
       '<span class="editor-legend-item"><span class="editor-legend-swatch editor-legend-swatch--editable"></span>可编辑列</span>',
       '<span class="editor-legend-item"><span class="editor-legend-swatch editor-legend-swatch--new"></span>新增项目</span>',
-      '<span class="editor-legend-item"><span class="editor-legend-swatch editor-legend-swatch--changed"></span>本月有变更字段</span>',
+      '<span class="editor-legend-item"><span class="editor-legend-swatch editor-legend-swatch--changed"></span>有变更字段</span>',
       '<span style="flex:1;"></span>',
       '<span style="cursor:pointer;" @click="showDiffHint=false"><i class="el-icon-close"></i></span>',
       '</motion-placeholder>',

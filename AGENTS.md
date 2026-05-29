@@ -1,7 +1,7 @@
 # 📁 项目追踪表线上化 — 目录说明
 
 > **项目目标：** 将项目执行追踪 Excel 表的填写、汇总、统计与展示线上化  
-> **最后更新：** 2026-05-27
+> **最后更新：** 2026-05-29
 
 ---
 
@@ -132,6 +132,7 @@ npm run sync:fields
 | `server/sector-workflow.js` | 🔀 板块流程 | ~4KB | 十二板块注册、流程状态（服务端）。 |
 | `server/dev-reset-seed.js` | 🔧 开发重置 | ~3KB | 重置后写 I 版 baseline（排除 demo 新增项目号）；预警演示数据。 |
 | `server/alert-demo-seed.js` | 🔧 预警演示 | ~3KB | 重导/重置后为 4 条项目注入 R/S、完成额 vs 工时预警场景及演示工时。 |
+| `server/alert-service.js` | ⚠️ 预警聚合 | ~4KB | 全公司预警计算与 DB 持久化同步；`collectAllAlerts` 一次遍历所有项目。 |
 | `server/patch-init-xlsx-alerts.js` | 🔧 初始化补丁 | ~2KB | `npm run patch:init-alerts` 将预警演示字段写回 `初始数据.xlsx`。 |
 | `server/mailer.js` | 📧 SMTP 传输层 | ~3KB | nodemailer 封装；懒初始化 transporter；`isEmailEnabled` / `sendMail`。 |
 | `server/email-reminder.js` | 📧 邮件提醒 | ~10KB | 填报提醒日 + 锁定倒计时邮件；板块数据聚合；模板生成；审计记录。 |
@@ -141,7 +142,7 @@ npm run sync:fields
 
 | 文件 | 类型 | 大小 | 说明 |
 |---|---|---|---|
-| `css/style.css` | 🎨 全局样式 | ~19KB | 品牌色、Luckysheet、Drawer 等。 |
+| `css/style.css` | 🎨 全局样式 | ~22KB | 品牌色、Luckysheet、Drawer、预警抽屉等。 |
 | `css/field-dictionary.css` | 🎨 字段字典样式 | ~4KB | 字段字典页 `.field-manager-view` / `.fm-*`。 |
 | `css/element-theme.css` | 🎨 Element 主题 | ~6KB | 覆盖 Element UI 默认蓝色，对齐 `docs/设计文档/DESIGN.md` 品牌色 `#007069`。 |
 
@@ -170,6 +171,7 @@ npm run sync:fields
 | `js/components/ApprovalReviewSheet.js` | 📋 审批表格 | ~5KB | 总监/群主审批 Luckysheet；继承 `ProjectEditorView`。 |
 | `js/components/SystemAdminSectorDock.js` | 📊 板块底栏 | ~4KB | 系统管理员十二板块进度底栏。 |
 | `js/components/SystemAdminApprovalBoard.js` | 📋 板块审批板 | ~4KB | 系统管理员各板块审批状态卡片。 |
+| `js/components/AlertsDrawer.js` | ⚠️ 预警抽屉 | ~6KB | 系统管理员全局预警面板；四维筛选、分页、活跃/已消除状态、点击跳转项目。 |
 | `js/views/Login.js` | 🔑 登录页 | ~6KB | 6 角色卡片登录；登录后跳转填报或审批首页。 |
 | `js/views/ProjectEditor.js` | 📝 项目追踪表 | ~28KB | Luckysheet；F 列 Drawer；保存/导入/筛选；变更批注。 |
 | `js/views/Approval.js` | ✅ 审批流程 | ~15KB | 流程进度时间轴；总监/群主/其他角色差异化视图。 |
@@ -186,6 +188,7 @@ npm run sync:fields
 | `test/snapshot-change-log.test.js` | ✅ Node 测试 | 覆盖 D/J 快照保留变更记录、I 版快照清理临时变更标记。 |
 | `test/sector-admin-skip-director.test.js` | ✅ Node 测试 | 覆盖板块管理员兼任总监时由平台用户权限自动跳过总监初审。 |
 | `test/email-reminder.test.js` | ✅ Node 测试 | 覆盖邮件提醒场景判断、收件人解析、防重逻辑、板块数据聚合。 |
+| `test/initial-import-merge.test.js` | ✅ Node 测试 | 覆盖初始化导入平台合并：全匹配/未匹配/值差异/平台独有不插入/NewExistingRef 保留/混合场景/空值等价。 |
 
 ### `docs/` 文档（已整理）
 
@@ -198,6 +201,7 @@ npm run sync:fields
 | `docs/需求文档/待确认项.md` | ❓ 待办 | Ethan 待拍板业务决策；已确认项迁入 `需求文档_开发版.md`。 |
 | `docs/需求文档/字段字典_备份.md` | 📄 字段备份 | 原 Markdown 版 83 字段字典归档；**运行时以 `config/fields/fields.json` 为准**。 |
 | `docs/需求文档/项目追踪表线上化方案.pptx` | 📊 方案 | 项目方案演示文稿。 |
+| `docs/需求文档/预警抽屉功能需求文档.md` | ⚠️ 预警需求 | 系统管理员预警抽屉独立需求文档：预警类型、交互设计、持久化、手动永久忽略、API、边界条件。 |
 | **设计文档/** | 🎨 | UI/UX 与页面设计规范 |
 | `docs/设计文档/DESIGN.md` | 🎨 设计系统 | Wood 工程平台视觉语言、品牌色 `#007069`、组件与布局原则。 |
 | `docs/设计文档/LIST_FORM.md` | 📋 列表表单规范 | 筛选、表格、分页、表单弹窗交互标准。 |

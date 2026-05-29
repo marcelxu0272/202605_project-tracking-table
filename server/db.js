@@ -54,6 +54,32 @@ function openDb() {
       amount REAL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_cost_project_month ON cost_entries(project_no, cost_month);
+    CREATE TABLE IF NOT EXISTS project_alerts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_no TEXT NOT NULL,
+      project_name TEXT NOT NULL DEFAULT '',
+      sector_code TEXT NOT NULL DEFAULT '',
+      sector_name TEXT NOT NULL DEFAULT '',
+      alert_type TEXT NOT NULL,
+      alert_label TEXT NOT NULL DEFAULT '',
+      detail TEXT NOT NULL DEFAULT '',
+      year INTEGER NOT NULL,
+      month_idx INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      first_detected_at TEXT NOT NULL DEFAULT '',
+      resolved_at TEXT NOT NULL DEFAULT '',
+      last_seen_at TEXT NOT NULL DEFAULT '',
+      UNIQUE(project_no, alert_type, year, month_idx)
+    );
+    CREATE INDEX IF NOT EXISTS idx_alerts_status ON project_alerts(status);
+    CREATE INDEX IF NOT EXISTS idx_alerts_project ON project_alerts(project_no);
+    CREATE TABLE IF NOT EXISTS project_alert_dismissals (
+      project_no TEXT NOT NULL,
+      alert_type TEXT NOT NULL,
+      dismissed_at TEXT NOT NULL,
+      dismissed_by TEXT NOT NULL DEFAULT '',
+      PRIMARY KEY (project_no, alert_type)
+    );
   `);
 
   return db;
@@ -440,6 +466,30 @@ function clearAllTimesheetEntries(db) {
   db.prepare('DELETE FROM timesheet_entries').run();
 }
 
+function getAllTimesheetEntriesForYear(db, year) {
+  const y = String(year);
+  const rows = db.prepare(`
+    SELECT project_no, work_date, profession, engineer_sector, engineer,
+           unit_no, unit_name, approved_hours, approved_cost, rate, remark
+    FROM timesheet_entries
+    WHERE substr(work_date, 1, 4) = ?
+    ORDER BY project_no, work_date ASC, id ASC
+  `).all(y);
+  return rows.map(r => ({
+    projectNo: r.project_no,
+    workDate: r.work_date,
+    profession: r.profession || '',
+    engineerSector: r.engineer_sector || '',
+    engineer: r.engineer || '',
+    unitNo: r.unit_no || '',
+    unitName: r.unit_name || '',
+    approvedHours: r.approved_hours || 0,
+    approvedCost: r.approved_cost || 0,
+    rate: r.rate,
+    remark: r.remark || ''
+  }));
+}
+
 function countCostEntries(db) {
   return db.prepare('SELECT COUNT(*) AS c FROM cost_entries').get().c;
 }
@@ -479,6 +529,92 @@ function clearAllCostEntries(db) {
   db.prepare('DELETE FROM cost_entries').run();
 }
 
+function upsertAlert(db, alert) {
+  db.prepare(`
+    INSERT INTO project_alerts (project_no, project_name, sector_code, sector_name,
+      alert_type, alert_label, detail, year, month_idx, status,
+      first_detected_at, resolved_at, last_seen_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(project_no, alert_type, year, month_idx) DO UPDATE SET
+      project_name = excluded.project_name,
+      sector_code = excluded.sector_code,
+      sector_name = excluded.sector_name,
+      alert_label = excluded.alert_label,
+      detail = excluded.detail,
+      status = excluded.status,
+      first_detected_at = excluded.first_detected_at,
+      resolved_at = excluded.resolved_at,
+      last_seen_at = excluded.last_seen_at
+  `).run(
+    alert.projectNo, alert.projectName, alert.sectorCode, alert.sectorName,
+    alert.alertType, alert.alertLabel, alert.detail,
+    alert.year, alert.monthIdx, alert.status,
+    alert.firstDetectedAt, alert.resolvedAt, alert.lastSeenAt
+  );
+}
+
+function getAlertsByScope(db, year, monthIdx) {
+  return db.prepare(`
+    SELECT * FROM project_alerts
+    WHERE year = ? AND month_idx = ?
+    ORDER BY status ASC, first_detected_at DESC
+  `).all(year, monthIdx).map(r => ({
+    id: r.id,
+    projectNo: r.project_no,
+    projectName: r.project_name,
+    sectorCode: r.sector_code,
+    sectorName: r.sector_name,
+    alertType: r.alert_type,
+    alertLabel: r.alert_label,
+    detail: r.detail,
+    year: r.year,
+    monthIdx: r.month_idx,
+    status: r.status,
+    firstDetectedAt: r.first_detected_at,
+    resolvedAt: r.resolved_at,
+    lastSeenAt: r.last_seen_at
+  }));
+}
+
+function getDismissals(db) {
+  return db.prepare('SELECT * FROM project_alert_dismissals').all().map(r => ({
+    projectNo: r.project_no,
+    alertType: r.alert_type,
+    dismissedAt: r.dismissed_at,
+    dismissedBy: r.dismissed_by
+  }));
+}
+
+function dismissAlert(db, projectNo, alertType, dismissedBy) {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT OR IGNORE INTO project_alert_dismissals (project_no, alert_type, dismissed_at, dismissed_by)
+    VALUES (?, ?, ?, ?)
+  `).run(projectNo, alertType, now, dismissedBy || '');
+  return { projectNo, alertType, dismissedAt: now, dismissedBy: dismissedBy || '' };
+}
+
+function getAlertById(db, id) {
+  const r = db.prepare('SELECT * FROM project_alerts WHERE id = ?').get(id);
+  if (!r) return null;
+  return {
+    id: r.id,
+    projectNo: r.project_no,
+    projectName: r.project_name,
+    sectorCode: r.sector_code,
+    sectorName: r.sector_name,
+    alertType: r.alert_type,
+    alertLabel: r.alert_label,
+    detail: r.detail,
+    year: r.year,
+    monthIdx: r.month_idx,
+    status: r.status,
+    firstDetectedAt: r.first_detected_at,
+    resolvedAt: r.resolved_at,
+    lastSeenAt: r.last_seen_at
+  };
+}
+
 function resolveSystemYear(db) {
   ensureDefaultMeta(db);
   const periodConfig = Object.assign({}, DEFAULT_PERIOD_CONFIG, getMeta(db, 'periodConfig') || {});
@@ -516,9 +652,15 @@ module.exports = {
   replaceProjectTimesheet,
   getTimesheetEntries,
   clearAllTimesheetEntries,
+  getAllTimesheetEntriesForYear,
   countCostEntries,
   replaceProjectCostEntries,
   getCostEntries,
   clearAllCostEntries,
-  resolveSystemYear
+  resolveSystemYear,
+  upsertAlert,
+  getAlertsByScope,
+  getDismissals,
+  dismissAlert,
+  getAlertById
 };

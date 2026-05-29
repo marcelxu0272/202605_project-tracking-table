@@ -261,9 +261,104 @@ function runPlatformSync(db, dbm, modules, options = {}) {
   return { syncedAt, stats, syncMeta };
 }
 
+/**
+ * 判断两个值是否"等价"（空值统一视为相等）
+ */
+function valuesEqual(excelVal, platformVal) {
+  const normExcel = (excelVal === null || excelVal === undefined) ? '' : excelVal;
+  const normPlatform = (platformVal === null || platformVal === undefined) ? '' : platformVal;
+  // 两边都是空
+  if (normExcel === '' && normPlatform === '') return true;
+  // 数值比较
+  if (typeof normExcel === 'number' || typeof normPlatform === 'number') {
+    const e = Number(normExcel);
+    const p = Number(normPlatform);
+    if (!isNaN(e) && !isNaN(p)) return e === p;
+  }
+  // 字符串比较
+  return String(normExcel).trim() === String(normPlatform).trim();
+}
+
+/**
+ * 初始化导入时与平台数据合并：Excel 值始终优先；
+ * - 未匹配项目：标记 _platform_unmatched，ref status='not_on_platform'
+ * - 匹配有差异：保留 Excel display，写 _system_ref(platformValue) + _system_override
+ * - 匹配一致：写 _system_ref(platformValue)
+ * - 平台独有项目不插入
+ */
+function mergeInitialImportWithPlatform(excelProjects, platformProjects, reportingMonth, modules) {
+  const { FormulaEngine, NewExistingRef } = modules;
+  const monthIdx = FormulaEngine.getMonthIdx(reportingMonth || '2026-05');
+  const reportingYear = NewExistingRef
+    ? NewExistingRef.reportingYearFromMonth(reportingMonth)
+    : Number(String(reportingMonth || '2026-05').slice(0, 4));
+  const refKeys = getRefKeysForMonth(modules, monthIdx).filter(k => k !== 'new_existing' && k !== 'project_no');
+  const syncedAt = new Date().toISOString();
+
+  const platformMap = new Map(
+    (platformProjects || []).filter(p => p && p.project_no).map(p => [p.project_no, p])
+  );
+
+  let matched = 0;
+  let overrides = 0;
+  let unmatched = 0;
+  const result = [];
+
+  for (const ep of excelProjects) {
+    const merged = JSON.parse(JSON.stringify(ep));
+    if (!merged._system_ref) merged._system_ref = {};
+    if (!merged._system_override) merged._system_override = {};
+
+    const platform = platformMap.get(merged.project_no);
+
+    if (!platform) {
+      // Branch A: 平台无此项目号
+      merged._platform_unmatched = true;
+      refKeys.forEach(refKey => {
+        merged._system_ref[refKey] = { value: null, status: 'not_on_platform', syncedAt };
+      });
+      // 不调用 updateExistingRef — seedImportRefs 已在 parse 阶段处理 A 列
+      unmatched++;
+      result.push(merged);
+      continue;
+    }
+
+    // Branch B/C: 平台匹配，逐字段对比
+    let projectHasOverride = false;
+    refKeys.forEach(refKey => {
+      const platformVal = resolvePlatformValue(platform, refKey, monthIdx);
+      const excelVal = resolvePlatformValue(merged, refKey, monthIdx);
+      merged._system_ref[refKey] = buildRefEntryFromPlatform(platform, refKey, monthIdx, syncedAt);
+
+      if (!valuesEqual(excelVal, platformVal)) {
+        // Branch B: 值不一致 → 标记覆盖
+        merged._system_override[refKey] = {
+          at: syncedAt,
+          userId: 'system',
+          userName: '初始化导入'
+        };
+        projectHasOverride = true;
+      }
+      // Branch C: 值一致 → 仅写 ref，不标记 override
+    });
+
+    // 不调用 updateExistingRef — seedImportRefs 已在 parse 阶段处理 A 列
+
+    if (projectHasOverride) overrides++;
+    matched++;
+    result.push(merged);
+  }
+
+  return {
+    projects: result,
+    stats: { total: excelProjects.length, matched, overrides, unmatched }
+  };
+}
+
 module.exports = {
   runPlatformSync,
   mergePlatformData,
+  mergeInitialImportWithPlatform,
   fetchPlatformSnapshot,
   getSystemSyncKeys,
   getRefKeysForMonth,

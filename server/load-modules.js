@@ -20,7 +20,9 @@ function loadBrowserScripts() {
     path.join(ROOT, 'js', 'formula-engine.js'),
     path.join(ROOT, 'js', 'field-config.js'),
     path.join(ROOT, 'js', 'system-ref-meta.js'),
-    path.join(ROOT, 'js', 'new-existing-ref.js')
+    path.join(ROOT, 'js', 'new-existing-ref.js'),
+    path.join(ROOT, 'js', 'stock-validation.js'),
+    path.join(ROOT, 'js', 'project-alerts.js')
   ];
 
   for (const file of files) {
@@ -33,7 +35,9 @@ function loadBrowserScripts() {
     FormulaEngine: ctx.FormulaEngine,
     SystemRefMeta: ctx.SystemRefMeta,
     NewExistingRef: ctx.NewExistingRef,
-    FIELD_DICTIONARY: ctx.FIELD_DICTIONARY
+    FIELD_DICTIONARY: ctx.FIELD_DICTIONARY,
+    StockValidation: ctx.StockValidation,
+    ProjectAlerts: ctx.ProjectAlerts
   };
 }
 

@@ -5,6 +5,7 @@
   'use strict';
 
   const OVERRIDE_BG = '#e8f4fd';
+  const UNMATCHED_BG = '#fff3cd';
 
   function ensureMeta(project) {
     if (!project._system_ref) project._system_ref = {};
@@ -52,6 +53,10 @@
     return val === null || val === undefined || val === '';
   }
 
+  function isUnmatchedProject(project) {
+    return !!(project && project._platform_unmatched);
+  }
+
   function getRefEntry(project, refKey) {
     if (!project || !project._system_ref) return null;
     return project._system_ref[refKey] || null;
@@ -68,6 +73,7 @@
     const entry = getRefEntry(project, refKey);
     if (!entry) return '工程平台引用：尚未同步';
     if (entry.status === 'missing_project') return '工程平台引用：无此项目号';
+    if (entry.status === 'not_on_platform') return '该项目号未在工程平台注册\n数据来源：初始化导入表';
     if (entry.status === 'unavailable') return '工程平台引用：暂不可用';
     if (entry.status === 'missing_field' || entry.value == null || entry.value === '') {
       return '工程平台引用：该字段无引用值';
@@ -149,6 +155,7 @@
 
   window.SystemRefMeta = {
     OVERRIDE_BG,
+    UNMATCHED_BG,
     ensureMeta,
     getRefKey,
     isSystemRefField,
@@ -156,6 +163,7 @@
     getRefKeys,
     isOverridden,
     isOverriddenField,
+    isUnmatchedProject,
     isEmptyDisplayValue,
     getRefEntry,
     getRefValue,
