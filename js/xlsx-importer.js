@@ -30,7 +30,7 @@
   /**
    * 将 Luckysheet 导出的数据写入 xlsx 并下载
    */
-  function exportToXlsx(projects, reportingMonth) {
+  function exportToXlsx(projects, reportingMonth, filename) {
     if (!window.XLSX) { alert('SheetJS 未加载'); return; }
     const fields = FieldConfig.buildFieldConfig();
     const monthIdx = FormulaEngine.getMonthIdx(reportingMonth || '2026-05');
@@ -63,7 +63,7 @@
     const ws = XLSX.utils.aoa_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, reportingMonth || '2026-05');
-    XLSX.writeFile(wb, `项目执行追踪_${reportingMonth || '2026-05'}.xlsx`);
+    XLSX.writeFile(wb, filename || ('项目执行追踪_' + (reportingMonth || '2026-05') + '.xlsx'));
   }
 
   // ── 内部：解析 Sheet ────────────────────────────────────

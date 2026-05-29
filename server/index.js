@@ -436,6 +436,11 @@ app.post('/api/sectors/:code/reject-approval', (req, res) => {
 
 app.post('/api/company/archive', (req, res) => {
   try {
+    const lockStatus = dbm.getEffectiveLockStatus(db);
+    if (lockStatus !== 'locked') {
+      res.status(403).json({ error: '归档仅可在锁定期提交' });
+      return;
+    }
     const { userName, role } = req.body || {};
     const allProjects = getAllProjectsFromDb(db);
     const result = snapSvc.createFinalSnapshot(db, allProjects, {

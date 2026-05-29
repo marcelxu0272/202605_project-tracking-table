@@ -86,6 +86,7 @@
         viewingVersion: '__current__',
         snapshotLoading: false,
         snapshotProjects: null,
+        downloadSnapshotLoading: false,
         _lsResizeObserver: null,
         _lsResizeTimer: null,
         tableFields: [],
@@ -130,6 +131,11 @@
     },
     activated() {
       const self = this;
+      // 安全重置：非 system_admin 不可切换版本
+      if (!this.isSystemAdmin) {
+        this.viewingVersion = '__current__';
+        this.snapshotProjects = null;
+      }
       const afterData = function () {
         if (self.viewingVersion !== '__current__') {
           self.handleViewingVersionChange(self.viewingVersion);
@@ -1182,6 +1188,23 @@
             this.$message.error('导出失败：' + e.message);
           }
           this.exportLoading = false;
+        }, 300);
+      },
+      handleDownloadSnapshot() {
+        if (!this.isViewingSnapshot || !this.snapshotProjects) return;
+        this.downloadSnapshotLoading = true;
+        setTimeout(() => {
+          try {
+            const snap = Store.snapshots[this.viewingVersion];
+            const reportingMonth = (snap && snap.reportingMonth) || Store.reportingMonth;
+            const label = (snap && snap.label) || this.viewingVersion;
+            const filename = '项目执行追踪_' + label + '.xlsx';
+            XlsxImporter.exportToXlsx(this.snapshotProjects, reportingMonth, filename);
+            this.$message.success('导出成功');
+          } catch (e) {
+            this.$message.error('导出失败：' + e.message);
+          }
+          this.downloadSnapshotLoading = false;
         }, 300);
       },
       handleRefreshEditorData() {
@@ -2523,6 +2546,7 @@
         <!-- 工具栏 -->
         <div class="editor-toolbar">
           <el-select
+            v-if="isSystemAdmin"
             v-model="viewingVersion"
             size="small"
             class="editor-version-select"
@@ -2544,6 +2568,14 @@
           >
             当前正在查看快照 · {{ snapshotViewMeta.label }}
           </span>
+          <el-button
+            v-if="isViewingJSnapshot"
+            size="mini"
+            icon="el-icon-download"
+            :loading="downloadSnapshotLoading"
+            @click="handleDownloadSnapshot"
+            style="margin-left:8px;"
+          >下载此版本</el-button>
           <span v-else-if="!isSystemAdmin" class="period-banner" :class="lockBannerClass">
             <span class="period-dot"></span>
             {{ lockBannerText }}
@@ -2617,6 +2649,7 @@
                 icon="el-icon-s-check"
                 :loading="archiveLoading"
                 :disabled="!canSubmitArchive"
+                :title="!canSubmitArchive ? '仅在锁定期可提交归档' : ''"
                 @click="handleSubmitArchive"
               >提交归档</el-button>
               <el-button
@@ -2984,7 +3017,7 @@
         return this.isSystemAdmin && !this.isViewingSnapshot;
       },
       canSubmitArchive() {
-        return this.isSystemAdmin && !this.isViewingSnapshot;
+        return this.isSystemAdmin && !this.isViewingSnapshot && this.lockStatus === 'locked';
       },
       // 板块管理员提交审批是否可用
       canSubmit() {
@@ -3006,6 +3039,16 @@
       isViewingSnapshot() {
         return this.viewingVersion !== '__current__';
       },
+      isViewingJSnapshot() {
+        if (!this.isViewingSnapshot) return false;
+        const v = this.viewingVersion;
+        if (v === 'J版') return true;
+        if (window.BaselineDiff) {
+          const parsed = BaselineDiff.parseSnapshotKey(v);
+          return parsed && parsed.stage === 'J';
+        }
+        return false;
+      },
       canImport() {
         const role = this.user.role;
         if (role === 'sector_director' || role === 'group_leader') return false;
@@ -3015,15 +3058,14 @@
       editorSnapshotOptions() {
         const self = this;
         const snaps = Store.snapshots || {};
-        const user = this.user;
-        const sector = user && user.sector;
         const baseline = Store.baselineVersion;
         const keys = Object.keys(snaps).filter(function (k) {
           if (/^Month:/.test(k) || /^PM:/.test(k)) return false;
           if (window.BaselineDiff && BaselineDiff.isModernSnapshotKey(k)) {
-            return BaselineDiff.isSnapshotVisibleToUser(k, user, sector);
+            const parsed = BaselineDiff.parseSnapshotKey(k);
+            return parsed && parsed.stage === 'J';
           }
-          return k === 'J版' || /^Draft:/.test(k);
+          return k === 'J版';
         });
         return keys
           .sort(function (a, b) {
