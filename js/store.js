@@ -108,7 +108,7 @@
     sectorRegistry: [],
     sectorNames: {},
     companyFlow: { archiveStatus: 'pending', archivedAt: null },
-    /** PM 提交状态 { '2026-05': { '何孝刚': { status, submittedAt, snapshotVersion, projectNos } } } */
+    /** PM 提交状态 { '2026-05': { '何孝刚': { status, submittedAt, projectNos, projectCount } } } */
     pmSubmissions: {},
     snapshots: {},
     baselineVersion: null,
@@ -358,25 +358,11 @@
     return snap;
   };
 
-  /** 板块管理员：同步 PM 提交状态与 PM 快照（进入填报页时调用） */
+  /** 板块管理员：同步 PM 提交状态与最新项目数据（进入填报页时调用） */
   Store.syncPmWorkflow = async function () {
     const d = await apiFetch('/bootstrap');
     if (!d) return;
-    Store.pmSubmissions = d.pmSubmissions || {};
-    Store.sectorFlows = d.sectorFlows || Store.sectorFlows;
-    Store.sectorRegistry = d.sectorRegistry || Store.sectorRegistry;
-    Store.companyFlow = d.companyFlow || Store.companyFlow;
-    Store.approvalStatus = d.approvalStatus || Store.approvalStatus;
-    Store.reportingSubmitted = d.reportingSubmitted === true;
-    const snaps = d.snapshots || {};
-    Object.keys(snaps).forEach(function (k) {
-      if (/^(I|D|J):\d{8}:/.test(k) || k.indexOf('PM:') === 0 || k === 'J版' || /^Draft:/.test(k)) {
-        Vue.set(Store.snapshots, k, snaps[k]);
-      }
-    });
-    Store.baselineVersion = d.baselineVersion || Store.baselineVersion;
-    Store.latestIVersion = d.latestIVersion || Store.latestIVersion;
-    Store.latestJVersion = d.latestJVersion || Store.latestJVersion;
+    applyBootstrap(d);
   };
 
   /** 按版本名获取快照（先读内存，缺失时从服务端拉取） */

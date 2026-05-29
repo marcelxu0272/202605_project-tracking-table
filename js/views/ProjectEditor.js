@@ -96,7 +96,8 @@
         _lsLoading: false,
         _lsRefreshTimer: null,
         _lsFilterScrollHandler: null,
-        // 板块管理员 PM diff 面板
+        // 板块管理员 PM 底栏
+        pmDockExpanded: true,
         pmDiffVisible: false,
         pmDiffName: '',
         pmDiffResults: [],
@@ -212,11 +213,6 @@
           ? this.snapshotProjects
           : Store.projects;
         const self = this;
-        if (!this.isViewingSnapshot
-          && Store.lockStatus === 'open'
-          && window.StockValidation) {
-          StockValidation.syncOpenPeriodStockHedge(source, this.monthIdx, Store.lockStatus);
-        }
         this.tableProjects = FormulaEngine.computeAll(source, this.monthIdx).map(function (p) {
           if (self.isViewingSnapshot || !window.ChangeMeta) return p;
           const sp = Store.projects.find(function (x) { return x.project_no === p.project_no; });
@@ -778,6 +774,7 @@
         const oldVal = flat[key];
         let updated = SystemRefMeta.applyOverride(storeProject, field, newVal, user, self.monthIdx);
         updated = FormulaEngine.compute(updated, self.monthIdx);
+        updated = this.applySystemRefContractHedge(updated, field);
         await Store.updateProject(updated);
         await Store.addAuditLog({
           projectNo: storeProject.project_no,
@@ -800,6 +797,32 @@
         return updated;
       },
 
+      applySystemRefContractHedge(project, sourceField) {
+        if (!project || !sourceField || !window.StockValidation || sourceField.col !== 'O') return project;
+        var result = StockValidation.applyOpenPeriodStockHedge(project, this.monthIdx, this.lockStatus);
+        if (!result.changed) return project;
+        var completionCol = FieldConfig.MC_COLS[this.monthIdx];
+        var completionField = FieldConfig.buildFieldConfig().find(function (f) {
+          return f.col === completionCol;
+        });
+        if (!completionField) return result.project;
+        var oldVal = FieldConfig.arraysToFlat(project)['mc_' + this.monthIdx];
+        var next = result.project;
+        var newVal = FieldConfig.arraysToFlat(next)['mc_' + this.monthIdx];
+        if (window.ChangeMeta) {
+          ChangeMeta.recordFieldChangeLog(next, completionField, oldVal, newVal, {
+            roleLabel: '系统自动对冲',
+            name: '系统自动对冲',
+            role: 'system'
+          });
+        }
+        next._changed_fields = next._changed_fields || [];
+        if (next._changed_fields.indexOf(completionField.col) < 0) {
+          next._changed_fields.push(completionField.col);
+        }
+        return next;
+      },
+
       promptRestoreSystemRef(project, field, opts) {
         const self = this;
         return this.$confirm('是否恢复工程平台引用值？', '恢复系统引用', {
@@ -808,7 +831,10 @@
           type: 'info'
         }).then(function () {
           const restored = SystemRefMeta.restoreFromRef(project, field, self.monthIdx);
-          return FormulaEngine.compute(restored, self.monthIdx);
+          return self.applySystemRefContractHedge(
+            FormulaEngine.compute(restored, self.monthIdx),
+            field
+          );
         }).then(function (recomputed) {
           return Store.updateProject(recomputed).then(function () {
             self.buildTableData();
@@ -1033,8 +1059,7 @@
           ).then(() => {
             const self = this;
             this.submitLoading = true;
-            this.persistOpenPeriodStockHedgeForScope()
-              .then(function () { return self.preparePmSubmit(); })
+            this.preparePmSubmit()
               .then(function () {
                 if (!self.assertStockBeforeSubmit()) {
                   throw new Error('stock_validation');
@@ -1063,7 +1088,6 @@
             const self = this;
             this.submitLoading = true;
             this.persistLuckysheetBeforeSubmit()
-              .then(function () { return self.persistOpenPeriodStockHedgeForScope(); })
               .then(function () {
                 if (!self.assertStockBeforeSubmit()) {
                   throw new Error('stock_validation');
@@ -1101,6 +1125,10 @@
         const ver = Store.latestJVersion || 'J版';
         this.viewingVersion = ver;
         this.handleViewingVersionChange(ver);
+      },
+
+      togglePmDock() {
+        this.pmDockExpanded = !this.pmDockExpanded;
       },
 
       showPmDiff(pmName) {
@@ -1309,33 +1337,11 @@
         const scope = this.scopedProjects.map(function (p) {
           return this.getStoreProject(p.project_no) || p;
         }.bind(this));
-        if (window.StockValidation && this.lockStatus === 'open') {
-          StockValidation.syncOpenPeriodStockHedge(scope, this.monthIdx, this.lockStatus);
-        }
         const list = scope.map(function (p) {
           return FormulaEngine.compute(p, this.monthIdx);
         }.bind(this));
         if (!window.StockValidation) return { ok: true, violations: [] };
         return StockValidation.validateProjectsForSubmit(list, this.monthIdx, this.lockStatus);
-      },
-
-      async persistOpenPeriodStockHedgeForScope() {
-        if (this.lockStatus !== 'open' || !window.StockValidation) return;
-        var self = this;
-        var tasks = [];
-        this.scopedProjects.forEach(function (p) {
-          var sp = self.getStoreProject(p.project_no);
-          if (!sp) return;
-          var r = StockValidation.applyOpenPeriodStockHedge(sp, self.monthIdx, self.lockStatus);
-          if (!r.changed) return;
-          sp['mc_' + self.monthIdx] = r.project['mc_' + self.monthIdx];
-          sp.monthly_completion = (r.project.monthly_completion || []).slice();
-          tasks.push(Store.updateProject(Object.assign({}, sp)));
-        });
-        if (tasks.length) {
-          await Promise.all(tasks);
-          self.buildTableData();
-        }
       },
 
       assertStockBeforeSubmit() {
@@ -2775,22 +2781,31 @@
         ></system-admin-sector-dock>
 
         <!-- 板块管理员：本月已提交 PM（自动进入汇总，可查看变更） -->
-        <div v-if="isSectorAdmin && submittedPmSubmissions.length > 0"
-          style="padding:10px 16px;background:#f8fafc;border-top:1px solid #e2e8f0;flex-shrink:0;">
-          <div style="font-size:12px;font-weight:600;color:#475569;margin-bottom:8px;">
-            <i class="el-icon-user" style="margin-right:4px;"></i>
-            本月已提交 PM（{{ submittedPmSubmissions.length }} 人）
-            <span style="font-weight:400;color:#94a3b8;margin-left:8px;">提交后已自动进入板块汇总；有问题由您直接改数</span>
+        <div
+          v-if="isSectorAdmin && submittedPmSubmissions.length > 0"
+          class="sector-admin-pm-dock"
+          :class="{ 'is-collapsed': !pmDockExpanded }"
+        >
+          <div class="sector-admin-pm-dock-head">
+            <span class="sector-admin-pm-dock-title">
+              <i class="el-icon-user" style="margin-right:4px;"></i>
+              本月已提交 PM（{{ submittedPmSubmissions.length }} 人）
+            </span>
+            <span class="sector-admin-pm-dock-hint">提交后已自动进入板块汇总；</span>
+            <el-button type="text" size="mini" class="sector-admin-pm-dock-toggle" @click="togglePmDock">
+              <i :class="pmDockExpanded ? 'el-icon-arrow-down' : 'el-icon-arrow-up'"></i>
+              {{ pmDockExpanded ? '收起' : '展开' }}
+            </el-button>
           </div>
-          <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          <div v-show="pmDockExpanded" class="sector-admin-pm-dock-cards">
             <div
               v-for="sub in submittedPmSubmissions"
               :key="sub.pmName"
-              style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:10px;font-size:12px;"
+              class="sector-admin-pm-card"
             >
               <div>
-                <div style="font-weight:600;color:#1e293b;">{{ sub.pmName }}</div>
-                <div style="color:#94a3b8;font-size:11px;">
+                <div class="sector-admin-pm-card-name">{{ sub.pmName }}</div>
+                <div class="sector-admin-pm-card-meta">
                   {{ sub.projectCount || 0 }} 个项目 · {{ sub.submittedAt ? new Date(sub.submittedAt).toLocaleString('zh-CN', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—' }}
                 </div>
               </div>
@@ -2932,7 +2947,7 @@
             const pmName = entry[0];
             const v = entry[1];
             if (!sectorPmNames[pmName]) return false;
-            if (!v || !v.snapshotVersion) return false;
+            if (!v) return false;
             return v.status === 'submitted' || v.status === 'received';
           })
           .map(function (entry) {

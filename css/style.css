@@ -921,6 +921,68 @@ body {
   .charts-grid { grid-template-columns: 1fr; }
 }
 
+/* ── 板块管理员：本月已提交 PM 底栏 ── */
+.sector-admin-pm-dock {
+  padding: 10px 16px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
+.sector-admin-pm-dock.is-collapsed {
+  padding-bottom: 6px;
+}
+.sector-admin-pm-dock-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.sector-admin-pm-dock.is-collapsed .sector-admin-pm-dock-head {
+  margin-bottom: 0;
+}
+.sector-admin-pm-dock-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+.sector-admin-pm-dock-hint {
+  font-size: 12px;
+  font-weight: 400;
+  color: #94a3b8;
+}
+.sector-admin-pm-dock-toggle {
+  margin-left: auto;
+  padding: 0 6px !important;
+  color: #64748b !important;
+  font-size: 12px;
+}
+.sector-admin-pm-dock-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+.sector-admin-pm-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.sector-admin-pm-card-name {
+  font-weight: 600;
+  color: #1e293b;
+}
+.sector-admin-pm-card-meta {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
 /* ── 系统管理员：各板块进度底栏（对齐板块管理员待接收 PM 样式） ── */
 .system-admin-sector-dock {
   padding: 10px 16px;
