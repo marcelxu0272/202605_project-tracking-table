@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>多角色与报告线列表设计方案</title>
+  <meta name="generator" content="Kami">
+  <meta name="author" content="Wood China">
+  <meta name="description" content="项目追踪表线上化 - 多角色协作与报告线列表业务设计方案">
+  <meta name="keywords" content="项目追踪, 多角色, 报告线, 审批流程, 业务设计">
+  <style>
+    :root {
+      --parchment: #f5f4ed;
+      --ivory: #faf9f5;
+      --warm-sand: #e8e6dc;
+      --dark-surface: #30302e;
+      --deep-dark: #141413;
+      --brand: #1B365D;
+      --ink-light: #2D5A8A;
+      --near-black: #141413;
+      --dark-warm: #3d3d3a;
+      --olive: #504e49;
+      --stone: #6b6a64;
+      --border: #e8e6dc;
+      --border-soft: #e5e3d8;
+      --warm-silver: #b0aea5;
+
+      --serif: "TsangerJinKai02", "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "STSong", Georgia, serif;
+      --sans: var(--serif);
+      --mono: "JetBrains Mono", "SF Mono", Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--sans);
+      font-size: 10pt;
+      line-height: 1.55;
+      color: var(--near-black);
+      background: var(--parchment);
+      padding: 40px 60px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    /* Typography */
+    h1, h2, h3, h4 {
+      font-family: var(--serif);
+      font-weight: 500;
+      color: var(--near-black);
+    }
+
+    h1 {
+      font-size: 28pt;
+      line-height: 1.15;
+      margin-bottom: 8pt;
+      border-left: 3pt solid var(--brand);
+      padding-left: 12pt;
+    }
+
+    h2 {
+      font-size: 16pt;
+      line-height: 1.25;
+      margin: 32pt 0 12pt 0;
+      border-left: 2.5pt solid var(--brand);
+      padding-left: 8pt;
+    }
+
+    h3 {
+      font-size: 13pt;
+      line-height: 1.3;
+      margin: 20pt 0 8pt 0;
+      color: var(--dark-warm);
+    }
+
+    h4 {
+      font-size: 11pt;
+      line-height: 1.35;
+      margin: 14pt 0 6pt 0;
+      color: var(--olive);
+    }
+
+    p { margin-bottom: 10pt; }
+
+    .subtitle {
+      font-size: 11pt;
+      color: var(--olive);
+      margin-bottom: 24pt;
+    }
+
+    .meta-info {
+      display: flex;
+      gap: 24pt;
+      font-size: 9pt;
+      color: var(--stone);
+      margin-bottom: 32pt;
+      padding-bottom: 12pt;
+      border-bottom: 0.5pt solid var(--border);
+    }
+
+    .meta-info span {
+      display: flex;
+      align-items: center;
+      gap: 4pt;
+    }
+
+    /* Tags */
+    .tag {
+      display: inline-block;
+      background: #EEF2F7;
+      color: var(--brand);
+      font-size: 8pt;
+      font-weight: 600;
+      padding: 2pt 6pt;
+      border-radius: 2pt;
+      letter-spacing: 0.3pt;
+      text-transform: uppercase;
+    }
+
+    .tag.status-active { background: #d4edda; color: #155724; }
+    .tag.status-pending { background: #fff3cd; color: #856404; }
+    .tag.status-done { background: #e2e3e5; color: #383d41; }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9.5pt;
+      margin: 12pt 0 20pt 0;
+      break-inside: avoid;
+    }
+
+    th {
+      text-align: left;
+      font-weight: 500;
+      color: var(--dark-warm);
+      padding: 8pt 10pt;
+      border-bottom: 1pt solid var(--border);
+      background: var(--ivory);
+    }
+
+    td {
+      padding: 7pt 10pt;
+      border-bottom: 0.3pt solid var(--border-soft);
+      vertical-align: top;
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    .table-striped tr:nth-child(even) td {
+      background: var(--ivory);
+    }
+
+    /* Cards */
+    .card {
+      background: var(--ivory);
+      border: 0.5pt solid var(--border);
+      border-radius: 8pt;
+      padding: 16pt 20pt;
+      margin-bottom: 16pt;
+    }
+
+    .card:hover {
+      box-shadow: 0 4pt 24pt rgba(0, 0, 0, 0.05);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8pt;
+    }
+
+    .card-title {
+      font-family: var(--serif);
+      font-size: 12pt;
+      font-weight: 500;
+      color: var(--near-black);
+    }
+
+    .card-meta {
+      font-size: 9pt;
+      color: var(--stone);
+    }
+
+    /* Metric cards */
+    .metrics-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16pt;
+      margin: 20pt 0;
+    }
+
+    .metric-card {
+      background: var(--ivory);
+      border: 0.5pt solid var(--border);
+      border-radius: 8pt;
+      padding: 16pt;
+      text-align: center;
+    }
+
+    .metric-value {
+      font-family: var(--serif);
+      font-size: 24pt;
+      font-weight: 500;
+      color: var(--brand);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .metric-label {
+      font-size: 9pt;
+      color: var(--olive);
+      margin-top: 4pt;
+    }
+
+    /* Flow diagram */
+    .flow-container {
+      background: var(--ivory);
+      border: 0.5pt solid var(--border);
+      border-radius: 8pt;
+      padding: 24pt;
+      margin: 20pt 0;
+    }
+
+    .flow-steps {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8pt;
+    }
+
+    .flow-step {
+      flex: 1;
+      text-align: center;
+      padding: 12pt 8pt;
+      background: var(--parchment);
+      border: 1pt solid var(--border);
+      border-radius: 6pt;
+      font-size: 9pt;
+      color: var(--dark-warm);
+    }
+
+    .flow-step.active {
+      background: var(--brand);
+      color: var(--ivory);
+      border-color: var(--brand);
+    }
+
+    .flow-step.completed {
+      background: #d4edda;
+      color: #155724;
+      border-color: #c3e6cb;
+    }
+
+    .flow-arrow {
+      font-size: 14pt;
+      color: var(--stone);
+    }
+
+    /* List items */
+    .feature-list {
+      list-style: none;
+      padding: 0;
+    }
+
+    .feature-list li {
+      position: relative;
+      padding-left: 20pt;
+      margin-bottom: 8pt;
+      line-height: 1.5;
+    }
+
+    .feature-list li::before {
+      content: "▸";
+      position: absolute;
+      left: 0;
+      color: var(--brand);
+      font-weight: 500;
+    }
+
+    /* Callout */
+    .callout {
+      background: #EEF2F7;
+      border-left: 2pt solid var(--brand);
+      padding: 12pt 16pt;
+      margin: 16pt 0;
+      border-radius: 0 4pt 4pt 0;
+    }
+
+    .callout-title {
+      font-weight: 500;
+      color: var(--brand);
+      margin-bottom: 4pt;
+    }
+
+    /* Status indicators */
+    .status-dot {
+      display: inline-block;
+      width: 8pt;
+      height: 8pt;
+      border-radius: 50%;
+      margin-right: 4pt;
+    }
+
+    .status-dot.active { background: #28a745; }
+    .status-dot.pending { background: #ffc107; }
+    .status-dot.inactive { background: #6c757d; }
+
+    /* Grid layout */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24pt;
+    }
+
+    /* Quote */
+    .quote {
+      border-left: 2pt solid var(--brand);
+      padding: 8pt 0 8pt 14pt;
+      color: var(--olive);
+      font-style: normal;
+      margin: 16pt 0;
+    }
+
+    /* Divider */
+    .section-divider {
+      height: 0.5pt;
+      background: var(--border);
+      margin: 32pt 0;
+      border: none;
+    }
+
+    /* Footer */
+    footer {
+      margin-top: 48pt;
+      padding-top: 16pt;
+      border-top: 0.5pt solid var(--border);
+      font-size: 8pt;
+      color: var(--stone);
+      text-align: center;
+    }
+
+    @media print {
+      body { padding: 20mm; }
+      .card:hover { box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+
+<h1>多角色与报告线列表设计方案</h1>
+<p class="subtitle">项目追踪表线上化 · 业务逻辑与功能设计</p>
+
+<div class="meta-info">
+  <span>版本 v1.0</span>
+  <span>日期 2026-06-01</span>
+  <span>状态 <span class="tag status-pending">草案讨论</span></span>
+  <span>Wood China</span>
+</div>
+
+<!-- Section 1: 背景与问题 -->
+<h2>一、背景与问题</h2>
+
+<h3>1.1 现状痛点</h3>
+<p>当前原型通过「角色切换」界面模拟不同角色的视图差异。正式环境中存在以下问题：</p>
+<ul class="feature-list">
+  <li>用户无角色切换入口，但一个人可能同时拥有多个角色</li>
+  <li>审批流只支持单条线展示，群主管理多个板块时无法并行查看</li>
+  <li>所有项目在一张大表中展示，缺乏按板块/周期的组织维度</li>
+</ul>
+
+<h3>1.2 典型多角色场景</h3>
+<table class="table-striped">
+  <thead>
+    <tr>
+      <th style="width: 35%;">场景</th>
+      <th style="width: 30%;">角色组合</th>
+      <th style="width: 35%;">矛盾点</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>板块管理员兼项目经理</td>
+      <td><span class="tag">板块管理员</span> + <span class="tag">项目经理</span></td>
+      <td>是否需要以 PM 身份"提交"自己的项目？</td>
+    </tr>
+    <tr>
+      <td>群主兼项目经理</td>
+      <td><span class="tag">群主</span> + <span class="tag">项目经理</span></td>
+      <td>同一界面既要填报又要审批其他板块</td>
+    </tr>
+    <tr>
+      <td>板块管理员管多板块</td>
+      <td><span class="tag">板块管理员</span> × N</td>
+      <td>需要同时看到多个板块的审批状态</td>
+    </tr>
+    <tr>
+      <td>板块领导兼板块管理员</td>
+      <td><span class="tag">板块领导</span> + <span class="tag">板块管理员</span></td>
+      <td>自审自批的流程跳过问题</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr class="section-divider">
+
+<!-- Section 2: 核心设计原则 -->
+<h2>二、核心设计原则</h2>
+
+<h3>2.1 权限向上合并</h3>
+<p>一个用户拥有多个角色时，取<strong>权限并集</strong>，高权限覆盖低权限：</p>
+<div class="callout">
+  <div class="callout-title">权限层级</div>
+  <p>系统管理员 > 群主 > 板块领导 > 板块管理员 > 项目经理</p>
+</div>
+<ul class="feature-list">
+  <li>板块管理员 ∪ 项目经理 → 对自己的项目拥有板块管理员级别的编辑权限，无需单独"提交"</li>
+  <li>群主 ∪ 项目经理 → 对自己的项目直接拥有填报+提交权限，对所辖板块项目拥有审批权限</li>
+  <li>审批流中，当提交人本身是审批链上的某个节点时，该节点<strong>自动跳过</strong></li>
+</ul>
+
+<h3>2.2 功能调整策略：最小变更原则</h3>
+<p>在当前系统基础上进行<strong>最小变更</strong>，不新增功能页面，仅调整现有功能的定位：</p>
+
+<p><strong>调整前（当前系统）：</strong></p>
+<ul class="feature-list">
+  <li>项目追踪表（编辑）</li>
+  <li>审批流程（独立页）</li>
+  <li>审计日志、表头配置、管理设置</li>
+</ul>
+
+<p><strong>调整后：</strong></p>
+<ul class="feature-list">
+  <li>项目追踪表 → <strong>只读查看</strong></li>
+  <li><strong>报告线管理（新增，取代审批流程页，整合填报+提交+审批）</strong></li>
+  <li>审计日志、表头配置、管理设置：保持不变</li>
+</ul>
+
+<p>以下表格列出典型角色组合下，用户在<strong>报告线管理</strong>中的数据范围和操作权限：</p>
+
+<table class="table-striped">
+  <thead>
+    <tr>
+      <th style="width: 22%;">角色组合</th>
+      <th style="width: 39%;">报告线管理中的数据范围</th>
+      <th style="width: 39%;">可执行操作</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="tag">项目经理</span><br>（单一角色）</td>
+      <td>仅自己项目所属板块的报告线，含历史归档</td>
+      <td>填报自己项目、保存草稿、提交</td>
+    </tr>
+    <tr>
+      <td><span class="tag">板块管理员</span><br>（单板块）</td>
+      <td>所辖板块全部报告线</td>
+      <td>查看所有PM填报进度、催办、提交审批</td>
+    </tr>
+    <tr>
+      <td><span class="tag">板块管理员</span> + <span class="tag">项目经理</span></td>
+      <td>所辖板块全部报告线（含自己项目）</td>
+      <td>自己项目无需PM提交环节，可直接编辑并提交审批</td>
+    </tr>
+    <tr>
+      <td><span class="tag">板块领导</span><br>（单板块）</td>
+      <td>所辖板块全部报告线</td>
+      <td>查看汇总、审批、退回</td>
+    </tr>
+    <tr>
+      <td><span class="tag">板块领导</span> + <span class="tag">项目经理</span></td>
+      <td>所辖板块全部报告线</td>
+      <td>自己项目可直接编辑并提交，跳过板块管理员审批节点；同时可审批</td>
+    </tr>
+    <tr>
+      <td><span class="tag">群主</span><br>（管辖多板块）</td>
+      <td>所辖多个板块的全部报告线，并行展示</td>
+      <td>查看多板块汇总、终审、退回</td>
+    </tr>
+    <tr>
+      <td><span class="tag">群主</span> + <span class="tag">项目经理</span></td>
+      <td>多板块报告线 + 自己项目报告线</td>
+      <td>自己项目跳过群主审批节点；可审批其他板块</td>
+    </tr>
+    <tr>
+      <td><span class="tag">系统管理员</span></td>
+      <td>全公司所有板块的全部报告线</td>
+      <td>全局查看、归档</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <div class="callout-title">关键设计要点</div>
+  <ul class="feature-list">
+    <li><strong>报告线管理统一入口：</strong>填报、提交、审批都在同一个功能中完成，通过列表→详情的方式组织</li>
+    <li><strong>项目追踪表保留但变为只读：</strong>提供全量数据的浏览、筛选和导出能力，不再承担编辑职责</li>
+    <li><strong>数据范围取并集：</strong>多角色用户看到的报告线是所有角色可见范围的并集</li>
+    <li><strong>审批跳过：</strong>当一个用户同时是提交者和审批者时，对应审批节点自动跳过，避免自审自批</li>
+  </ul>
+</div>
+
+<h3>2.3 Git-like 数据流模型</h3>
+<p>将数据的流转类比为 Git 版本管理，每一层只关心"收到了哪些变更，是否接受"：</p>
+
+<table class="table-striped">
+  <thead>
+    <tr>
+      <th style="width: 25%;">Git 概念</th>
+      <th style="width: 25%;">系统对应</th>
+      <th style="width: 50%;">说明</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>main 分支</td>
+      <td><strong>J 版（归档版）</strong></td>
+      <td>上一周期最终确认的权威数据</td>
+    </tr>
+    <tr>
+      <td>fork/branch</td>
+      <td><strong>开启新填报周期</strong></td>
+      <td>各板块从 J 版中 fork 出本板块的数据副本</td>
+    </tr>
+    <tr>
+      <td>working copy</td>
+      <td><strong>PM 工作区</strong></td>
+      <td>PM 在自己的项目范围内编辑</td>
+    </tr>
+    <tr>
+      <td>commit + push</td>
+      <td><strong>PM 提交</strong></td>
+      <td>PM 将变更提交到板块报告线</td>
+    </tr>
+    <tr>
+      <td>code review</td>
+      <td><strong>板块管理员审批</strong></td>
+      <td>审查变更，可退回（reject）或通过（approve）</td>
+    </tr>
+    <tr>
+      <td>merge upstream</td>
+      <td><strong>逐级汇总</strong></td>
+      <td>板块→群组→全公司，层层合并</td>
+    </tr>
+    <tr>
+      <td>tag/release</td>
+      <td><strong>新 J 版归档</strong></td>
+      <td>最终确认后生成新的 J 版快照</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr class="section-divider">
+
+<!-- Section 3: 报告线列表设计 -->
+<h2>三、报告线列表设计</h2>
+
+<h3>3.1 概念定义</h3>
+<p><strong>报告线（Report Line）</strong>：以「板块 × 月度周期」为单位的工作项，是填报、审批、归档的最小管理粒度。</p>
+
+<div class="metrics-row">
+  <div class="metric-card">
+    <div class="metric-value">12</div>
+    <div class="metric-label">执行板块</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-value">12</div>
+    <div class="metric-label">年度周期</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-value">7</div>
+    <div class="metric-label">状态阶段</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-value">4</div>
+    <div class="metric-label">流程节点</div>
+  </div>
+</div>
+
+<h3>3.2 列表视图（工作台首页）</h3>
+<p>所有角色进入系统后，首先看到的是<strong>报告线列表</strong>，根据角色不同，可见范围不同：</p>
+
+<table class="table-striped">
+  <thead>
+    <tr>
+      <th style="width: 20%;">角色</th>
+      <th style="width: 40%;">可见报告线</th>
+      <th style="width: 40%;">列表展示重点</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="tag">项目经理</span></td>
+      <td>自己项目所属板块的报告线（含历史归档）</td>
+      <td>我的填报状态、是否需要操作</td>
+    </tr>
+    <tr>
+      <td><span class="tag">板块管理员</span></td>
+      <td>所辖板块的所有报告线</td>
+      <td>板块整体进度、待审批数</td>
+    </tr>
+    <tr>
+      <td><span class="tag">板块领导</span></td>
+      <td>所辖板块的所有报告线</td>
+      <td>待我审批的报告线</td>
+    </tr>
+    <tr>
+      <td><span class="tag">群主</span></td>
+      <td>所辖多个板块的所有报告线</td>
+      <td>多板块并行状态一览</td>
+    </tr>
+    <tr>
+      <td><span class="tag">系统管理员</span></td>
+      <td>全部报告线</td>
+      <td>全局进度监控</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>3.3 列表信息结构示例</h3>
+
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">
+      <span class="status-dot pending"></span>
+      板块A · 2026年6月
+    </div>
+    <span class="tag status-pending">待填报</span>
+  </div>
+  <div class="card-meta">12个项目 · 截止: 6/15 · 我的项目: 2个 · 未提交</div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">
+      <span class="status-dot active"></span>
+      板块B · 2026年6月
+    </div>
+    <span class="tag status-active">审批中</span>
+  </div>
+  <div class="card-meta">8个项目 · 截止: 6/15 · 当前节点: 板块领导审批中</div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">
+      <span class="status-dot inactive"></span>
+      板块A · 2026年5月
+    </div>
+    <span class="tag status-done">已归档</span>
+  </div>
+  <div class="card-meta">12个项目 · J版: J2505 · 归档时间: 2026-05-28</div>
+</div>
+
+<h3>3.4 列表筛选与排序</h3>
+<ul class="feature-list">
+  <li><strong>状态筛选：</strong>全部 / 需要我操作 / 进行中 / 已归档</li>
+  <li><strong>板块筛选：</strong>按板块名称（多板块用户适用）</li>
+  <li><strong>周期筛选：</strong>按年月</li>
+  <li><strong>默认排序：</strong>需要操作的在前 → 进行中 → 已归档（按时间倒序）</li>
+</ul>
+
+<hr class="section-divider">
+
+<!-- Section 4: 报告线详情 -->
+<h2>四、报告线详情</h2>
+
+<h3>4.1 进入逻辑</h3>
+<p>点击列表中的报告线进入详情页，详情页内容根据用户角色和报告线状态动态展示：</p>
+
+<table class="table-striped">
+  <thead>
+    <tr>
+      <th style="width: 20%;">用户角色</th>
+      <th style="width: 25%;">报告线状态</th>
+      <th style="width: 55%;">详情页行为</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td rowspan="3"><span class="tag">项目经理</span></td>
+      <td>待填报 / 填报中</td>
+      <td>只显示自己负责的项目，可编辑</td>
+    </tr>
+    <tr>
+      <td>已提交 / 审批中</td>
+      <td>只显示自己的项目，只读</td>
+    </tr>
+    <tr>
+      <td>已退回</td>
+      <td>只显示自己的项目，可重新编辑</td>
+    </tr>
+    <tr>
+      <td rowspan="2"><span class="tag">板块管理员</span></td>
+      <td>填报中</td>
+      <td>显示板块所有项目，可催办/查看进度</td>
+    </tr>
+    <tr>
+      <td>待审批</td>
+      <td>显示板块所有项目 + 变更 diff，可提交审批或退回</td>
+    </tr>
+    <tr>
+      <td><span class="tag">板块总监</span></td>
+      <td>待审批（初审）</td>
+      <td>显示板块汇总 + 变更 diff，可批准/退回</td>
+    </tr>
+    <tr>
+      <td><span class="tag">群主</span></td>
+      <td>待审批（复审）</td>
+      <td>显示板块汇总 + 变更 diff，可批准/退回</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>4.2 详情页结构</h3>
+
+<div class="flow-container">
+  <div class="flow-steps">
+    <div class="flow-step completed">PM 提交</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step active">板块管理员提交审批</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">板块总监审批</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">群主审批</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">归档</div>
+  </div>
+</div>
+
+<div class="card">
+  <h4>操作区</h4>
+  <p>保存草稿 · 提交 · 导出</p>
+</div>
+
+<div class="card">
+  <h4>项目数据表</h4>
+  <p>PM: 只显示自己的项目行；板块管理员+: 显示板块全部项目</p>
+</div>
+
+<div class="card">
+  <h4>审批记录</h4>
+  <p>时间轴展示：提交 → 初审通过 → ...</p>
+</div>
+
+<h3>4.3 PM 视角的特殊说明</h3>
+<ul class="feature-list">
+  <li>PM 点入报告线后，<strong>只能看到和编辑自己负责的项目</strong></li>
+  <li>历史已归档的报告线也出现在列表中，PM 可点入查看自己项目的历史数据（只读）</li>
+  <li>如果 PM 只有一条当前需要操作的报告线，列表仍正常显示（因历史记录也在列表中）</li>
+</ul>
+
+<hr class="section-divider">
+
+<!-- Section 5: Git-like 数据流 -->
+<h2>五、Git-like 数据流详细设计</h2>
+
+<h3>5.1 周期开启（Fork）</h3>
+<div class="callout">
+  <div class="callout-title">系统管理员操作</div>
+  <p>点击「开启新周期 2026年6月」→ 系统为 12 个板块分别创建报告线，每条报告线从最新 J 版快照中 fork 出该板块的项目数据作为 baseline。</p>
+</div>
+
+<h3>5.2 填报与提交（Commit & Push）</h3>
+<ul class="feature-list">
+  <li><strong>保存草稿 = local commit：</strong>不影响他人，PM 可随时保存</li>
+  <li><strong>提交 = push to 板块报告线：</strong>系统记录哪些字段相对 baseline 发生了变更（diff）</li>
+</ul>
+
+<h3>5.3 审批与合并（Review & Merge）</h3>
+<table class="table-striped">
+  <thead>
+    <tr>
+      <th style="width: 25%;">审批层级</th>
+      <th style="width: 30%;">操作</th>
+      <th style="width: 45%;">说明</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="tag">板块管理员</span></td>
+      <td>编辑/汇总 / 提交审批</td>
+      <td>板块管理员可直接编辑板块数据（PM 填报非必须），确认后提交审批</td>
+    </tr>
+    <tr>
+      <td><span class="tag">板块总监</span></td>
+      <td>查看 diff / 退回到板块管理员 / 通过</td>
+      <td>板块管理员提交审批后的汇总变更</td>
+    </tr>
+    <tr>
+      <td><span class="tag">群主</span></td>
+      <td>查看 diff / 退回到板块管理员 / 通过</td>
+      <td>板块总监确认后的最终变更</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>5.4 归档（Merge to Main / Tag）</h3>
+<div class="callout">
+  <div class="callout-title">系统管理员操作</div>
+  <p>确认归档 → 所有板块报告线汇总生成新 J 版快照 → 新 J 版成为下一周期的 main 分支 → 所有报告线状态更新为「已归档」</p>
+</div>
+
+<hr class="section-divider">
+
+<!-- Section 6: 导航与路由 -->
+<h2>六、导航与路由设计</h2>
+
+<h3>6.1 侧栏导航（按角色动态显示）</h3>
+
+<table class="table-striped">
+  <thead>
+    <tr>
+      <th style="width: 30%;">导航项</th>
+      <th style="width: 70%;">可见角色</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>📋 报告线管理</td>
+      <td>所有角色（取代原「审批流程」）</td>
+    </tr>
+    <tr>
+      <td>📊 项目追踪表（只读）</td>
+      <td>PM、板块管理员、系统管理员等（保留，变为查看）</td>
+    </tr>
+    <tr>
+      <td>📝 审计日志</td>
+      <td>系统管理员（不变）</td>
+    </tr>
+    <tr>
+      <td>⚙️ 管理设置</td>
+      <td>系统管理员（不变）</td>
+    </tr>
+    <tr>
+      <td>📄 表头配置</td>
+      <td>系统管理员（不变）</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><strong>与当前系统的对应关系：</strong></p>
+<table class="table-striped">
+  <thead>
+    <tr>
+      <th style="width: 20%;">当前导航项</th>
+      <th style="width: 25%;">调整后</th>
+      <th style="width: 55%;">变化说明</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>项目追踪表</td>
+      <td>📊 项目追踪表（只读）</td>
+      <td>保留页面，去除编辑能力，仅供浏览/导出</td>
+    </tr>
+    <tr>
+      <td>审批流程</td>
+      <td>📋 报告线管理</td>
+      <td>替换为报告线列表，整合填报+审批</td>
+    </tr>
+    <tr>
+      <td>审计日志</td>
+      <td>📝 审计日志</td>
+      <td>不变</td>
+    </tr>
+    <tr>
+      <td>管理设置</td>
+      <td>⚙️ 管理设置</td>
+      <td>不变</td>
+    </tr>
+    <tr>
+      <td>表头配置</td>
+      <td>📄 表头配置</td>
+      <td>不变</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>6.2 登录后跳转逻辑</h3>
+<div class="callout">
+  <div class="callout-title">统一入口</div>
+  <p>所有角色登录后统一跳转到「报告线管理」，列表根据权限自动过滤显示。</p>
+</div>
+
+<hr class="section-divider">
+
+<!-- Section 7: 权限矩阵 -->
+<h2>七、权限矩阵</h2>
+
+<h3>7.1 功能权限</h3>
+<table class="table-striped">
+  <thead>
+    <tr>
+      <th style="width: 30%;">功能</th>
+      <th style="width: 14%;">PM</th>
+      <th style="width: 14%;">板块管理员</th>
+      <th style="width: 14%;">板块领导</th>
+      <th style="width: 14%;">群主</th>
+      <th style="width: 14%;">系统管理员</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>查看报告线列表</td>
+      <td>✅ 自己板块</td>
+      <td>✅ 所辖板块</td>
+      <td>✅ 所辖板块</td>
+      <td>✅ 所辖板块</td>
+      <td>✅ 全部</td>
+    </tr>
+    <tr>
+      <td>填报项目数据</td>
+      <td>✅ 自己项目</td>
+      <td>✅ 板块全部</td>
+      <td>❌</td>
+      <td>❌</td>
+      <td>✅ 全部</td>
+    </tr>
+    <tr>
+      <td>提交审批（板块管理员发起）</td>
+      <td>❌</td>
+      <td>✅</td>
+      <td>❌</td>
+      <td>❌</td>
+      <td>❌</td>
+    </tr>
+    <tr>
+      <td>审批</td>
+      <td>❌</td>
+      <td>❌</td>
+      <td>✅</td>
+      <td>✅</td>
+      <td>❌</td>
+    </tr>
+    <tr>
+      <td>退回</td>
+      <td>❌</td>
+      <td>❌</td>
+      <td>✅</td>
+      <td>✅</td>
+      <td>❌</td>
+    </tr>
+    <tr>
+      <td>归档</td>
+      <td>❌</td>
+      <td>❌</td>
+      <td>❌</td>
+      <td>❌</td>
+      <td>✅</td>
+    </tr>
+    <tr>
+      <td>系统管理</td>
+      <td>❌</td>
+      <td>❌</td>
+      <td>❌</td>
+      <td>❌</td>
+      <td>✅</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>7.2 多角色合并规则</h3>
+<p>当用户同时拥有多个角色时，取所有角色权限的<strong>并集</strong>，数据范围同样取并集。</p>
+
+<h3>7.3 审批流自动跳过</h3>
+<p>当用户同时拥有提交者和审批者角色时，审批节点自动跳过：</p>
+
+<table class="table-striped">
+  <thead>
+    <tr>
+      <th style="width: 40%;">场景</th>
+      <th style="width: 60%;">行为</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>板块管理员提交自己的项目</td>
+      <td>板块管理员直接提交审批，跳过 PM 提交环节</td>
+    </tr>
+    <tr>
+      <td>板块总监兼板块管理员</td>
+      <td>跳过板块总监审批节点，直接进入群主审批</td>
+    </tr>
+    <tr>
+      <td>群主兼板块管理员</td>
+      <td>跳过群主审批节点，仅需板块总监审批（若也兼任则直接归档）</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr class="section-divider">
+
+<!-- Section 8: 与现有系统的关系 -->
+<h2>八、与现有系统的关系</h2>
+
+<h3>8.1 保留的能力</h3>
+<table class="table-striped">
+  <thead>
+    <tr>
+      <th style="width: 30%;">能力</th>
+      <th style="width: 70%;">说明</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Luckysheet 表格编辑</td>
+      <td>报告线详情内仍使用 Luckysheet 展示项目数据</td>
+    </tr>
+    <tr>
+      <td>字段权限矩阵</td>
+      <td>行级（PM只见自己项目）+ 字段级（角色×锁定期）保持不变</td>
+    </tr>
+    <tr>
+      <td>公式引擎</td>
+      <td>auto_calc 字段逻辑不变</td>
+    </tr>
+    <tr>
+      <td>快照机制</td>
+      <td>I/D/J 版快照继续使用，报告线 fork 基于 J 版快照</td>
+    </tr>
+    <tr>
+      <td>预警系统</td>
+      <td>保持不变，继续以 AlertsDrawer 组件形式存在</td>
+    </tr>
+    <tr>
+      <td>变更追踪</td>
+      <td>与 Git-like diff 机制整合，审批时展示字段级变更</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>8.2 需要调整的部分</h3>
+<table class="table-striped">
+  <thead>
+    <tr>
+      <th style="width: 25%;">模块</th>
+      <th style="width: 75%;">调整内容</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>路由系统</td>
+      <td>新增 /#/report-lines 和 /#/report-lines/:id；/#/editor 改为只读</td>
+    </tr>
+    <tr>
+      <td>登录跳转</td>
+      <td>所有角色统一跳转报告线管理，不再按角色跳不同首页</td>
+    </tr>
+    <tr>
+      <td>Store 数据结构</td>
+      <td>新增报告线列表状态、当前报告线上下文</td>
+    </tr>
+    <tr>
+      <td>侧栏导航</td>
+      <td>「审批流程」替换为「报告线管理」；「项目追踪表」标注为只读查看</td>
+    </tr>
+    <tr>
+      <td>审批页面</td>
+      <td>从独立审批页整合到报告线详情内</td>
+    </tr>
+    <tr>
+      <td>项目追踪表</td>
+      <td>去除编辑能力，保留浏览、筛选、导出功能</td>
+    </tr>
+    <tr>
+      <td>数据加载</td>
+      <td>报告线详情按板块×周期加载，项目追踪表保留全量加载</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr class="section-divider">
+
+<!-- Section 9: 开放问题 -->
+<h2>九、开放问题（已确认）</h2>
+
+<table class="table-striped">
+  <thead>
+    <tr>
+      <th style="width: 8%;">编号</th>
+      <th style="width: 42%;">问题</th>
+      <th style="width: 50%;">结论</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Q1</td>
+      <td>板块管理员是否可以代替 PM 填报？</td>
+      <td>✅ 可以。板块管理员可统一填报而不需要 PM 参与，但 PM 仍保留填报入口。PM 填报不是必须的前置条件。</td>
+    </tr>
+    <tr>
+      <td>Q2</td>
+      <td>退回粒度？</td>
+      <td>✅ 退回到板块管理员。审批退回统一退回到板块管理员层级，不细分到单个 PM。</td>
+    </tr>
+    <tr>
+      <td>Q3</td>
+      <td>多 PM 提交时序？</td>
+      <td>✅ 不强制等待。PM 填报不是必须的，板块管理员随时可以提交审批，无需等待所有 PM 填报完成。</td>
+    </tr>
+    <tr>
+      <td>Q4</td>
+      <td>历史报告线如何展示？</td>
+      <td>✅ 不折叠。历史报告线按时间倒序排在列表最后，不做折叠处理。</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr class="section-divider">
+
+<!-- Section 10: 下一步 -->
+<h2>十、下一步</h2>
+
+<ol style="padding-left: 20pt; line-height: 2;">
+  <li>设计详细的数据库 schema 变更（报告线表、状态流转表）</li>
+  <li>设计前端原型 / 线框图</li>
+  <li>确定迁移策略（从当前原型到报告线模式的过渡方案）</li>
+</ol>
+
+<footer>
+  <p>多角色与报告线列表设计方案 · v1.0 · 2026-06-01</p>
+  <p>Wood China · 项目追踪表线上化</p>
+</footer>
+
+</body>
+</html>
+     
