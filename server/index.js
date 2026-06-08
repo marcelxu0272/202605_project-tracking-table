@@ -83,6 +83,49 @@ function seedFromXlsxIfEmpty(db) {
   return { seeded: true, count: projects.length, file: xlsxPath, devSeed, importSnapshot };
 }
 
+function loadCurrentProjects(db) {
+  return db.prepare('SELECT payload FROM projects ORDER BY project_no ASC').all()
+    .map(function (r) { return JSON.parse(r.payload); });
+}
+
+/**
+ * 初始化/演示环境需要一份与当前项目追踪表一致的 J 版，作为报告线 fork baseline。
+ * 若旧库中已有报告线但 baseline_version 为空，也回填为该 J 版，避免未提交前 diff 误报为新增项目。
+ */
+function ensureInitialFinalSnapshot(db, options) {
+  options = options || {};
+  let latestJVersion = dbm.getMeta(db, 'latestJVersion', null);
+  let latestJExists = false;
+  if (latestJVersion) {
+    latestJExists = !!db.prepare('SELECT 1 FROM snapshots WHERE version = ?').get(latestJVersion);
+  }
+
+  let finalSnapshot = null;
+  if (options.force || !latestJExists) {
+    const projects = loadCurrentProjects(db);
+    if (!projects.length) return { created: false, updatedReportLines: 0 };
+    finalSnapshot = snapSvc.createFinalSnapshot(db, projects, {
+      name: '系统',
+      role: 'system_admin'
+    });
+    latestJVersion = finalSnapshot.version;
+    console.log('[ptrack] 已生成初始化 J 版快照', latestJVersion);
+  }
+
+  const updated = db.prepare(
+    'UPDATE report_lines SET baseline_version = ? WHERE baseline_version IS NULL OR baseline_version = ?'
+  ).run(latestJVersion, '');
+  if (updated.changes > 0) {
+    console.log('[ptrack] 已回填报告线 baseline_version', latestJVersion, 'count=', updated.changes);
+  }
+  return {
+    created: !!finalSnapshot,
+    finalSnapshot,
+    baselineVersion: latestJVersion,
+    updatedReportLines: updated.changes
+  };
+}
+
 const db = dbm.openDb();
 dbm.ensureDefaultMeta(db);
 seedFromXlsxIfEmpty(db);
@@ -95,6 +138,11 @@ try {
   }
 } catch (e) {
   console.warn('[ptrack] 快照库维护失败:', e.message);
+}
+try {
+  ensureInitialFinalSnapshot(db);
+} catch (e) {
+  console.warn('[ptrack] 初始化 J 版快照维护失败:', e.message);
 }
 timesheetImport.seedTimesheetsIfEmpty(db, dbm);
 try {
@@ -501,7 +549,8 @@ function applyDevSeedAfterImport(reportingMonth, sourceFile) {
     repickDemoNew: true
   });
   const importSnapshot = createDevImportSnapshot(db, devSeed, { sourceFile });
-  return Object.assign({}, devSeed, { importSnapshot });
+  const finalSnapshot = ensureInitialFinalSnapshot(db, { force: true });
+  return Object.assign({}, devSeed, { importSnapshot, finalSnapshot });
 }
 
 function resetWorkflowMeta(db) {
@@ -531,11 +580,13 @@ app.post('/api/admin/reseed', (_req, res) => {
       userName: '系统',
       role: 'system_admin'
     });
+    const finalSnapshot = ensureInitialFinalSnapshot(db, { force: true });
     res.json({
       ok: true,
       count,
       file,
       importSnapshot,
+      finalSnapshot,
       state: dbm.getBootstrapState(db)
     });
   } catch (e) {
@@ -677,9 +728,11 @@ app.post('/api/admin/reset-dev', (_req, res) => {
 /** 开发测试：重建填报管理（报告线）演示数据 */
 app.post('/api/admin/reseed-report-lines', (_req, res) => {
   try {
+    const finalSnapshot = ensureInitialFinalSnapshot(db);
     const result = reportLineSeed.seedReportLines(db, { force: true });
     res.json({
       ok: true,
+      finalSnapshot,
       ...result,
       state: dbm.getBootstrapState(db)
     });
@@ -1059,6 +1112,21 @@ app.post('/api/report-lines/fork-period', (req, res) => {
   }
 });
 
+// 手动/测试：自动完结当前报告月所有未完成报告线
+app.post('/api/report-lines/auto-complete-current', (req, res) => {
+  try {
+    const { role } = req.body || {};
+    if (role !== 'system_admin') {
+      res.status(403).json({ error: '仅系统管理员可自动结束报告线' });
+      return;
+    }
+    const result = runReportLineDeadlineCheck(true);
+    res.json({ ok: true, result, state: dbm.getBootstrapState(db) });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: String(e.message) });
+  }
+});
+
 app.use(express.static(ROOT));
 
 function runScheduledPlatformSync() {
@@ -1087,7 +1155,46 @@ function scheduleDailyPlatformSync() {
   }, 60 * 1000);
 }
 
+function shouldAutoCompleteReportLines(now, periodConfig) {
+  const deadlineDay = Number(periodConfig.deadlineDay || periodConfig.lockDay || 25);
+  if (!deadlineDay || isNaN(deadlineDay)) return false;
+  const reportingMonth = periodConfig.reportingMonth || dbm.getMeta(db, 'reportingMonth') || '2026-06';
+  const parts = String(reportingMonth).split('-').map(Number);
+  const y = parts[0];
+  const m = parts[1];
+  if (!y || !m) return false;
+  return now.getFullYear() === y && (now.getMonth() + 1) === m && now.getDate() >= deadlineDay;
+}
+
+function runReportLineDeadlineCheck(force) {
+  const pc = Object.assign({}, dbm.DEFAULT_PERIOD_CONFIG, dbm.getMeta(db, 'periodConfig') || {});
+  const period = dbm.getMeta(db, 'reportingMonth') || pc.reportingMonth;
+  if (!force && !shouldAutoCompleteReportLines(new Date(), pc)) return null;
+  const result = reportLineService.autoCompletePeriod(period, {
+    actorName: force ? '系统管理员' : '系统',
+    comment: force
+      ? '系统管理员手动触发，自动提交并审批通过。'
+      : '截止填报日期已到，系统自动提交并审批通过。'
+  });
+  return result;
+}
+
+function scheduleReportLineDeadlineCheck() {
+  setInterval(() => {
+    try {
+      const result = runReportLineDeadlineCheck(false);
+      if (result && result.count) {
+        console.log('[ptrack] 报告线截止自动完结', result.period, result.count);
+      }
+    } catch (e) {
+      console.warn('[ptrack] 报告线截止自动完结失败:', e.message);
+    }
+  }, 60 * 1000);
+}
+
 app.listen(PORT, () => {
   console.log(`[ptrack] http://127.0.0.1:${PORT}/  | SQLite: ${dbm.DB_PATH}`);
+  try { runReportLineDeadlineCheck(false); } catch (e) { console.warn('[ptrack] 报告线截止检查失败:', e.message); }
   scheduleDailyPlatformSync();
+  scheduleReportLineDeadlineCheck();
 });

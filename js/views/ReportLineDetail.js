@@ -90,7 +90,9 @@
         if (this.rlMode === 'view') return false;
         var s = this.rlStatus;
         var role = (Store.currentUser || {}).role;
-        if (role === 'pm') return s === 'open';
+        if (role === 'pm') {
+          return s === 'open' && (this.currentPmReportLineStatus === 'open' || this.currentPmReportLineStatus === 'rejected');
+        }
         if (role === 'sector_admin' || role === 'system_admin') {
           return s === 'open' || s === 'returned' || s === 'rejected';
         }
@@ -148,6 +150,14 @@
       editorSnapshotOptions:        function () { return []; },
       isSystemAdmin:                function () { return false; }, // 隐藏版本快照下拉
 
+      currentPmReportLineStatus: function () {
+        var user = Store.currentUser || {};
+        var pmName = user.pmName || user.name;
+        var rows = this.reportLine.pmStatuses || [];
+        var hit = rows.find(function (row) { return row && row.pm_name === pmName; });
+        return hit ? hit.status : null;
+      },
+
       // ── 报告线操作按钮可见性 ──
       rlCanSubmit: function () {
         var role = (Store.currentUser || {}).role;
@@ -155,6 +165,21 @@
         if (role === 'pm') return s === 'open';
         if (role === 'sector_admin') return s === 'open' || s === 'returned' || s === 'rejected';
         return false;
+      },
+
+      rlSubmitDisabled: function () {
+        var role = (Store.currentUser || {}).role;
+        if (role !== 'pm') return false;
+        return this.currentPmReportLineStatus !== 'open' && this.currentPmReportLineStatus !== 'rejected';
+      },
+
+      rlSubmitLabel: function () {
+        var role = (Store.currentUser || {}).role;
+        if (role !== 'pm') return '提交审批';
+        var status = this.currentPmReportLineStatus;
+        if (status === 'submitted') return '已提交';
+        if (status === 'closed') return '已关闭';
+        return '提交填报';
       },
 
       rlCanApprove: function () {
@@ -513,9 +538,16 @@
       handleRlSubmit: async function () {
         var role = (Store.currentUser || {}).role;
         var rlId = this.reportLine.id;
+        if (this.rlSubmitDisabled) return;
         this._rlSubmitting = true;
         try {
-          if (this.canEdit) await this._flushRlLuckysheet();
+          if (this.canEdit) {
+            await this._flushRlLuckysheet();
+            await this.loadDetail();
+          }
+          if (!this.assertStockBeforeSubmit()) {
+            throw new Error('stock_validation');
+          }
           if (role === 'pm') {
             await Store.pmSubmitReportLine(rlId);
             this.$message.success('提交成功');
@@ -525,7 +557,9 @@
           }
           await this.loadDetail();
         } catch (e) {
-          this.$message.error('操作失败：' + (e.message || e));
+          if (!e || e.message !== 'stock_validation') {
+            this.$message.error('操作失败：' + (e.message || e));
+          }
         } finally {
           this._rlSubmitting = false;
         }

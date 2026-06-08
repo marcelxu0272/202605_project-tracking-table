@@ -2675,8 +2675,9 @@
                 type="success"
                 icon="el-icon-check"
                 :loading="rlSubmitting"
+                :disabled="rlSubmitDisabled"
                 @click="handleRlSubmit"
-              >{{ user.role === 'pm' ? '提交填报' : '提交审批' }}</el-button>
+              >{{ rlSubmitLabel }}</el-button>
               <el-button
                 v-if="rlCanApprove"
                 size="small"
@@ -2979,6 +2980,10 @@
       },
       /** 报告线提交按钮（PM → pmSubmit；sector_admin → submitApproval） */
       rlCanSubmit()  { return false; },
+      /** 报告线提交按钮禁用态 */
+      rlSubmitDisabled() { return false; },
+      /** 报告线提交按钮文案 */
+      rlSubmitLabel() { return this.user.role === 'pm' ? '提交填报' : '提交审批'; },
       /** 报告线审批通过按钮 */
       rlCanApprove() { return false; },
       /** 报告线退回按钮 */

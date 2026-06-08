@@ -14,6 +14,7 @@
         importLoading: false,
         importResult: null,
         importFile: null,
+        autoCompleteLoading: false,
         sectorAdmins: {},
         sectorReviewers: {},
         groupReviewers: {},
@@ -267,6 +268,26 @@
             })
             .catch(e => { this.$message.error('恢复失败：' + (e.message || e)); });
         }).catch(() => {});
+      },
+      handleAutoCompleteReportLines() {
+        if (!this.isAdmin) { this.$message.error('仅管理员可操作'); return; }
+        this.$confirm(
+          '将把当前报告月所有未完成的报告线置为「已完成」，并在流转轨迹中记录系统自动完结节点。该操作用于测试/截止日处理，确认继续？',
+          '自动结束当前报告线',
+          { confirmButtonText: '确认结束', cancelButtonText: '取消', type: 'warning' }
+        ).then(() => {
+          this.autoCompleteLoading = true;
+          return Store.autoCompleteCurrentReportLines();
+        }).then((res) => {
+          const count = res && res.result ? res.result.count : 0;
+          this.$message.success('已自动结束 ' + count + ' 条报告线');
+        }).catch(e => {
+          if (e !== 'cancel' && e !== 'close') {
+            this.$message.error('自动结束失败：' + (e.message || e));
+          }
+        }).finally(() => {
+          this.autoCompleteLoading = false;
+        });
       }
     },
     template: `
@@ -300,10 +321,22 @@
                   <el-input-number v-model="periodForm.reminderDay" :min="1" :max="28" style="width:100px;"></el-input-number>
                   <span style="font-size:11px;color:#94a3b8;margin-left:8px;">每月第 N 日系统发送提醒</span>
                 </el-form-item>
+                <el-form-item label="截止填报日期">
+                  <el-input-number v-model="periodForm.deadlineDay" :min="1" :max="28" style="width:100px;"></el-input-number>
+                  <span style="font-size:11px;color:#94a3b8;margin-left:8px;">到期后当月未完成报告线自动置为已完成</span>
+                </el-form-item>
                 <el-form-item>
                   <el-button type="primary" size="small" style="background:#007069;border-color:#007069;" :disabled="!isAdmin" @click="savePeriodConfig">
                     保存配置
                   </el-button>
+                  <el-button
+                    size="small"
+                    type="warning"
+                    icon="el-icon-finished"
+                    :loading="autoCompleteLoading"
+                    :disabled="!isAdmin"
+                    @click="handleAutoCompleteReportLines"
+                  >自动结束当前所有报告线</el-button>
                 </el-form-item>
               </el-form>
             </div>

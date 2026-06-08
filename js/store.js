@@ -696,6 +696,16 @@
     return result;
   };
 
+  Store.autoCompleteCurrentReportLines = async function () {
+    var user = Store.currentUser || {};
+    var result = await apiFetch('/report-lines/auto-complete-current', {
+      method: 'POST',
+      body: { role: user.role, userName: user.name }
+    });
+    if (result && result.state) applyBootstrap(result.state);
+    return result;
+  };
+
   /**
    * 根据角色 + 状态返回可见操作列表（同步方法）
    * 状态: open | submitted | reviewing_director | reviewing_leader | returned | completed | closed

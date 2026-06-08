@@ -779,7 +779,55 @@ function reviewApproval(id, action, reviewerRole, reviewerName, comment) {
 }
 
 // ---------------------------------------------------------------------------
-// 8. shouldSkipNode — 审批自动跳过
+// 8. autoCompletePeriod — 截止日后自动完结当前报告月报告线
+// ---------------------------------------------------------------------------
+
+function autoCompletePeriod(period, options) {
+  options = options || {};
+  var db = dbm.getDb();
+  var targetPeriod = period || dbm.getMeta(db, 'reportingMonth', null)
+    || (dbm.getMeta(db, 'periodConfig', {}) || {}).reportingMonth;
+  if (!targetPeriod) fail(400, '当前报告月不存在');
+
+  var rows = db.prepare(
+    'SELECT * FROM report_lines WHERE period = ? AND status <> ? ORDER BY id ASC'
+  ).all(targetPeriod, 'completed');
+
+  var actorName = options.actorName || '系统';
+  var comment = options.comment || '截止填报日期已到，系统自动提交并审批通过。';
+  var completed = [];
+
+  var tx = db.transaction(function () {
+    rows.forEach(function (line) {
+      db.prepare(
+        'UPDATE report_lines SET status = ?, approval_node = NULL, updated_at = datetime(\'now\',\'localtime\') WHERE id = ?'
+      ).run('completed', line.id);
+
+      db.prepare(
+        'UPDATE report_line_pm_status SET status = ?, submitted_at = COALESCE(submitted_at, ?) '
+        + 'WHERE report_line_id = ? AND status IN (?, ?)'
+      ).run('closed', nowLocal(), line.id, 'open', 'rejected');
+
+      db.prepare(
+        'INSERT INTO report_line_approvals (report_line_id, action, actor_role, actor_name, comment, from_status, to_status) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).run(line.id, 'auto_complete', 'system', actorName, comment, line.status, 'completed');
+
+      completed.push({
+        id: line.id,
+        sector_code: line.sector_code,
+        from_status: line.status,
+        to_status: 'completed'
+      });
+    });
+  });
+  tx();
+
+  return { period: targetPeriod, count: completed.length, completed: completed };
+}
+
+// ---------------------------------------------------------------------------
+// 9. shouldSkipNode — 审批自动跳过
 // ---------------------------------------------------------------------------
 
 function shouldSkipNode(sectorCode, submitterName) {
@@ -1091,6 +1139,7 @@ module.exports = {
   pmSubmit: pmSubmit,
   submitApproval: submitApproval,
   reviewApproval: reviewApproval,
+  autoCompletePeriod: autoCompletePeriod,
   shouldSkipNode: shouldSkipNode,
   getDiff: getDiff,
   exportReportLine: exportReportLine,

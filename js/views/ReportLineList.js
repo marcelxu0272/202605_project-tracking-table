@@ -342,6 +342,7 @@
           else if (a.action === 'approve') { icon = 'el-icon-circle-check'; color = '#10b981'; }
           else if (a.action === 'reject') { icon = 'el-icon-circle-close'; color = '#ef4444'; }
           else if (a.action === 'auto_skip') { icon = 'el-icon-d-arrow-right'; color = '#f59e0b'; }
+          else if (a.action === 'auto_complete') { icon = 'el-icon-finished'; color = '#8b5cf6'; }
           else if (a.action === 'close_pm') { icon = 'el-icon-lock'; color = '#94a3b8'; }
           items.push({
             approvalId: a.id,
@@ -369,6 +370,7 @@
           approve: '审批通过',
           reject: '退回',
           auto_skip: '自动跳过节点',
+          auto_complete: '逾期自动完结',
           close_pm: '关闭 PM 填报'
         };
         return map[action] || action;

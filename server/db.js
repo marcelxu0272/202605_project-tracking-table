@@ -150,6 +150,7 @@ function openDb() {
 
 const DEFAULT_PERIOD_CONFIG = {
   reminderDay: 5,
+  deadlineDay: 25,
   lockDay: 25,
   unlockDay: 9,
   autoUnlockEnabled: false,
