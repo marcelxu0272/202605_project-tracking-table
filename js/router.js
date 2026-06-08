@@ -5,8 +5,7 @@
   'use strict';
 
   function homePathForRole(role) {
-    if (role === 'sector_director' || role === 'group_leader') return '/approval';
-    return '/editor';
+    return '/report-lines';
   }
 
   const routes = [
@@ -36,9 +35,19 @@
           meta: { requiresAuth: true, title: '项目追踪表' }
         },
         {
+          path: 'report-lines',
+          component: window.ReportLineListView,
+          meta: { requiresAuth: true, title: '填报管理' }
+        },
+        {
+          path: 'report-lines/:id',
+          component: window.ReportLineDetailView,
+          meta: { requiresAuth: true, title: '填报详情' }
+        },
+        // /approval 保留兼容：重定向到 /report-lines（防止旧书签失效）
+        {
           path: 'approval',
-          component: window.ApprovalView,
-          meta: { requiresAuth: true, title: '审批流程' }
+          redirect: '/report-lines'
         },
         {
           path: 'audit',
@@ -106,24 +115,23 @@
       return;
     }
 
-    // 项目经理仅允许访问填报
-    const pmRestrictedPaths = ['/approval', '/audit', '/admin', '/fields'];
+    // 项目经理：仅限制管理类路由
+    const pmRestrictedPaths = ['/audit', '/admin', '/fields'];
     if (role === 'pm' && pmRestrictedPaths.includes(to.path)) {
       denyAccess(next, role);
       return;
     }
 
-    // 经营管理（只读）：填报，无审批/审计/管理
-    const execRestrictedPaths = ['/approval', '/audit', '/admin', '/fields'];
+    // 经营管理（只读）：仅限制管理类路由
+    const execRestrictedPaths = ['/audit', '/admin', '/fields'];
     if (role === 'executive_viewer' && execRestrictedPaths.includes(to.path)) {
       denyAccess(next, role);
       return;
     }
 
-    // 板块总监 / 项目群群主：仅审批流程
-    const approvalOnlyRoles = ['sector_director', 'group_leader'];
-    const approvalOnlyRestricted = ['/editor', '/audit', '/admin', '/fields'];
-    if (approvalOnlyRoles.includes(role) && approvalOnlyRestricted.includes(to.path)) {
+    // 板块总监 / 项目群群主：仅限制管理类路由（/editor 权限在页面内控制）
+    const directorRestrictedPaths = ['/audit', '/admin', '/fields'];
+    if (['sector_director', 'group_leader'].includes(role) && directorRestrictedPaths.includes(to.path)) {
       denyAccess(next, role);
       return;
     }

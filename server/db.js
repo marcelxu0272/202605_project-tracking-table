@@ -80,17 +80,69 @@ function openDb() {
       dismissed_by TEXT NOT NULL DEFAULT '',
       PRIMARY KEY (project_no, alert_type)
     );
+    CREATE TABLE IF NOT EXISTS report_lines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sector_code TEXT NOT NULL,
+      period TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      approval_node TEXT,
+      baseline_version TEXT,
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      updated_at TEXT DEFAULT (datetime('now','localtime')),
+      UNIQUE(sector_code, period)
+    );
+    CREATE INDEX IF NOT EXISTS idx_rl_sector ON report_lines(sector_code);
+    CREATE INDEX IF NOT EXISTS idx_rl_period ON report_lines(period);
+    CREATE INDEX IF NOT EXISTS idx_rl_status ON report_lines(status);
+    CREATE TABLE IF NOT EXISTS report_line_pm_status (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_line_id INTEGER NOT NULL,
+      pm_name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      submitted_at TEXT,
+      FOREIGN KEY (report_line_id) REFERENCES report_lines(id),
+      UNIQUE(report_line_id, pm_name)
+    );
+    CREATE INDEX IF NOT EXISTS idx_rlpm_report_line ON report_line_pm_status(report_line_id);
+    CREATE INDEX IF NOT EXISTS idx_rlpm_status ON report_line_pm_status(status);
+    CREATE TABLE IF NOT EXISTS report_line_approvals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_line_id INTEGER NOT NULL,
+      action TEXT NOT NULL,
+      actor_role TEXT NOT NULL,
+      actor_name TEXT NOT NULL,
+      comment TEXT,
+      from_status TEXT,
+      to_status TEXT,
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (report_line_id) REFERENCES report_lines(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_rla_report_line ON report_line_approvals(report_line_id);
+    CREATE INDEX IF NOT EXISTS idx_rla_action ON report_line_approvals(action);
+    CREATE TABLE IF NOT EXISTS report_line_data (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_line_id INTEGER NOT NULL,
+      project_no TEXT NOT NULL,
+      field_data TEXT,
+      change_diff TEXT,
+      updated_by TEXT,
+      updated_at TEXT DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (report_line_id) REFERENCES report_lines(id),
+      UNIQUE(report_line_id, project_no)
+    );
+    CREATE INDEX IF NOT EXISTS idx_rld_report_line ON report_line_data(report_line_id);
+    CREATE INDEX IF NOT EXISTS idx_rld_project ON report_line_data(project_no);
   `);
 
   return db;
 }
 
 const DEFAULT_PERIOD_CONFIG = {
-  reminderDay: 19,
+  reminderDay: 5,
   lockDay: 25,
   unlockDay: 9,
   autoUnlockEnabled: false,
-  reportingMonth: '2026-05',
+  reportingMonth: '2026-06',
   systemYear: 2026,
   platformSyncHour: 2
 };
@@ -99,21 +151,101 @@ const DEFAULT_GROUP_REGISTRY = {
   GRP_JS: {
     name: '金山项目群',
     sectors: ['SAS520', 'SAS560', 'SAS550', 'SAS530']
+  },
+  GRP_ZB: {
+    name: '总部项目群',
+    sectors: ['SAS170', 'SAS610', 'SAS680', 'SAS650', 'SAS710', 'SAS690', 'SAS720', 'SAS670']
   }
 };
 
-const DEFAULT_SECTOR_ADMINS = {};
+/** 各板块管理员（板块汇总与提交审批） */
+const DEFAULT_SECTOR_ADMINS = {
+  SAS520: { adminName: '运营总监 周明',     adminUserId: 'u_sa_520' },
+  SAS530: { adminName: '银川板块管理员 宁刚', adminUserId: 'u_sa_530' },
+  SAS550: { adminName: '惠湛板块管理员 郑涛', adminUserId: 'u_sa_550' },
+  SAS560: { adminName: '沈阳板块管理员 杨帆', adminUserId: 'u_sa_560' },
+  SAS670: { adminName: '供应链板块管理员 夏磊', adminUserId: 'u_sa_670' },
+  SAS170: { adminName: 'PMC板块管理员 吴敏',  adminUserId: 'u_sa_170' },
+  SAS610: { adminName: '咨询板块管理员 曹琳',  adminUserId: 'u_sa_610' },
+  SAS680: { adminName: '数字技术板块管理员 朱彤', adminUserId: 'u_sa_680' },
+  SAS650: { adminName: '新材料板块管理员 梁欢', adminUserId: 'u_sa_650' },
+  SAS710: { adminName: '生命科学板块管理员 秦伟', adminUserId: 'u_sa_710' },
+  SAS690: { adminName: 'COII板块管理员 贾峰',  adminUserId: 'u_sa_690' },
+  SAS720: { adminName: '模块化板块管理员 许涛', adminUserId: 'u_sa_720' }
+};
+
+/** 各板块审批负责人（板块总监审批） */
+const DEFAULT_SECTOR_REVIEWERS = {
+  SAS520: { reviewerName: '板块总监 陈磊',     reviewerUserId: 'u_sd_520' },
+  SAS530: { reviewerName: '银川板块总监 马军',  reviewerUserId: 'u_sd_530' },
+  SAS550: { reviewerName: '惠湛板块总监 林海',  reviewerUserId: 'u_sd_550' },
+  SAS560: { reviewerName: '沈阳板块总监 王刚',  reviewerUserId: 'u_sd_560' },
+  SAS670: { reviewerName: '供应链板块总监 方博', reviewerUserId: 'u_sd_670' },
+  SAS170: { reviewerName: 'PMC板块总监 钱进',  reviewerUserId: 'u_sd_170' },
+  SAS610: { reviewerName: '咨询板块总监 孙洁',  reviewerUserId: 'u_sd_610' },
+  SAS680: { reviewerName: '数字技术板块总监 卢峰', reviewerUserId: 'u_sd_680' },
+  SAS650: { reviewerName: '新材料板块总监 魏来',  reviewerUserId: 'u_sd_650' },
+  SAS710: { reviewerName: '生命科学板块总监 谢云', reviewerUserId: 'u_sd_710' },
+  SAS690: { reviewerName: 'COII板块总监 杜超',   reviewerUserId: 'u_sd_690' },
+  SAS720: { reviewerName: '模块化板块总监 侯强',  reviewerUserId: 'u_sd_720' }
+};
+
+/** 各项目群审批负责人（群主终审） */
+const DEFAULT_GROUP_REVIEWERS = {
+  GRP_JS: { reviewerName: '项目群主 王总', reviewerUserId: 'u_gl_js' },
+  GRP_ZB: { reviewerName: '总部群主 刘总', reviewerUserId: 'u_gl_zb' }
+};
 
 const DEFAULT_USERS = [
-  { id: 'u_admin', name: '管理员 Admin', role: 'system_admin', status: 'active' },
-  { id: 'u_ev_company', name: '财务总监 张颖', role: 'executive_viewer', dataScope: 'company', status: 'active' },
-  { id: 'u_ev_sector', name: '板块领导 李强', role: 'executive_viewer', dataScope: 'sector', sectorCode: 'SAS520', status: 'active' },
-  { id: 'u_ev_group', name: '群领导 孙总', role: 'executive_viewer', dataScope: 'group', groupCode: 'GRP_JS', status: 'active' },
-  { id: 'u_sa', name: '运营总监 周明', role: 'sector_admin', sector: 'S520', status: 'active' },
-  { id: 'u_pm1', name: '何孝刚', role: 'pm', sector: 'S520', status: 'active' },
-  { id: 'u_pm2', name: '宋建生', role: 'pm', sector: 'S520', status: 'active' },
-  { id: 'u_sd', name: '板块总监 陈磊', role: 'sector_director', sector: 'S520', status: 'active' },
-  { id: 'u_gl', name: '项目群主 王总', role: 'group_leader', status: 'active' }
+  { id: 'u_admin',      name: '管理员 Admin',     role: 'system_admin',     status: 'active' },
+  { id: 'u_ev_company', name: '财务总监 张颖',     role: 'executive_viewer', dataScope: 'company',            status: 'active' },
+  { id: 'u_ev_sector',  name: '板块领导 李强',     role: 'executive_viewer', dataScope: 'sector', sectorCode: 'SAS520', status: 'active' },
+  { id: 'u_ev_group',   name: '群领导 孙总',       role: 'executive_viewer', dataScope: 'group',  groupCode: 'GRP_JS',  status: 'active' },
+  // 金山中心 SAS520
+  { id: 'u_sa_520',  name: '运营总监 周明',     role: 'sector_admin',     sector: 'SAS520', status: 'active' },
+  { id: 'u_pm1',     name: '何孝刚',            role: 'pm',               sector: 'SAS520', status: 'active' },
+  { id: 'u_pm2',     name: '宋建生',            role: 'pm',               sector: 'SAS520', status: 'active' },
+  { id: 'u_sd_520',  name: '板块总监 陈磊',     role: 'sector_director',  sector: 'SAS520', status: 'active' },
+  // 银川中心 SAS530
+  { id: 'u_sa_530',  name: '银川板块管理员 宁刚', role: 'sector_admin',    sector: 'SAS530', status: 'active' },
+  { id: 'u_sd_530',  name: '银川板块总监 马军',  role: 'sector_director',  sector: 'SAS530', status: 'active' },
+  // 惠湛中心 SAS550
+  { id: 'u_sa_550',  name: '惠湛板块管理员 郑涛', role: 'sector_admin',    sector: 'SAS550', status: 'active' },
+  { id: 'u_sd_550',  name: '惠湛板块总监 林海',  role: 'sector_director',  sector: 'SAS550', status: 'active' },
+  // 沈阳中心 SAS560
+  { id: 'u_sa_560',  name: '沈阳板块管理员 杨帆', role: 'sector_admin',    sector: 'SAS560', status: 'active' },
+  { id: 'u_sd_560',  name: '沈阳板块总监 王刚',  role: 'sector_director',  sector: 'SAS560', status: 'active' },
+  // 供应链板块 SAS670
+  { id: 'u_sa_670',  name: '供应链板块管理员 夏磊', role: 'sector_admin',  sector: 'SAS670', status: 'active' },
+  { id: 'u_sd_670',  name: '供应链板块总监 方博', role: 'sector_director',  sector: 'SAS670', status: 'active' },
+  // PMC板块 SAS170
+  { id: 'u_sa_170',  name: 'PMC板块管理员 吴敏',  role: 'sector_admin',    sector: 'SAS170', status: 'active' },
+  { id: 'u_sd_170',  name: 'PMC板块总监 钱进',   role: 'sector_director',  sector: 'SAS170', status: 'active' },
+  // 咨询板块 SAS610
+  { id: 'u_sa_610',  name: '咨询板块管理员 曹琳', role: 'sector_admin',    sector: 'SAS610', status: 'active' },
+  { id: 'u_sd_610',  name: '咨询板块总监 孙洁',  role: 'sector_director',  sector: 'SAS610', status: 'active' },
+  // 数字技术板块 SAS680
+  { id: 'u_sa_680',  name: '数字技术板块管理员 朱彤', role: 'sector_admin', sector: 'SAS680', status: 'active' },
+  { id: 'u_sd_680',  name: '数字技术板块总监 卢峰', role: 'sector_director', sector: 'SAS680', status: 'active' },
+  // 新材料板块 SAS650
+  { id: 'u_sa_650',  name: '新材料板块管理员 梁欢', role: 'sector_admin',  sector: 'SAS650', status: 'active' },
+  { id: 'u_sd_650',  name: '新材料板块总监 魏来', role: 'sector_director',  sector: 'SAS650', status: 'active' },
+  // 生命科学板块 SAS710
+  { id: 'u_sa_710',  name: '生命科学板块管理员 秦伟', role: 'sector_admin', sector: 'SAS710', status: 'active' },
+  { id: 'u_sd_710',  name: '生命科学板块总监 谢云', role: 'sector_director', sector: 'SAS710', status: 'active' },
+  // COII板块 SAS690
+  { id: 'u_sa_690',  name: 'COII板块管理员 贾峰', role: 'sector_admin',    sector: 'SAS690', status: 'active' },
+  { id: 'u_sd_690',  name: 'COII板块总监 杜超',  role: 'sector_director',  sector: 'SAS690', status: 'active' },
+  // 模块化板块 SAS720
+  { id: 'u_sa_720',  name: '模块化板块管理员 许涛', role: 'sector_admin',  sector: 'SAS720', status: 'active' },
+  { id: 'u_sd_720',  name: '模块化板块总监 侯强', role: 'sector_director',  sector: 'SAS720', status: 'active' },
+  // 群主
+  { id: 'u_gl_js',   name: '项目群主 王总',      role: 'group_leader',     groupCode: 'GRP_JS', status: 'active' },
+  { id: 'u_gl_zb',   name: '总部群主 刘总',      role: 'group_leader',     groupCode: 'GRP_ZB', status: 'active' },
+  // 兼容旧 ID（供已存在数据引用）
+  { id: 'u_sa',  name: '运营总监 周明',  role: 'sector_admin',    sector: 'S520',   status: 'active' },
+  { id: 'u_sd',  name: '板块总监 陈磊',  role: 'sector_director', sector: 'S520',   status: 'active' },
+  { id: 'u_gl',  name: '项目群主 王总',  role: 'group_leader',                      status: 'active' }
 ];
 
 function getMeta(db, key, fallback = null) {
@@ -180,12 +312,41 @@ function ensureDefaultMeta(db) {
   }
   if (getMeta(db, 'users', null) === null) {
     setMeta(db, 'users', DEFAULT_USERS);
+  } else {
+    const existing = getMeta(db, 'users', []);
+    const existingIds = new Set(existing.map(u => u && u.id).filter(Boolean));
+    const newUsers = DEFAULT_USERS.filter(u => !existingIds.has(u.id));
+    if (newUsers.length > 0) {
+      setMeta(db, 'users', existing.concat(newUsers));
+    }
   }
   if (getMeta(db, 'groupRegistry', null) === null) {
     setMeta(db, 'groupRegistry', DEFAULT_GROUP_REGISTRY);
+  } else {
+    const existing = getMeta(db, 'groupRegistry', {});
+    const merged = Object.assign({}, DEFAULT_GROUP_REGISTRY, existing);
+    setMeta(db, 'groupRegistry', merged);
   }
   if (getMeta(db, 'sectorAdmins', null) === null) {
     setMeta(db, 'sectorAdmins', DEFAULT_SECTOR_ADMINS);
+  } else {
+    const existing = getMeta(db, 'sectorAdmins', {});
+    const merged = Object.assign({}, DEFAULT_SECTOR_ADMINS, existing);
+    setMeta(db, 'sectorAdmins', merged);
+  }
+  if (getMeta(db, 'sectorReviewers', null) === null) {
+    setMeta(db, 'sectorReviewers', DEFAULT_SECTOR_REVIEWERS);
+  } else {
+    const existing = getMeta(db, 'sectorReviewers', {});
+    const merged = Object.assign({}, DEFAULT_SECTOR_REVIEWERS, existing);
+    setMeta(db, 'sectorReviewers', merged);
+  }
+  if (getMeta(db, 'groupReviewers', null) === null) {
+    setMeta(db, 'groupReviewers', DEFAULT_GROUP_REVIEWERS);
+  } else {
+    const existing = getMeta(db, 'groupReviewers', {});
+    const merged = Object.assign({}, DEFAULT_GROUP_REVIEWERS, existing);
+    setMeta(db, 'groupReviewers', merged);
   }
   if (getMeta(db, 'newExistingClassYear', null) === null) {
     const rm = getMeta(db, 'reportingMonth') || DEFAULT_PERIOD_CONFIG.reportingMonth;
@@ -287,7 +448,9 @@ function getBootstrapState(db) {
     systemDataSyncMeta: getMeta(db, 'systemDataSyncMeta', null),
     users: getMeta(db, 'users', DEFAULT_USERS),
     groupRegistry: getMeta(db, 'groupRegistry', DEFAULT_GROUP_REGISTRY),
-    sectorAdmins: getMeta(db, 'sectorAdmins', DEFAULT_SECTOR_ADMINS)
+    sectorAdmins: getMeta(db, 'sectorAdmins', DEFAULT_SECTOR_ADMINS),
+    sectorReviewers: getMeta(db, 'sectorReviewers', DEFAULT_SECTOR_REVIEWERS),
+    groupReviewers: getMeta(db, 'groupReviewers', DEFAULT_GROUP_REVIEWERS)
   };
 }
 
@@ -623,8 +786,16 @@ function resolveSystemYear(db) {
   return Number(String(reportingMonth).slice(0, 4)) || new Date().getFullYear();
 }
 
+let _dbInstance = null;
+
+function getDb() {
+  if (!_dbInstance) _dbInstance = openDb();
+  return _dbInstance;
+}
+
 module.exports = {
   openDb,
+  getDb,
   DB_PATH,
   getMeta,
   setMeta,
@@ -647,6 +818,8 @@ module.exports = {
   DEFAULT_USERS,
   DEFAULT_GROUP_REGISTRY,
   DEFAULT_SECTOR_ADMINS,
+  DEFAULT_SECTOR_REVIEWERS,
+  DEFAULT_GROUP_REVIEWERS,
   _calcLockStatus,
   countTimesheetEntries,
   replaceProjectTimesheet,

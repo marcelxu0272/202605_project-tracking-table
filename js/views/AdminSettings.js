@@ -1,6 +1,6 @@
 /**
  * AdminSettings.js — 管理员设置
- * 时间节点配置 + 锁定控制 + 板块管理员配置 + 初始数据导入
+ * 时间节点配置 + 锁定控制 + 审批人员配置 + 初始数据导入
  */
 (function (window) {
   'use strict';
@@ -15,6 +15,8 @@
         importResult: null,
         importFile: null,
         sectorAdmins: {},
+        sectorReviewers: {},
+        groupReviewers: {},
         userSaving: false,
         activeSection: 'period',
         resetConfirmVisible: false
@@ -25,8 +27,6 @@
       user()          { return Store.currentUser || {}; },
       isAdmin()       { return this.user.role === 'system_admin'; },
       lockStatus()    { return Store.lockStatus; },
-      lockLabel()     { return { open: '填报中', locked: '已锁定' }[this.lockStatus] || '—'; },
-      lockTagType()   { return { open: 'success', locked: 'danger' }[this.lockStatus] || 'info'; },
       projectCount()  { return Store.projects.length; },
       auditCount()    { return Store.auditLog.length; },
       sectorOptions() {
@@ -50,15 +50,27 @@
           };
         }).filter(Boolean);
       },
-      sectorAdminRows() {
-        const config = this.sectorAdmins || {};
+      approvalStaffRows() {
+        const adminCfg = this.sectorAdmins || {};
+        const reviewerCfg = this.sectorReviewers || {};
+        const groupCfg = this.groupReviewers || {};
+        const registry = Store.groupRegistry || {};
+        const self = this;
         return this.sectorOptions.map(function (o) {
-          const cfg = config[o.value] || {};
+          const sectorCode = o.value;
+          const admin = adminCfg[sectorCode] || {};
+          const reviewer = reviewerCfg[sectorCode] || {};
+          const groupCode = self.resolveGroupCodeForSector(sectorCode);
+          const group = groupCode ? (registry[groupCode] || {}) : null;
+          const groupReviewer = groupCode ? (groupCfg[groupCode] || {}) : {};
           return {
-            code: o.value,
+            code: sectorCode,
             label: o.label,
-            adminName: cfg.adminName || '',
-            adminUserId: cfg.adminUserId || ''
+            groupCode: groupCode,
+            groupLabel: group ? (group.name || groupCode) : '',
+            adminUserId: admin.adminUserId || '',
+            sectorReviewerUserId: reviewer.reviewerUserId || '',
+            groupReviewerUserId: groupReviewer.reviewerUserId || ''
           };
         });
       }
@@ -69,11 +81,27 @@
     },
     watch: {
       'store.sectorRegistry': function () { this.syncUsersFromStore(); },
-      'store.sectorAdmins': function () { this.syncUsersFromStore(); }
+      'store.sectorAdmins': function () { this.syncUsersFromStore(); },
+      'store.sectorReviewers': function () { this.syncUsersFromStore(); },
+      'store.groupReviewers': function () { this.syncUsersFromStore(); },
+      'store.groupRegistry': function () { this.syncUsersFromStore(); }
     },
     methods: {
       syncUsersFromStore() {
         this.sectorAdmins = JSON.parse(JSON.stringify(Store.sectorAdmins || {}));
+        this.sectorReviewers = JSON.parse(JSON.stringify(Store.sectorReviewers || {}));
+        this.groupReviewers = JSON.parse(JSON.stringify(Store.groupReviewers || {}));
+      },
+      resolveGroupCodeForSector(sectorCode) {
+        const registry = Store.groupRegistry || {};
+        const code = String(sectorCode || '');
+        const keys = Object.keys(registry);
+        for (let i = 0; i < keys.length; i++) {
+          const groupCode = keys[i];
+          const sectors = (registry[groupCode] && registry[groupCode].sectors) || [];
+          if (sectors.indexOf(code) >= 0) return groupCode;
+        }
+        return null;
       },
       updateSectorAdmin(code, patch) {
         const current = Object.assign({}, this.sectorAdmins[code] || {});
@@ -88,6 +116,32 @@
           adminName: hit ? (hit.name || '') : ''
         });
       },
+      updateSectorReviewer(code, patch) {
+        const current = Object.assign({}, this.sectorReviewers[code] || {});
+        Vue.set(this.sectorReviewers, code, Object.assign(current, patch || {}));
+      },
+      selectSectorReviewer(code, userId) {
+        const hit = (Store.users || []).find(function (u) {
+          return String(u.id || u.name || '') === String(userId || '');
+        });
+        this.updateSectorReviewer(code, {
+          reviewerUserId: userId || '',
+          reviewerName: hit ? (hit.name || '') : ''
+        });
+      },
+      updateGroupReviewer(code, patch) {
+        const current = Object.assign({}, this.groupReviewers[code] || {});
+        Vue.set(this.groupReviewers, code, Object.assign(current, patch || {}));
+      },
+      selectGroupReviewer(code, userId) {
+        const hit = (Store.users || []).find(function (u) {
+          return String(u.id || u.name || '') === String(userId || '');
+        });
+        this.updateGroupReviewer(code, {
+          reviewerUserId: userId || '',
+          reviewerName: hit ? (hit.name || '') : ''
+        });
+      },
       buildSectorAdminPayload() {
         const payload = {};
         Object.keys(this.sectorAdmins || {}).forEach(function (code) {
@@ -99,14 +153,38 @@
         }, this);
         return payload;
       },
+      buildSectorReviewerPayload() {
+        const payload = {};
+        Object.keys(this.sectorReviewers || {}).forEach(function (code) {
+          const cfg = this.sectorReviewers[code] || {};
+          payload[code] = {
+            reviewerName: cfg.reviewerName || '',
+            reviewerUserId: cfg.reviewerUserId || ''
+          };
+        }, this);
+        return payload;
+      },
+      buildGroupReviewerPayload() {
+        const payload = {};
+        Object.keys(this.groupReviewers || {}).forEach(function (code) {
+          const cfg = this.groupReviewers[code] || {};
+          payload[code] = {
+            reviewerName: cfg.reviewerName || '',
+            reviewerUserId: cfg.reviewerUserId || ''
+          };
+        }, this);
+        return payload;
+      },
       persistUsersConfig() {
         if (!this.isAdmin) return;
         this.userSaving = true;
         Store.saveUsersConfig({
           sectorAdmins: this.buildSectorAdminPayload(),
+          sectorReviewers: this.buildSectorReviewerPayload(),
+          groupReviewers: this.buildGroupReviewerPayload(),
           user: this.user
         }).then(function () {
-          this.$message.success('板块管理员配置已保存');
+          this.$message.success('审批人员配置已保存');
         }.bind(this)).catch(function (e) {
           this.$message.error('保存失败：' + (e.message || e));
         }.bind(this)).finally(function () {
@@ -133,42 +211,8 @@
             .catch(e => { this.$message.error('保存失败：' + (e.message || e)); });
         }).catch(() => {});
       },
-      handleLock() {
-        if (!this.isAdmin) { this.$message.error('仅管理员可操作'); return; }
-        this.$confirm('立即锁定数据？除管理员外所有人将无法编辑。', '锁定确认', {
-          confirmButtonText: '确认锁定', cancelButtonText: '取消', type: 'warning'
-        }).then(() => {
-          this.lockLoading = true;
-          Store.setLockStatus('locked')
-            .then(() => Store.addAuditLog({
-              projectNo: '—', projectName: '系统操作',
-              fieldName: 'lockStatus', fieldCN: '锁定状态',
-              oldVal: 'open', newVal: 'locked',
-              userId: this.user.role, userName: this.user.name
-            }))
-            .then(() => { this.$message.success('数据已手动锁定'); })
-            .catch(e => { this.$message.error('操作失败：' + (e.message || e)); })
-            .finally(() => { this.lockLoading = false; });
-        }).catch(() => {});
-      },
-      handleUnlock() {
-        if (!this.isAdmin) { this.$message.error('仅管理员可操作'); return; }
-        this.$confirm('解锁后填报人员可重新编辑，确认？', '解锁确认', {
-          confirmButtonText: '确认解锁', cancelButtonText: '取消', type: 'info'
-        }).then(() => {
-          this.lockLoading = true;
-          Store.setLockStatus('open')
-            .then(() => Store.addAuditLog({
-              projectNo: '—', projectName: '系统操作',
-              fieldName: 'lockStatus', fieldCN: '锁定状态',
-              oldVal: 'locked', newVal: 'open',
-              userId: this.user.role, userName: this.user.name
-            }))
-            .then(() => { this.$message.success('数据已解锁，填报窗口重新开放'); })
-            .catch(e => { this.$message.error('操作失败：' + (e.message || e)); })
-            .finally(() => { this.lockLoading = false; });
-        }).catch(() => {});
-      },
+      handleLock() {},
+      handleUnlock() {},
       onFileChange(e) {
         this.importFile = e.target.files[0];
         this.importResult = null;
@@ -256,24 +300,6 @@
                   <el-input-number v-model="periodForm.reminderDay" :min="1" :max="28" style="width:100px;"></el-input-number>
                   <span style="font-size:11px;color:#94a3b8;margin-left:8px;">每月第 N 日系统发送提醒</span>
                 </el-form-item>
-                <el-form-item label="月度锁定日">
-                  <el-input-number v-model="periodForm.lockDay" :min="1" :max="31" style="width:100px;"></el-input-number>
-                  <span style="font-size:11px;color:#94a3b8;margin-left:8px;">每月第 N 日填报窗口关闭</span>
-                </el-form-item>
-                <el-form-item label="次月解禁日">
-                  <el-input-number v-model="periodForm.unlockDay" :min="1" :max="15" style="width:100px;"></el-input-number>
-                  <span style="font-size:11px;color:#94a3b8;margin-left:8px;">次月第 N 日，开启自动解锁后生效</span>
-                </el-form-item>
-                <el-form-item label="自动解锁">
-                  <el-switch
-                    v-model="periodForm.autoUnlockEnabled"
-                    active-text="开启"
-                    inactive-text="关闭"
-                  ></el-switch>
-                  <div style="font-size:11px;color:#94a3b8;margin-top:4px;line-height:1.6;">
-                    默认关闭。关闭时次月到达解禁日也不会自动开放，需系统管理员完成开放准备后手动「解除锁定」。
-                  </div>
-                </el-form-item>
                 <el-form-item>
                   <el-button type="primary" size="small" style="background:#007069;border-color:#007069;" :disabled="!isAdmin" @click="savePeriodConfig">
                     保存配置
@@ -282,40 +308,6 @@
               </el-form>
             </div>
 
-            <!-- 锁定控制 -->
-            <div class="card">
-              <div class="card-header">
-                <div class="card-title"><i class="el-icon-lock" style="color:#007069;margin-right:6px;"></i>数据锁定控制</div>
-              </div>
-              <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
-                <span style="font-size:13px;color:#64748b;">当前状态：</span>
-                <el-tag :type="lockTagType" size="medium">{{ lockLabel }}</el-tag>
-              </div>
-              <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                <el-button
-                  size="small"
-                  type="danger"
-                  icon="el-icon-lock"
-                  :loading="lockLoading"
-                  :disabled="!isAdmin || lockStatus === 'locked'"
-                  @click="handleLock"
-                >立即锁定</el-button>
-                <el-button
-                  size="small"
-                  type="success"
-                  icon="el-icon-unlock"
-                  :loading="lockLoading"
-                  :disabled="!isAdmin || lockStatus === 'open'"
-                  @click="handleUnlock"
-                >解除锁定</el-button>
-              </div>
-              <div v-if="store.financeReviewReminder" style="margin-top:10px;font-size:12px;color:#b45309;line-height:1.6;">
-                当前处于<strong>财务核查提醒期</strong>（报告月次月 1–3 日）：提醒财务核对开票/回款等数据；填报窗口仍按「填报中/已锁定」规则开放，财务角色始终只读。
-              </div>
-              <div style="margin-top:12px;font-size:12px;color:#94a3b8;line-height:1.8;">
-                锁定后除管理员外所有人无法编辑，操作全程留痕。
-              </div>
-            </div>
           </div>
 
           <!-- 右列 -->
@@ -370,19 +362,19 @@
               </div>
             </div>
 
-            <!-- 板块管理员配置 -->
+            <!-- 审批人员配置 -->
             <div class="card">
               <div class="card-header">
-                <div class="card-title"><i class="el-icon-user" style="color:#007069;margin-right:6px;"></i>系统用户</div>
+                <div class="card-title"><i class="el-icon-user" style="color:#007069;margin-right:6px;"></i>审批人员配置</div>
                 <el-button size="mini" type="primary" plain :disabled="!isAdmin" :loading="userSaving" @click="persistUsersConfig">保存配置</el-button>
               </div>
               <div style="font-size:12px;color:#64748b;line-height:1.7;margin-bottom:12px;">
-                上线后，项目经理、经营管理、板块总监、项目群群主等角色由平台全局权限自动带入；本系统只维护各项目执行板块的板块管理员。
-                板块管理员从平台用户中选择；若所选用户同时具备该板块总监权限，系统在提交审批时自动跳过总监初审，直接进入群主复审。
+                项目经理等填报角色由平台全局权限自动带入。本系统按板块维护审批链路三类负责人。
+                板块审批、项目群审批未单独配置时默认取自平台组织关系，也可指定其他管理人员承接审批职责。
               </div>
-              <el-table :data="sectorAdminRows" size="mini" border style="width:100%;">
-                <el-table-column label="板块" prop="label" min-width="140"></el-table-column>
-                <el-table-column label="板块管理员" min-width="220">
+              <el-table :data="approvalStaffRows" size="mini" border style="width:100%;">
+                <el-table-column label="板块" prop="label" min-width="110" fixed></el-table-column>
+                <el-table-column label="板块管理员" min-width="180">
                   <template slot-scope="{row}">
                     <el-select
                       size="mini"
@@ -396,7 +388,7 @@
                     >
                       <el-option
                         v-for="u in platformUserOptions"
-                        :key="u.value"
+                        :key="'sa-' + row.code + '-' + u.value"
                         :label="u.label"
                         :value="u.value"
                       >
@@ -406,9 +398,59 @@
                     </el-select>
                   </template>
                 </el-table-column>
+                <el-table-column label="板块审批" min-width="180">
+                  <template slot-scope="{row}">
+                    <el-select
+                      size="mini"
+                      filterable
+                      clearable
+                      style="width:100%;"
+                      :disabled="!isAdmin"
+                      :value="row.sectorReviewerUserId"
+                      placeholder="默认取自平台组织关系"
+                      @change="selectSectorReviewer(row.code, $event)"
+                    >
+                      <el-option
+                        v-for="u in platformUserOptions"
+                        :key="'sr-' + row.code + '-' + u.value"
+                        :label="u.label"
+                        :value="u.value"
+                      >
+                        <span>{{ u.label }}</span>
+                        <span style="float:right;color:#94a3b8;font-size:12px;">{{ u.role }} {{ u.sector }}</span>
+                      </el-option>
+                    </el-select>
+                  </template>
+                </el-table-column>
+                <el-table-column label="项目群审批" min-width="180">
+                  <template slot-scope="{row}">
+                    <el-select
+                      v-if="row.groupCode"
+                      size="mini"
+                      filterable
+                      clearable
+                      style="width:100%;"
+                      :disabled="!isAdmin"
+                      :value="row.groupReviewerUserId"
+                      :placeholder="row.groupLabel ? ('默认取自 ' + row.groupLabel) : '默认取自平台组织关系'"
+                      @change="selectGroupReviewer(row.groupCode, $event)"
+                    >
+                      <el-option
+                        v-for="u in platformUserOptions"
+                        :key="'gr-' + row.groupCode + '-' + u.value"
+                        :label="u.label"
+                        :value="u.value"
+                      >
+                        <span>{{ u.label }}</span>
+                        <span style="float:right;color:#94a3b8;font-size:12px;">{{ u.role }} {{ u.sector }}</span>
+                      </el-option>
+                    </el-select>
+                    <span v-else style="font-size:12px;color:#cbd5e1;">—</span>
+                  </template>
+                </el-table-column>
               </el-table>
               <div style="font-size:11px;color:#94a3b8;margin-top:10px;line-height:1.6;">
-                上线后该下拉选项来自平台全量用户信息。项目群、经营管理范围、总监/群主等权限不在本系统维护，沿用平台原有组织与权限配置；是否跳过总监初审由系统按平台权限自动判断。
+                同一项目群下辖多个板块时，项目群审批列共享同一配置。清空选择表示沿用平台组织关系中的默认审批人。
               </div>
             </div>
           </div>

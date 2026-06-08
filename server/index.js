@@ -18,6 +18,8 @@ const costStats = require('./cost-stats');
 const alertDemo = require('./alert-demo-seed');
 const fieldDict = require('./fields/dictionary');
 const alertService = require('./alert-service');
+const reportLineService = require('./report-line-service');
+const reportLineSeed = require('./report-line-seed');
 
 const ROOT = path.join(__dirname, '..');
 const PORT = Number(process.env.PTRACK_PORT) || 3000;
@@ -101,6 +103,7 @@ try {
   console.warn('[ptrack] 预警演示工时初始化失败:', e.message);
 }
 costImport.seedCostIfEmpty(db, dbm);
+reportLineSeed.seedReportLines(db);
 
 const app = express();
 app.use(express.json({ limit: '80mb' }));
@@ -656,12 +659,28 @@ app.post('/api/admin/reset-dev', (_req, res) => {
     const reportingMonth = dbm.DEFAULT_PERIOD_CONFIG.reportingMonth;
     const { count, file } = importProjectsFromInitXlsx(reportingMonth);
     const devSeed = applyDevSeedAfterImport(reportingMonth, file);
+    const reportLineReseed = reportLineSeed.seedReportLines(db, { force: true });
     res.json({
       ok: true,
       count,
       file,
       devSeed,
       importSnapshot: devSeed.importSnapshot,
+      reportLineReseed,
+      state: dbm.getBootstrapState(db)
+    });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: String(e.message) });
+  }
+});
+
+/** 开发测试：重建填报管理（报告线）演示数据 */
+app.post('/api/admin/reseed-report-lines', (_req, res) => {
+  try {
+    const result = reportLineSeed.seedReportLines(db, { force: true });
+    res.json({
+      ok: true,
+      ...result,
       state: dbm.getBootstrapState(db)
     });
   } catch (e) {
@@ -676,6 +695,8 @@ app.get('/api/admin/users', (_req, res) => {
       users: dbm.getMeta(db, 'users', dbm.DEFAULT_USERS),
       groupRegistry: dbm.getMeta(db, 'groupRegistry', dbm.DEFAULT_GROUP_REGISTRY),
       sectorAdmins: dbm.getMeta(db, 'sectorAdmins', dbm.DEFAULT_SECTOR_ADMINS),
+      sectorReviewers: dbm.getMeta(db, 'sectorReviewers', dbm.DEFAULT_SECTOR_REVIEWERS),
+      groupReviewers: dbm.getMeta(db, 'groupReviewers', dbm.DEFAULT_GROUP_REVIEWERS),
       sectorRegistry: dbm.getBootstrapState(db).sectorRegistry
     });
   } catch (e) {
@@ -711,20 +732,65 @@ app.patch('/api/admin/users', (req, res) => {
       });
       dbm.setMeta(db, 'sectorAdmins', sanitized);
     }
+    if (body.sectorReviewers != null) {
+      if (!body.sectorReviewers || typeof body.sectorReviewers !== 'object' || Array.isArray(body.sectorReviewers)) {
+        res.status(400).json({ error: 'sectorReviewers 必须为对象' });
+        return;
+      }
+      const sanitizedReviewers = {};
+      Object.keys(body.sectorReviewers).forEach(function (code) {
+        const cfg = body.sectorReviewers[code] || {};
+        sanitizedReviewers[sw.normalizeSectorCode(code)] = {
+          reviewerName: String(cfg.reviewerName || '').trim(),
+          reviewerUserId: String(cfg.reviewerUserId || '').trim()
+        };
+      });
+      dbm.setMeta(db, 'sectorReviewers', sanitizedReviewers);
+    }
+    if (body.groupReviewers != null) {
+      if (!body.groupReviewers || typeof body.groupReviewers !== 'object' || Array.isArray(body.groupReviewers)) {
+        res.status(400).json({ error: 'groupReviewers 必须为对象' });
+        return;
+      }
+      const sanitizedGroupReviewers = {};
+      Object.keys(body.groupReviewers).forEach(function (code) {
+        const cfg = body.groupReviewers[code] || {};
+        sanitizedGroupReviewers[String(code).trim()] = {
+          reviewerName: String(cfg.reviewerName || '').trim(),
+          reviewerUserId: String(cfg.reviewerUserId || '').trim()
+        };
+      });
+      dbm.setMeta(db, 'groupReviewers', sanitizedGroupReviewers);
+    }
     const actor = body.user || {};
     const sectorAdminCount = body.sectorAdmins ? Object.keys(body.sectorAdmins).length : 0;
+    const sectorReviewerCount = body.sectorReviewers ? Object.keys(body.sectorReviewers).length : 0;
+    const groupReviewerCount = body.groupReviewers ? Object.keys(body.groupReviewers).length : 0;
+    const auditField = body.sectorAdmins ? 'sectorAdmins'
+      : body.sectorReviewers ? 'sectorReviewers'
+      : body.groupReviewers ? 'groupReviewers'
+      : 'users';
+    const auditLabel = body.sectorAdmins ? '板块管理员配置'
+      : body.sectorReviewers ? '板块审批人员配置'
+      : body.groupReviewers ? '项目群审批人员配置'
+      : '用户与权限配置';
+    const auditSummary = body.sectorAdmins
+      ? sectorAdminCount + ' 个板块管理员'
+      : body.sectorReviewers
+        ? sectorReviewerCount + ' 个板块审批'
+        : body.groupReviewers
+          ? groupReviewerCount + ' 个项目群审批'
+          : ((body.users && body.users.length) ? body.users.length + ' 用户' : '群配置更新');
     dbm.pushAudit(db, {
       id: Date.now() + '_users_' + Math.random().toString(36).slice(2, 6),
       timestamp: new Date().toISOString(),
       operation_type: 'user_config',
       projectNo: '—',
       projectName: '用户权限',
-      fieldName: body.sectorAdmins ? 'sectorAdmins' : 'users',
-      fieldCN: body.sectorAdmins ? '板块管理员配置' : '用户与权限配置',
+      fieldName: auditField,
+      fieldCN: auditLabel,
       oldVal: '—',
-      newVal: body.sectorAdmins
-        ? sectorAdminCount + ' 个板块配置'
-        : ((body.users && body.users.length) ? body.users.length + ' 用户' : '群配置更新'),
+      newVal: auditSummary,
       userId: actor.role || 'system_admin',
       userName: actor.name || '系统管理员'
     });
@@ -812,6 +878,165 @@ app.put('/api/admin/fields', (req, res) => {
     res.json({ ok: true, count: result.count, fields: fieldDict.readFields() });
   } catch (e) {
     res.status(e.status || 400).json({ error: String(e.message) });
+  }
+});
+
+// ============ 报告线 API ============
+
+// 手动发起填报预览（需 system_admin）
+app.get('/api/report-lines/fork-preview', (req, res) => {
+  try {
+    const { role } = req.query;
+    if (role !== 'system_admin') {
+      res.status(403).json({ error: '仅系统管理员可查看发起预览' });
+      return;
+    }
+    const preview = reportLineService.getForkPreview();
+    res.json(preview);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: String(e.message) });
+  }
+});
+
+// 查询列表
+app.get('/api/report-lines', (req, res) => {
+  try {
+    const { status, sector, period, role, sectorCode, groupCode, group } = req.query;
+    const user = role ? { role: role, sector: sectorCode, sectorCode: sectorCode, groupCode: groupCode, group: group } : null;
+    const filters = {};
+    if (status) filters.status = status;
+    if (sector) filters.sector = sector;
+    if (period) filters.period = period;
+    const rows = reportLineService.getReportLines(user, filters);
+    res.json(rows);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: String(e.message) });
+  }
+});
+
+// 单条详情
+app.get('/api/report-lines/:id', (req, res) => {
+  try {
+    const detail = reportLineService.getReportLineDetail(req.params.id);
+    res.json(detail);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: String(e.message) });
+  }
+});
+
+// 字段级变更 diff
+app.get('/api/report-lines/:id/diff', (req, res) => {
+  try {
+    const diffs = reportLineService.getDiff(req.params.id);
+    res.json(diffs);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: String(e.message) });
+  }
+});
+
+// 审批记录
+app.get('/api/report-lines/:id/approvals', (req, res) => {
+  try {
+    const detail = reportLineService.getReportLineDetail(req.params.id);
+    res.json(detail.approvals || []);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: String(e.message) });
+  }
+});
+
+// 导出 Excel
+app.get('/api/report-lines/:id/export', (req, res) => {
+  try {
+    const result = reportLineService.exportReportLine(req.params.id);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=' + encodeURIComponent(result.filename));
+    res.send(result.buffer);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: String(e.message) });
+  }
+});
+
+// 保存填报数据
+app.put('/api/report-lines/:id/data', (req, res) => {
+  try {
+    const { projectNo, fieldData, userName } = req.body || {};
+    if (!projectNo) {
+      res.status(400).json({ error: 'projectNo 必填' });
+      return;
+    }
+    const result = reportLineService.saveData(req.params.id, projectNo, fieldData, userName);
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: String(e.message) });
+  }
+});
+
+// PM 提交
+app.post('/api/report-lines/:id/pm-submit', (req, res) => {
+  try {
+    const { pmName } = req.body || {};
+    if (!pmName) {
+      res.status(400).json({ error: 'pmName 必填' });
+      return;
+    }
+    const result = reportLineService.pmSubmit(req.params.id, pmName);
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: String(e.message) });
+  }
+});
+
+// 板块管理员提交审批
+app.post('/api/report-lines/:id/submit-approval', (req, res) => {
+  try {
+    const { userName } = req.body || {};
+    if (!userName) {
+      res.status(400).json({ error: 'userName 必填' });
+      return;
+    }
+    const result = reportLineService.submitApproval(req.params.id, userName);
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: String(e.message) });
+  }
+});
+
+// 审批通过/退回
+app.post('/api/report-lines/:id/review', (req, res) => {
+  try {
+    const { action, role, userName, comment } = req.body || {};
+    if (!action || !role || !userName) {
+      res.status(400).json({ error: 'action、role、userName 必填' });
+      return;
+    }
+    if (action !== 'approve' && action !== 'reject') {
+      res.status(400).json({ error: 'action 必须为 approve 或 reject' });
+      return;
+    }
+    const result = reportLineService.reviewApproval(req.params.id, action, role, userName, comment);
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: String(e.message) });
+  }
+});
+
+// 创建新周期
+app.post('/api/report-lines/fork-period', (req, res) => {
+  try {
+    const { period, role, userName } = req.body || {};
+    if (role !== 'system_admin') {
+      res.status(403).json({ error: '仅系统管理员可创建新周期' });
+      return;
+    }
+    if (!period) {
+      res.status(400).json({ error: 'period 必填' });
+      return;
+    }
+    const result = reportLineService.forkPeriod(period, { userName: userName || '系统管理员' });
+    const state = dbm.getBootstrapState(db);
+    res.json({ ok: true, created: result.created, skipped: result.skipped, baselineVersion: result.baselineVersion, period: result.period, state });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: String(e.message) });
   }
 });
 

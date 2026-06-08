@@ -19,11 +19,11 @@
   }
 
   const DEFAULT_CONFIG = {
-    reminderDay:  19,
+    reminderDay:  5,
     lockDay:      25,
     unlockDay:    9,
     autoUnlockEnabled: false,
-    reportingMonth: '2026-05',
+    reportingMonth: '2026-06',
     systemYear: 2026
   };
 
@@ -119,11 +119,19 @@
     users: [],
     groupRegistry: {},
     sectorAdmins: {},
+    sectorReviewers: {},
+    groupReviewers: {},
     /** 83 字段字典（与项目追踪表同源，bootstrap 加载） */
     fieldDictionary: [],
     auditLog: [],
     sidebarCollapsed: !!lsGet(LS_KEY_SIDEBAR, false),
     editorViewMode: 'all',
+    /** 报告线列表数据 */
+    reportLines: [],
+    /** 当前查看/编辑的报告线详情 */
+    currentReportLine: null,
+    /** 报告线列表筛选条件 */
+    reportLineFilters: { status: 'all', sector: '', period: '' },
     _hydrated: false
   });
 
@@ -158,6 +166,8 @@
     Store.users = d.users || [];
     Store.groupRegistry = d.groupRegistry || {};
     Store.sectorAdmins = d.sectorAdmins || {};
+    Store.sectorReviewers = d.sectorReviewers || {};
+    Store.groupReviewers = d.groupReviewers || {};
     if (d.fieldDictionary && d.fieldDictionary.length) {
       Store.applyFieldDictionary(d.fieldDictionary);
     }
@@ -581,6 +591,173 @@
     const fresh = (d && d.fields) ? d.fields : (await apiFetch('/fields')).fields;
     if (fresh && fresh.length) Store.applyFieldDictionary(fresh);
     return d;
+  };
+
+  // ─── 报告线相关方法 ───────────────────────────────────────────
+
+  /** 请求报告线列表 */
+  Store.fetchReportLines = async function (filters) {
+    var params = Object.assign({}, Store.reportLineFilters, filters || {});
+    var qs = [];
+    // 传递用户身份信息用于后端权限过滤
+    var u = Store.currentUser || {};
+    if (u.role) qs.push('role=' + encodeURIComponent(u.role));
+    if (u.sector) qs.push('sectorCode=' + encodeURIComponent(u.sector));
+    if (u.groupCode) qs.push('groupCode=' + encodeURIComponent(u.groupCode));
+    // 筛选条件
+    if (params.status && params.status !== 'all') qs.push('status=' + encodeURIComponent(params.status));
+    if (params.sector) qs.push('sector=' + encodeURIComponent(params.sector));
+    if (params.period) qs.push('period=' + encodeURIComponent(params.period));
+    var query = qs.length ? '?' + qs.join('&') : '';
+    try {
+      var data = await apiFetch('/report-lines' + query);
+      Store.reportLines.splice(0, Store.reportLines.length, ...(data || []));
+      Store.reportLineFilters = params;
+    } catch (e) {
+      console.error('fetchReportLines 失败:', e);
+    }
+  };
+
+  /** 请求报告线详情 */
+  Store.fetchReportLineDetail = async function (id) {
+    try {
+      var data = await apiFetch('/report-lines/' + encodeURIComponent(id));
+      Store.currentReportLine = data || null;
+    } catch (e) {
+      console.error('fetchReportLineDetail 失败:', e);
+    }
+  };
+
+  /** 保存报告线填报数据 */
+  Store.saveReportLineData = async function (id, projectNo, data) {
+    return await apiFetch('/report-lines/' + encodeURIComponent(id) + '/data', {
+      method: 'PUT',
+      body: { projectNo: projectNo, fieldData: data }
+    });
+  };
+
+  /** PM 提交报告线 */
+  Store.pmSubmitReportLine = async function (id) {
+    return await apiFetch('/report-lines/' + encodeURIComponent(id) + '/pm-submit', {
+      method: 'POST',
+      body: { pmName: (Store.currentUser || {}).name }
+    });
+  };
+
+  /** 板块管理员提交审批 */
+  Store.submitReportLineApproval = async function (id) {
+    return await apiFetch('/report-lines/' + encodeURIComponent(id) + '/submit-approval', {
+      method: 'POST',
+      body: { userName: (Store.currentUser || {}).name }
+    });
+  };
+
+  /** 审批操作（approve / reject） */
+  Store.reviewReportLine = async function (id, action, comment) {
+    return await apiFetch('/report-lines/' + encodeURIComponent(id) + '/review', {
+      method: 'POST',
+      body: {
+        action: action,
+        comment: comment || '',
+        role: (Store.currentUser || {}).role,
+        userName: (Store.currentUser || {}).name
+      }
+    });
+  };
+
+  /** 获取手动发起填报的预览数据（板块人员核对表） */
+  Store.fetchForkPreview = async function () {
+    var u = Store.currentUser || {};
+    var role = u.role || '';
+    var data = await apiFetch('/report-lines/fork-preview?role=' + encodeURIComponent(role));
+    return data;
+  };
+
+  /** 手动发起填报 */
+  Store.forkReportPeriod = async function (period) {
+    var u = Store.currentUser || {};
+    var result = await apiFetch('/report-lines/fork-period', {
+      method: 'POST',
+      body: { period: period, role: u.role, userName: u.name }
+    });
+    if (result && result.state) {
+      applyBootstrap(result.state);
+    }
+    await Store.fetchReportLines();
+    return result;
+  };
+
+  /**
+   * 根据角色 + 状态返回可见操作列表（同步方法）
+   * 状态: open | submitted | reviewing_director | reviewing_leader | returned | completed | closed
+   * 操作: fill | view | export | approve | submit_approval | pm_submit
+   *
+   * 角色×状态矩阵:
+   *   PM:              open→fill / submitted→view / closed→view / 其他→—
+   *   sector_admin:    open→fill,export / reviewing_director→view,export / reviewing_leader→view,export
+   *                    returned→fill,export / completed→view,export / closed→view,export
+   *                    submitted→—
+   *   sector_director: open→view / reviewing_director→approve,view,export / reviewing_leader→view,export
+   *                    returned→view,export / completed→view,export / closed→view,export
+   *                    submitted→—
+   *   group_leader:    reviewing_leader→approve,view,export / completed→view,export / closed→view,export
+   *                    其他→view,export 或 —（仅 reviewing_leader 可审批）
+   *   system_admin:    所有状态→view,export
+   */
+  Store.getVisibleOperations = function (reportLine) {
+    if (!reportLine) return [];
+    var role = (Store.currentUser || {}).role;
+    var status = reportLine.status;
+
+    if (role === 'system_admin') {
+      return ['view', 'export'];
+    }
+
+    if (role === 'pm') {
+      switch (status) {
+        case 'open': return ['fill'];
+        case 'submitted': return ['view'];
+        case 'closed': return ['view'];
+        default: return [];
+      }
+    }
+
+    if (role === 'sector_admin') {
+      switch (status) {
+        case 'open': return ['fill', 'export'];
+        case 'submitted': return ['submit_approval', 'export'];
+        case 'reviewing_director': return ['view', 'export'];
+        case 'reviewing_leader': return ['view', 'export'];
+        case 'returned': return ['fill', 'export'];
+        case 'completed': return ['view', 'export'];
+        case 'closed': return ['view', 'export'];
+        default: return [];
+      }
+    }
+
+    if (role === 'sector_director') {
+      switch (status) {
+        case 'open': return ['view'];
+        case 'submitted': return [];
+        case 'reviewing_director': return ['approve', 'view', 'export'];
+        case 'reviewing_leader': return ['view', 'export'];
+        case 'returned': return ['view', 'export'];
+        case 'completed': return ['view', 'export'];
+        case 'closed': return ['view', 'export'];
+        default: return [];
+      }
+    }
+
+    if (role === 'group_leader') {
+      switch (status) {
+        case 'reviewing_leader': return ['approve', 'view', 'export'];
+        case 'completed': return ['view', 'export'];
+        case 'closed': return ['view', 'export'];
+        default: return ['view', 'export'];
+      }
+    }
+
+    return [];
   };
 
   window.Store = Store;

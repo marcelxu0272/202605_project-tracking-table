@@ -198,6 +198,12 @@
       },
     },
     methods: {
+      // ── 报告线钩子方法（默认空实现，ReportLineDetailView 覆盖） ──
+      handleRlSubmit()  {},
+      handleRlApprove() {},
+      handleRlReject()  {},
+      // ────────────────────────────────────────────────────
+
       /** 字段字典就绪后重建表格 / Luckysheet（避免空表头） */
       syncEditorFromFieldDictionary: function (initLuckysheet) {
         if (!Store.fieldDictionary.length) return;
@@ -2543,8 +2549,20 @@
     },
     template: `
       <div style="display:flex;flex-direction:column;height:100%;">
+        <!-- 只读提示条 -->
+        <div v-if="showReportLineHint" class="report-line-hint" style="background:#e6f7ff;border:1px solid #91d5ff;padding:10px 16px;border-radius:4px;display:flex;align-items:center;justify-content:space-between;">
+          <span style="color:#1890ff;"><i class="el-icon-info" style="margin-right:6px;"></i>当前页面仅供查看，如需填报请至&ldquo;填报管理&rdquo;</span>
+          <a href="/#/report-lines" style="color:#007069;text-decoration:none;font-weight:500;">前往填报管理 &rarr;</a>
+        </div>
         <!-- 工具栏 -->
         <div class="editor-toolbar">
+          <template v-if="rlContextBar">
+            <el-button size="mini" icon="el-icon-arrow-left" plain @click="$router.push('/report-lines')">填报管理</el-button>
+            <span style="color:#94a3b8;">|</span>
+            <span style="font-weight:600;color:#1e293b;">{{ rlContextBar.sectorName }}</span>
+            <span style="color:#64748b;">{{ rlContextBar.periodLabel }}</span>
+            <el-tag :type="rlContextBar.statusType" size="small">{{ rlContextBar.statusLabel }}</el-tag>
+          </template>
           <el-select
             v-if="isSystemAdmin"
             v-model="viewingVersion"
@@ -2576,14 +2594,6 @@
             @click="handleDownloadSnapshot"
             style="margin-left:8px;"
           >下载此版本</el-button>
-          <span v-else-if="!isSystemAdmin" class="period-banner" :class="lockBannerClass">
-            <span class="period-dot"></span>
-            {{ lockBannerText }}
-          </span>
-          <span v-else class="period-banner open">
-            <span class="period-dot"></span>
-            系统管理员 — 可编辑全部项目数据
-          </span>
 
           <div class="editor-toolbar-spacer"></div>
 
@@ -2615,7 +2625,7 @@
               :disabled="!canClearCurrentMonthCompletion"
               @click="handleClearCurrentMonthCompletion"
             >清零当月完成额</el-button>
-            <template v-if="canImport">
+            <template v-if="canImport && user.role === 'system_admin'">
               <input
                 ref="importFileInput"
                 type="file"
@@ -2632,7 +2642,7 @@
             </template>
           </div>
 
-          <template v-if="canEdit || canShowSubmitButton || canShowArchiveButton">
+          <template v-if="canShowEditorSaveGroup">
             <el-divider direction="vertical"></el-divider>
             <div class="editor-toolbar-group">
               <el-button
@@ -2652,16 +2662,30 @@
                 :title="!canSubmitArchive ? '仅在锁定期可提交归档' : ''"
                 @click="handleSubmitArchive"
               >提交归档</el-button>
+              <!-- 报告线提交/审批/退回按钮（仅报告线详情页覆盖相关 computed 后显示） -->
               <el-button
-                v-if="canShowSubmitButton"
+                v-if="rlCanSubmit"
                 size="small"
-                type="primary"
-                icon="el-icon-s-promotion"
-                class="editor-submit-btn"
-                :loading="submitLoading"
-                :disabled="!canSubmit"
-                @click="handleSubmit"
-              >{{ submitButtonLabel }}</el-button>
+                type="success"
+                icon="el-icon-check"
+                :loading="rlSubmitting"
+                @click="handleRlSubmit"
+              >{{ user.role === 'pm' ? '提交填报' : '提交审批' }}</el-button>
+              <el-button
+                v-if="rlCanApprove"
+                size="small"
+                type="success"
+                icon="el-icon-circle-check"
+                @click="handleRlApprove"
+              >审批通过</el-button>
+              <el-button
+                v-if="rlCanReject"
+                size="small"
+                type="danger"
+                plain
+                icon="el-icon-circle-close"
+                @click="handleRlReject"
+              >退回</el-button>
             </div>
           </template>
         </div>
@@ -2854,13 +2878,10 @@
             <span>报告月份：{{ store.reportingMonth }}</span>
             <span>当前角色：{{ user.name || '—' }}</span>
             <span v-if="isPm && pmLocked" style="color:#f59e0b;font-weight:500;">
-              <i class="el-icon-lock"></i> 已提交（本月不可再改，请联系板块管理员）
+              <i class="el-icon-warning-outline"></i> 已提交本月填报（如需修正请联系板块管理员）
             </span>
-            <span v-else-if="!isSystemAdmin && reportingSubmitted" style="color:#ef4444;font-weight:500;">
-              <i class="el-icon-lock"></i> 板块已提交审批，填报数据已锁定
-            </span>
-            <span v-else-if="!isSystemAdmin && lockStatus !== 'open'" style="color:#ef4444;font-weight:500;">
-              <i class="el-icon-lock"></i> 编辑受限
+            <span v-else-if="!isSystemAdmin && reportingSubmitted" style="color:#f59e0b;font-weight:500;">
+              <i class="el-icon-warning-outline"></i> 板块已提交审批，待审批处理
             </span>
           </div>
           <span style="color:#94a3b8;white-space:nowrap;">
@@ -2943,6 +2964,22 @@
       isSectorAdmin() { return this.user.role === 'sector_admin'; },
       lsMountId() { return 'luckysheet-mount'; },
       lsGridKey() { return 'ptrack_editor_v2'; },
+      // ── 报告线钩子（默认值，ReportLineDetailView 覆盖） ──
+      /** 当非 null 时在工具栏上方显示报告线上下文条 */
+      rlContextBar() { return null; },
+      /** 控制保存/归档/报告线操作按钮分组的显示条件 */
+      canShowEditorSaveGroup() {
+        return this.user.role === 'system_admin' && (this.canEdit || this.canShowArchiveButton);
+      },
+      /** 报告线提交按钮（PM → pmSubmit；sector_admin → submitApproval） */
+      rlCanSubmit()  { return false; },
+      /** 报告线审批通过按钮 */
+      rlCanApprove() { return false; },
+      /** 报告线退回按钮 */
+      rlCanReject()  { return false; },
+      /** 报告线提交中状态 */
+      rlSubmitting() { return false; },
+      // ────────────────────────────────────────────────────
       newProjectCount() {
         return this.scopedProjects.filter(function (p) { return p._added_this_month; }).length;
       },
@@ -2999,7 +3036,7 @@
       },
       canShowClearCompletionButton() {
         if (this.isViewingSnapshot) return false;
-        return ['system_admin', 'sector_admin', 'pm'].indexOf(this.user.role) >= 0;
+        return this.isSystemAdmin;
       },
       canClearCurrentMonthCompletion() {
         if (!this.canShowClearCompletionButton) return false;
@@ -3091,18 +3128,17 @@
         return window.DataScope && DataScope.isExecutiveViewer(this.user);
       },
       canEdit() {
+        // 新增: 非系统管理员强制只读（填报已迁移至「填报管理」）
+        const role = (this.user || {}).role;
+        if (role !== 'system_admin') return false;
+        // ── 以下仅 system_admin ──
         if (this.isViewingSnapshot) return false;
-        const role = this.user.role;
-        if (role === 'executive_viewer') return false;
-        if (role === 'system_admin') return true;
-        // PM：个人锁定或板块正式提交后均不可编辑
-        if (this.isPm) {
-          if (this.pmLocked) return false;
-          if (this.reportingSubmitted) return false;
-        } else {
-          if (this.reportingSubmitted) return false;
-        }
-        return this.lockStatus !== 'locked';
+        return true;
+      },
+      showReportLineHint() {
+        const role = (this.user || {}).role;
+        // PM 和 板块管理员 始终显示提示（因为他们原来是在这里编辑的）
+        return role === 'pm' || role === 'sector_admin';
       },
       // 按角色过滤后的项目（PM 只看自己的）
       scopedProjects() {
@@ -3145,43 +3181,6 @@
       hasStockViolationsInScope() {
         if (!window.StockValidation) return false;
         return StockValidation.countContractViolations(this.scopedProjects, this.monthIdx) > 0;
-      },
-      lockBannerClass() {
-        if (this.isSystemAdmin) return 'open';
-        if (this.isExecutiveViewer && Store.financeReviewReminder) return 'finance-only';
-        if (this.isExecutiveViewer) return 'open';
-        if (this.isPm && this.pmLocked) return 'locked';
-        if (this.reportingSubmitted) return 'locked';
-        if (Store.financeReviewReminder) return 'finance-only';
-        return { open: 'open', locked: 'locked' }[this.lockStatus] || 'open';
-      },
-      lockBannerText() {
-        if (this.isSystemAdmin) return '系统管理员 — 可编辑全部项目数据';
-        if (this.isExecutiveViewer) {
-          const scope = window.DataScope
-            ? DataScope.getScopeLabel(this.user, Store.groupRegistry, Store.sectorNames)
-            : '';
-          if (Store.financeReviewReminder) {
-            return '经营管理（只读）' + (scope ? ' · ' + scope : '') +
-              ' — 核查提醒期，请核对开票/回款等数据';
-          }
-          return '经营管理（只读）' + (scope ? ' · ' + scope : '') + ' — 汇总数据只读查看';
-        }
-        if (this.isPm && this.pmLocked) {
-          return '您已提交本月填报（每月仅可提交一次）；如需修正请联系板块管理员';
-        }
-        if (this.reportingSubmitted) {
-          if (this.isPm) return '板块已正式提交审批，本月填报已锁定';
-          return '本月填报已提交审批 — 数据已锁定，待审批或驳回后可再编辑';
-        }
-        if (Store.financeReviewReminder) {
-          return '财务核查提醒期（1-3日）— 请财务完成上月数据核对，其他角色填报照常开放';
-        }
-        if (this.lockStatus === 'locked') {
-          var lockDay = (Store.periodConfig && Store.periodConfig.lockDay) || 25;
-          return '数据已锁定（每月' + lockDay + '日）— 请联系系统管理员临时解锁编辑';
-        }
-        return '填报窗口开放中 — 可正常填报';
       },
       tableSections() {
         return FieldConfig.getSections(this.tableFields);

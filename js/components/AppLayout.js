@@ -13,14 +13,12 @@
     group_leader:     '项目群群主'
   };
 
-  const APPROVAL_ONLY_ROLES = ['sector_director', 'group_leader'];
-
   const NAV_ITEMS = [
-    { path: '/editor',    icon: 'el-icon-s-grid',        label: '项目追踪表', hideForRoles: APPROVAL_ONLY_ROLES },
-    { path: '/approval',  icon: 'el-icon-s-check',       label: '审批流程', hideForRoles: ['pm', 'executive_viewer'] },
-    { path: '/audit',     icon: 'el-icon-document',      label: '审计日志', auditOnly: true },
-    { path: '/fields',    icon: 'el-icon-s-grid',        label: '表头配置', adminOnly: true },
-    { path: '/admin',     icon: 'el-icon-setting',       label: '管理设置', adminOnly: true }
+    { path: '/report-lines', icon: '📋', label: '填报管理' },
+    { path: '/editor',       icon: '📊', label: '项目追踪表' },
+    { path: '/audit',        icon: '📝', label: '审计日志', adminOnly: true },
+    { path: '/fields',       icon: '📄', label: '表头配置', adminOnly: true },
+    { path: '/admin',        icon: '⚙️', label: '管理设置', adminOnly: true }
   ];
 
   const LOCK_INFO = {
@@ -48,13 +46,8 @@
         const role = this.user.role;
         return NAV_ITEMS.filter(item => {
           if (item.adminOnly && role !== 'system_admin') return false;
-          if (item.auditOnly && role !== 'system_admin') return false;
-          if (item.hideForRoles && item.hideForRoles.includes(role)) return false;
           return true;
         });
-      },
-      approvalOnlyNav() {
-        return APPROVAL_ONLY_ROLES.indexOf(this.user.role) >= 0;
       },
       lockInfo()  { return LOCK_INFO[Store.lockStatus] || LOCK_INFO.open; },
       periodBannerInfo() {
@@ -102,7 +95,7 @@
           '· 从「初始数据.xlsx」重新导入全部项目\n' +
           '· 审批状态恢复为「草稿」，清除已提交标记\n' +
           '· 清空审计日志与全部版本快照，写入新 I 版导入快照\n' +
-          '· 填报周期配置恢复默认值（报告月 2026-05）\n' +
+          '· 填报周期配置恢复默认值（报告月 2026-06，填报提醒日 5 日）\n' +
           '· 固定 5 条「新增项目」演示（相对 I 版 baseline 高亮）\n' +
           '· 锁定状态恢复为按日期自动计算\n\n' +
           '仅用于开发测试，确认继续？',
@@ -154,24 +147,14 @@
                 :index="item.path"
                 @click="goTo(item.path)"
               >
-                <i :class="item.icon"></i>
+                <i v-if="item.icon.startsWith('el-icon-')" :class="item.icon"></i>
+                <span v-else class="nav-emoji-icon">{{ item.icon }}</span>
                 <span slot="title">{{ item.label }}</span>
               </el-menu-item>
             </el-menu>
           </div>
           <div class="sidebar-footer">
             <template v-if="!sidebarCollapsed">
-              <div class="sidebar-footer-status">
-                <div class="sidebar-footer-month">填报月份：{{ reportingMonth }}</div>
-                <span
-                  class="period-banner sidebar-footer-period"
-                  :class="periodBannerInfo.type"
-                  :title="periodBannerInfo.tip"
-                >
-                  <span class="period-dot"></span>
-                  {{ periodBannerInfo.text }}
-                </span>
-              </div>
               <button
                 type="button"
                 class="sidebar-collapse-btn sidebar-footer-toggle"
@@ -229,7 +212,7 @@
             </el-dropdown>
           </div>
 
-          <div class="app-content" :class="{'no-padding': activePath === '/editor' || (activePath === '/approval' && approvalOnlyNav)}">
+          <div class="app-content" :class="{'no-padding': activePath === '/editor'}">
             <router-view></router-view>
           </div>
         </div>

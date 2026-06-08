@@ -194,6 +194,15 @@ body {
   border-right: none !important;
 }
 .sidebar-nav .el-menu-item i { color: rgba(255,255,255,0.45) !important; }
+.sidebar-nav .el-menu-item .nav-emoji-icon {
+  font-size: 16px;
+  margin-right: 10px;
+  vertical-align: middle;
+  line-height: 1;
+}
+.app-sidebar.is-collapsed .sidebar-nav .el-menu-item .nav-emoji-icon {
+  margin-right: 0;
+}
 .sidebar-nav .el-menu-item:hover,
 .sidebar-nav .el-menu-item.is-active {
   background: rgba(0,112,105,0.2) !important;
@@ -212,20 +221,6 @@ body {
 .app-sidebar.is-collapsed .sidebar-footer {
   padding: 10px 8px;
   align-items: center;
-}
-.sidebar-footer-status {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.sidebar-footer-month {
-  color: rgba(255,255,255,0.35);
-  font-size: 11px;
-}
-.sidebar-footer-period {
-  font-size: 11px;
-  padding: 3px 8px;
-  align-self: flex-start;
 }
 .sidebar-footer-toggle {
   width: 100%;
@@ -292,7 +287,7 @@ body {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 20px;
+  padding: 8px;
   background: var(--color-bg);
 }
 .app-content.no-padding {
@@ -391,42 +386,6 @@ body {
   padding: 16px 20px;
 }
 .chart-container { width: 100%; }
-
-/* ── 填报期状态条 ──────────────────────────────────────── */
-.period-banner {
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.period-banner.open {
-  background: rgba(16, 185, 129, 0.1);
-  color: #059669;
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  padding: 4px 10px;
-}
-.period-banner.finance-only {
-  background: rgba(245, 158, 11, 0.1);
-  color: #d97706;
-  border: 1px solid rgba(245, 158, 11, 0.3);
-  padding: 4px 10px;
-}
-.period-banner.locked {
-  background: rgba(100, 116, 139, 0.1);
-  color: #475569;
-  border: 1px solid rgba(100, 116, 139, 0.3);
-  padding: 4px 10px;
-}
-.period-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: currentColor;
-  display: inline-block;
-}
 
 /* ── Luckysheet 容器 ───────────────────────────────────── */
 .luckysheet-wrap {
@@ -551,7 +510,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
+  padding: 6px 0px;
   background: var(--color-card);
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
@@ -2214,4 +2173,41 @@ body {
   background: #fff;
 }
 
+/* ── 手动发起填报弹窗 ──────────────────────────────────── */
+
+.fork-dialog .fork-meta-label {
+  font-size: 12px;
+  color: #64748b;
+}
+.fork-dialog .fork-meta-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+}
+.fork-dialog .fork-staff-cell {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* ── 填报管理详情页 ─────────────────────────────────────── */
+
+.report-line-detail .diff-cell {
+  background: #fff7e6;
+}
+.report-line-detail .diff-old {
+  color: #fa8c16;
+  font-size: 11px;
+  margin-left: 4px;
+}
+.report-line-detail .editable-cell .el-input {
+  width: 100%;
+}
+.report-line-detail .editable-cell .el-input__inner {
+  padding: 0 6px;
+  font-size: 12px;
+  height: 26px;
+  line-height: 26px;
+}
 

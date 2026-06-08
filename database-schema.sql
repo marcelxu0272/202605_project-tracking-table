@@ -329,3 +329,83 @@ CREATE TABLE IF NOT EXISTS project_alert_dismissals (
 
     PRIMARY KEY (project_no, alert_type)
 );
+
+-- ============================================================================
+-- 9. 报告线主表 (report_lines)
+-- 存储按板块×周期创建的报告线，支持多级审批流程
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS report_lines (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    sector_code       TEXT    NOT NULL,                -- 板块代码，如 'SAS520'
+    period            TEXT    NOT NULL,                -- 周期，如 '2026-06'
+    status            TEXT    NOT NULL DEFAULT 'open', -- open/reviewing_director/reviewing_leader/completed/rejected/closed
+    approval_node     TEXT,                            -- 当前审批节点: director/leader/null
+    baseline_version  TEXT,                            -- fork时的基线版本(J版key)
+    created_at        TEXT DEFAULT (datetime('now', 'localtime')),
+    updated_at        TEXT DEFAULT (datetime('now', 'localtime')),
+
+    UNIQUE(sector_code, period)                       -- 每板块每周期唯一
+);
+
+CREATE INDEX IF NOT EXISTS idx_rl_sector  ON report_lines (sector_code);
+CREATE INDEX IF NOT EXISTS idx_rl_period  ON report_lines (period);
+CREATE INDEX IF NOT EXISTS idx_rl_status  ON report_lines (status);
+
+-- ============================================================================
+-- 10. PM提交状态表 (report_line_pm_status)
+-- 记录报告线内各PM的提交状态
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS report_line_pm_status (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    report_line_id  INTEGER NOT NULL,
+    pm_name         TEXT    NOT NULL,
+    status          TEXT    NOT NULL DEFAULT 'open',  -- open/submitted/closed
+    submitted_at    TEXT,
+
+    FOREIGN KEY (report_line_id) REFERENCES report_lines(id),
+    UNIQUE(report_line_id, pm_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rlpm_report_line ON report_line_pm_status (report_line_id);
+CREATE INDEX IF NOT EXISTS idx_rlpm_status       ON report_line_pm_status (status);
+
+-- ============================================================================
+-- 11. 审批记录表 (report_line_approvals)
+-- 记录报告线审批流程的每一步操作
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS report_line_approvals (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    report_line_id  INTEGER NOT NULL,
+    action          TEXT    NOT NULL,                -- submit/approve/reject/auto_skip/close_pm
+    actor_role      TEXT    NOT NULL,
+    actor_name      TEXT    NOT NULL,
+    comment         TEXT,
+    from_status     TEXT,
+    to_status       TEXT,
+    created_at      TEXT DEFAULT (datetime('now', 'localtime')),
+
+    FOREIGN KEY (report_line_id) REFERENCES report_lines(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rla_report_line ON report_line_approvals (report_line_id);
+CREATE INDEX IF NOT EXISTS idx_rla_action      ON report_line_approvals (action);
+
+-- ============================================================================
+-- 12. 报告线项目数据表 (report_line_data)
+-- 存储报告线内各项目的字段数据与相对baseline的变更差异
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS report_line_data (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    report_line_id  INTEGER NOT NULL,
+    project_no      TEXT    NOT NULL,
+    field_data      TEXT,                            -- JSON: 项目字段数据
+    change_diff     TEXT,                            -- JSON: 相对baseline的变更
+    updated_by      TEXT,
+    updated_at      TEXT DEFAULT (datetime('now', 'localtime')),
+
+    FOREIGN KEY (report_line_id) REFERENCES report_lines(id),
+    UNIQUE(report_line_id, project_no)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rld_report_line ON report_line_data (report_line_id);
+CREATE INDEX IF NOT EXISTS idx_rld_project     ON report_line_data (project_no);
