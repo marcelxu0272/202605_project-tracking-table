@@ -13,6 +13,28 @@ function nowLocal() {
   return new Date().toISOString();
 }
 
+function syncMonthlyFlatFields(data) {
+  if (!data || typeof data !== 'object') return data;
+
+  function syncArray(arrayKey, prefix) {
+    var arr = Array.isArray(data[arrayKey]) ? data[arrayKey].slice() : Array(12).fill(0);
+    for (var i = 0; i < 12; i++) {
+      var key = prefix + '_' + i;
+      if (Object.prototype.hasOwnProperty.call(data, key)) {
+        arr[i] = data[key];
+      } else {
+        data[key] = arr[i] || 0;
+      }
+    }
+    data[arrayKey] = arr;
+  }
+
+  syncArray('monthly_completion', 'mc');
+  syncArray('monthly_invoice', 'mi');
+  syncArray('monthly_payment', 'mp');
+  return data;
+}
+
 /**
  * 将报告线当前项目数据固化为一条 D 版快照，写入 snapshots 表。
  * version key 格式：RL_D:YYYYMMDD:sectorCode:seq
@@ -24,7 +46,7 @@ function saveReportLineSnapshot(db, lineId, sectorCode) {
   ).all(lineId);
 
   var projects = dataRows.map(function (r) {
-    try { return JSON.parse(r.field_data); } catch (e) { return { project_no: r.project_no }; }
+    try { return syncMonthlyFlatFields(JSON.parse(r.field_data)); } catch (e) { return { project_no: r.project_no }; }
   });
 
   var now = new Date();
@@ -420,6 +442,19 @@ function getReportLineDetail(id) {
   var line = db.prepare('SELECT * FROM report_lines WHERE id = ?').get(id);
   if (!line) fail(404, '报告线不存在 (id=' + id + ')');
 
+  var baselineProjectMap = {};
+  if (line.baseline_version) {
+    var baselineRow = db.prepare('SELECT payload FROM snapshots WHERE version = ?').get(line.baseline_version);
+    if (baselineRow) {
+      try {
+        var baselineSnap = JSON.parse(baselineRow.payload);
+        (baselineSnap.projects || []).forEach(function (p) {
+          if (p && p.project_no) baselineProjectMap[p.project_no] = p;
+        });
+      } catch (e) { /* ignore */ }
+    }
+  }
+
   var dataRows = db.prepare(
     'SELECT * FROM report_line_data WHERE report_line_id = ? ORDER BY project_no ASC'
   ).all(id);
@@ -435,6 +470,11 @@ function getReportLineDetail(id) {
   var projects = dataRows.map(function (r) {
     var fd = null;
     try { fd = JSON.parse(r.field_data); } catch (e) { /* ignore */ }
+    var baselineProject = baselineProjectMap[r.project_no] || {};
+    if (fd && typeof fd === 'object') {
+      fd = Object.assign({}, baselineProject, fd, { project_no: r.project_no });
+      syncMonthlyFlatFields(fd);
+    }
     var cd = null;
     try { cd = JSON.parse(r.change_diff); } catch (e) { /* ignore */ }
     return {
@@ -499,10 +539,34 @@ function saveData(id, projectNo, fieldData, userName) {
   var line = db.prepare('SELECT * FROM report_lines WHERE id = ?').get(id);
   if (!line) fail(404, '报告线不存在 (id=' + id + ')');
 
-  // 计算 change_diff：对比 baseline 中该项目的字段数据
-  var changeDiff = computeChangeDiff(db, line, projectNo, fieldData);
+  var existingData = {};
+  var existingRow = db.prepare(
+    'SELECT field_data FROM report_line_data WHERE report_line_id = ? AND project_no = ?'
+  ).get(id, projectNo);
+  if (existingRow) {
+    try { existingData = JSON.parse(existingRow.field_data) || {}; } catch (e) { existingData = {}; }
+  }
 
-  var fieldDataJson = JSON.stringify(fieldData);
+  var baselineData = {};
+  if (line.baseline_version) {
+    var baselineRow = db.prepare('SELECT payload FROM snapshots WHERE version = ?').get(line.baseline_version);
+    if (baselineRow) {
+      try {
+        var baselineSnap = JSON.parse(baselineRow.payload);
+        baselineData = ((baselineSnap.projects || []).find(function (p) {
+          return p && p.project_no === projectNo;
+        })) || {};
+      } catch (e) { baselineData = {}; }
+    }
+  }
+
+  var mergedFieldData = Object.assign({}, baselineData, existingData, fieldData || {}, { project_no: projectNo });
+  syncMonthlyFlatFields(mergedFieldData);
+
+  // 计算 change_diff：对比 baseline 中该项目的字段数据
+  var changeDiff = computeChangeDiff(db, line, projectNo, mergedFieldData);
+
+  var fieldDataJson = JSON.stringify(mergedFieldData);
   var changeDiffJson = changeDiff ? JSON.stringify(changeDiff) : null;
 
   db.prepare(
@@ -893,7 +957,7 @@ function getDiff(id) {
 
   dataRows.forEach(function (r) {
     var newFieldData = null;
-    try { newFieldData = JSON.parse(r.field_data); } catch (e) { return; }
+    try { newFieldData = syncMonthlyFlatFields(JSON.parse(r.field_data)); } catch (e) { return; }
 
     var baselineProject = baselineMap[r.project_no];
 
@@ -962,7 +1026,7 @@ function exportReportLine(id, options) {
   ).all(id);
 
   var projects = dataRows.map(function (r) {
-    try { return JSON.parse(r.field_data); } catch (e) { return { project_no: r.project_no }; }
+    try { return syncMonthlyFlatFields(JSON.parse(r.field_data)); } catch (e) { return { project_no: r.project_no }; }
   });
 
   if (options.role === 'pm') {

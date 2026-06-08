@@ -533,7 +533,7 @@
         if (!this.canShowArchiveButton) return;
         const self = this;
         this.$confirm(
-          '确认提交公司归档？将生成新的 J 版快照（含全部项目），并更新变更对比基准。',
+          '确认提交公司归档？将生成新的 J 版快照（含全部项目），并更新内容对比基准。',
           '提交归档',
           { confirmButtonText: '确认归档', cancelButtonText: '取消', type: 'warning' }
         ).then(function () {
@@ -1005,7 +1005,7 @@
           originalFlat, coerced, this.tableFields, this.canEditField.bind(this)
         );
         if (!changes.length) {
-          this.$message.info('无变更');
+          this.$message.info('无更新内容');
           return;
         }
 
@@ -1225,7 +1225,7 @@
         this.$confirm(
           isSector
             ? '将从工程平台刷新系统引用列与新增项目，并重载库内最新数据（含本板块各 PM 已提交内容）。是否继续？'
-            : '将从工程平台刷新系统引用列与新增项目，并重载库内最新数据（含各 PM/板块已保存与审批中的变更）。是否继续？',
+            : '将从工程平台刷新系统引用列与新增项目，并重载库内最新数据（含各 PM/板块已保存与审批中的更新内容）。是否继续？',
           '刷新数据',
           { confirmButtonText: '立即刷新', cancelButtonText: '取消', type: 'info' }
         ).then(function () {
@@ -1815,7 +1815,7 @@
         return this.lsApplyCellLock(cell, true);
       },
 
-      /** 本月有变更：浅橙底 + 橙字 + 左边框（与图例 / HTML .field-changed 一致） */
+      /** 本月有更新内容：浅橙底 + 橙字 + 左边框（与图例 / HTML .field-changed 一致） */
       applyLuckysheetHighlight(cell, project, field) {
         if (window.ChangeMeta) {
           return ChangeMeta.applyLuckysheetChangedStyle(cell, project, field);
@@ -1869,7 +1869,7 @@
         } catch (e) { /* ignore */ }
       },
 
-      /** 按项目变更记录，同步该行所有批注与高亮（公式重算后防丢失） */
+      /** 按项目更新内容记录，同步该行所有批注与高亮（公式重算后防丢失） */
       syncLuckysheetProjectRowDecor(dataRowIndex, project) {
         if (!project || dataRowIndex < 0) return;
         const file = this.lsGetActiveLuckysheetFile();
@@ -2706,7 +2706,7 @@
             <span class="editor-legend-swatch editor-legend-swatch--new"></span>新增项目
           </span>
           <span class="editor-legend-item">
-            <span class="editor-legend-swatch editor-legend-swatch--changed"></span>有变更字段
+            <span class="editor-legend-swatch editor-legend-swatch--changed"></span>有更新内容字段
           </span>
           <span class="editor-legend-item">
             <span class="editor-legend-swatch editor-legend-swatch--system-ref"></span>系统引用已覆盖
@@ -2726,7 +2726,7 @@
             <el-radio-group v-model="viewMode" size="mini" class="view-toggle view-toggle--compact">
               <el-radio-button label="all">全部（{{ scopedProjects.length }}）</el-radio-button>
               <el-radio-button label="new_only">新增（{{ newProjectCount }}）</el-radio-button>
-              <el-radio-button label="changed_only">有变更（{{ changedProjectCount }}）</el-radio-button>
+              <el-radio-button label="changed_only">有更新内容（{{ changedProjectCount }}）</el-radio-button>
               <el-radio-button label="warning_only">预警（{{ warningProjectCount }}）</el-radio-button>
             </el-radio-group>
             <el-divider direction="vertical" class="sheet-toolbar-divider"></el-divider>
@@ -2844,7 +2844,7 @@
           @archived="onCompanyArchived"
         ></system-admin-sector-dock>
 
-        <!-- 板块管理员：本月已提交 PM（自动进入汇总，可查看变更） -->
+        <!-- 板块管理员：本月已提交 PM（自动进入汇总，可查看更新内容） -->
         <div
           v-if="isSectorAdmin && submittedPmSubmissions.length > 0"
           class="sector-admin-pm-dock"
@@ -2873,7 +2873,7 @@
                   {{ formatPmSubmissionMeta(sub) }}
                 </div>
               </div>
-              <el-button size="mini" @click="showPmDiff(sub.pmName)">查看变更</el-button>
+              <el-button size="mini" @click="showPmDiff(sub.pmName)">查看更新内容</el-button>
             </div>
           </div>
         </div>
@@ -2896,15 +2896,15 @@
           </span>
         </div>
 
-        <!-- PM diff 对比弹窗（板块管理员用） -->
+        <!-- PM 更新内容弹窗（板块管理员用） -->
         <el-dialog
-          :title="'变更对比 — ' + pmDiffName"
+          :title="'更新内容 — ' + pmDiffName"
           :visible.sync="pmDiffVisible"
           width="760px"
           top="8vh"
         >
           <div v-if="pmDiffResults.length === 0" style="text-align:center;padding:40px;color:#94a3b8;">
-            暂无变更数据
+            暂无更新内容
           </div>
           <div v-for="row in pmDiffResults" :key="row.projectNo" style="margin-bottom:16px;">
             <div style="font-size:13px;font-weight:600;color:#1e293b;margin-bottom:6px;padding:4px 8px;background:#f1f5f9;border-radius:4px;">
@@ -2912,12 +2912,7 @@
             </div>
             <el-table :data="row.diffs" size="mini" border style="width:100%;">
               <el-table-column label="字段" prop="field" width="140"></el-table-column>
-              <el-table-column :label="pmDiffColLeft" prop="leftVal">
-                <template slot-scope="{row: d}">
-                  <span style="color:#64748b;">{{ d.leftVal || '—' }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column :label="pmDiffColRight" prop="rightVal">
+              <el-table-column label="更新后" prop="rightVal">
                 <template slot-scope="{row: d}">
                   <span style="color:#007069;font-weight:500;">{{ d.rightVal || '—' }}</span>
                 </template>
@@ -3129,7 +3124,7 @@
           .map(function (k) {
             let label = self.formatSnapshotOptionLabel(k, snaps[k]);
             if (baseline && k === baseline) {
-              label += ' · 变更基准';
+              label += ' · 更新基准';
             }
             return { value: k, label: label };
           });

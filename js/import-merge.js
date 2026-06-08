@@ -72,7 +72,7 @@
         });
 
         if (!changed) {
-          skipped.push({ projectNo: projectNo, reason: '无可合并的可编辑变更' });
+          skipped.push({ projectNo: projectNo, reason: '无可合并的可编辑更新内容' });
           return;
         }
 

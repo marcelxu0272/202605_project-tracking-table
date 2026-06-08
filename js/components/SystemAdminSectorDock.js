@@ -115,7 +115,7 @@
       openSectorChanges: function (code) {
         var flow = Store.getSectorFlow(code);
         if (!this.isSectorApprovalComplete(flow)) {
-          this.$message.info('该板块尚未完成审批，暂不可查看变更');
+          this.$message.info('该板块尚未完成审批，暂不可查看更新内容');
           return;
         }
         var self = this;
@@ -124,13 +124,13 @@
         var current = this.currentSectorProjects(code);
         var loading = this.$loading({
           lock: true,
-          text: '加载变更…',
+          text: '加载更新内容…',
           background: 'rgba(0,0,0,0.15)'
         });
 
         function showResults(results, colLeft, colRight) {
           if (!results.length) {
-            self.$message.info('该板块暂无可展示的手动填报变更');
+            self.$message.info('该板块暂无可展示的手动填报更新内容');
             return;
           }
           self.sectorChangeCode = code;
@@ -144,12 +144,12 @@
           Store.fetchSnapshot(draftKey)
             .then(function (snap) {
               if (!snap || !snap.projects) {
-                showResults(self.buildChangeResultsFromMetadata(current), '—', '当前变更记录');
+                showResults(self.buildChangeResultsFromMetadata(current), '—', '当前更新内容');
                 return;
               }
               var results = DiffUtils.diffProjectSets(snap.projects, current, compareFields);
               if (results.length === 0) {
-                showResults(self.buildChangeResultsFromMetadata(current), '—', '当前变更记录');
+                showResults(self.buildChangeResultsFromMetadata(current), '—', '当前更新内容');
                 return;
               }
               showResults(results, 'Draft 提交时', '当前追踪表');
@@ -165,7 +165,7 @@
         showResults(
           this.buildChangeResultsFromMetadata(current),
           '—',
-          '当前变更记录'
+          '当前更新内容'
         );
       },
     },
@@ -188,11 +188,11 @@
       '<motion-placeholder class="system-admin-sector-card-code">{{ card.displayLabel }}</motion-placeholder>',
       '<el-tag size="mini" :type="flowTagType(card.flow)">{{ card.statusText }}</el-tag>',
       '<motion-placeholder class="system-admin-sector-card-actions">',
-      '<el-button size="mini" type="primary" plain :disabled="!card.approvalComplete" @click="openSectorChanges(card.code)">查看变更</el-button>',
+      '<el-button size="mini" type="primary" plain :disabled="!card.approvalComplete" @click="openSectorChanges(card.code)">查看更新内容</el-button>',
       '</motion-placeholder></motion-placeholder>',
       '</motion-placeholder>',
-      '<el-dialog :title="\'变更明细 — \' + sectorChangeDialogTitle" :visible.sync="sectorChangeVisible" width="80%" top="8vh" append-to-body>',
-      '<div v-if="sectorChangeResults.length===0" style="text-align:center;padding:40px;color:#94a3b8;">暂无变更</div>',
+      '<el-dialog :title="\'更新内容 — \' + sectorChangeDialogTitle" :visible.sync="sectorChangeVisible" width="80%" top="8vh" append-to-body>',
+      '<div v-if="sectorChangeResults.length===0" style="text-align:center;padding:40px;color:#94a3b8;">暂无更新内容</div>',
       '<motion-placeholder v-else style="max-height:480px;overflow-y:auto;">',
       '<motion-placeholder v-for="row in sectorChangeResults" :key="row.projectNo" style="margin-bottom:16px;">',
       '<motion-placeholder style="font-weight:600;margin-bottom:4px;">{{ row.projectNo }} · {{ row.projectName }}</motion-placeholder>',

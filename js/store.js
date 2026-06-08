@@ -632,7 +632,11 @@
   Store.saveReportLineData = async function (id, projectNo, data) {
     return await apiFetch('/report-lines/' + encodeURIComponent(id) + '/data', {
       method: 'PUT',
-      body: { projectNo: projectNo, fieldData: data }
+      body: {
+        projectNo: projectNo,
+        fieldData: data,
+        userName: (Store.currentUser || {}).name
+      }
     });
   };
 

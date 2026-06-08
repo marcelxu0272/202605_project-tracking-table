@@ -1,6 +1,6 @@
 /**
  * change-meta.js — 单元格变更元数据（批注 / 审计联动）
- * _field_change_log[col] 为变更记录数组，同一流程内多角色多次修改均保留
+ * _field_change_log[col] 为更新内容记录数组，同一流程内多角色多次修改均保留
  */
 (function (window) {
   'use strict';
