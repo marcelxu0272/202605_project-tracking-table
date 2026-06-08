@@ -13,6 +13,45 @@ function nowLocal() {
   return new Date().toISOString();
 }
 
+/**
+ * 将报告线当前项目数据固化为一条 D 版快照，写入 snapshots 表。
+ * version key 格式：RL_D:YYYYMMDD:sectorCode:seq
+ * @returns {string} version 键
+ */
+function saveReportLineSnapshot(db, lineId, sectorCode) {
+  var dataRows = db.prepare(
+    'SELECT * FROM report_line_data WHERE report_line_id = ? ORDER BY project_no ASC'
+  ).all(lineId);
+
+  var projects = dataRows.map(function (r) {
+    try { return JSON.parse(r.field_data); } catch (e) { return { project_no: r.project_no }; }
+  });
+
+  var now = new Date();
+  var ymd = now.getFullYear()
+    + String(now.getMonth() + 1).padStart(2, '0')
+    + String(now.getDate()).padStart(2, '0');
+  var prefix = 'RL_D:' + ymd + ':' + sectorCode + ':';
+  var rows = db.prepare("SELECT version FROM snapshots WHERE version LIKE ?").all(prefix + '%');
+  var maxSeq = 0;
+  rows.forEach(function (r) {
+    var seq = parseInt(String(r.version).split(':').pop(), 10);
+    if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+  });
+  var version = prefix + String(maxSeq + 1).padStart(2, '0');
+
+  var payload = JSON.stringify({
+    snapshotType: 'report_line_draft',
+    version: version,
+    report_line_id: lineId,
+    sector: sectorCode,
+    time: now.toISOString(),
+    projects: projects
+  });
+  db.prepare('INSERT INTO snapshots (version, payload) VALUES (?, ?)').run(version, payload);
+  return version;
+}
+
 /** 从 projects 表中解析出 payload（JSON） */
 function loadProjectsFromDb(db) {
   return db.prepare('SELECT payload FROM projects ORDER BY project_no ASC').all()
@@ -180,6 +219,25 @@ function getForkPreview() {
   };
 }
 
+/** 强制必须包含的项目识别列（不可取消） */
+var MANDATORY_COLS = ['E', 'F', 'G'];
+
+/**
+ * 规范化分发列：去重、补强制列、返回排序后的列字母数组；
+ * 若 input 为空/null 则返回 null（表示显示全部列）
+ */
+function normalizeDistributedColumns(input) {
+  if (!Array.isArray(input) || input.length === 0) return null;
+  var set = new Set(input.filter(function (c) { return typeof c === 'string' && c.trim(); }));
+  MANDATORY_COLS.forEach(function (c) { set.add(c); });
+  var arr = Array.from(set);
+  arr.sort(function (a, b) {
+    if (a.length !== b.length) return a.length - b.length;
+    return a < b ? -1 : a > b ? 1 : 0;
+  });
+  return arr;
+}
+
 function forkPeriod(period, options) {
   options = options || {};
   var db = dbm.getDb();
@@ -206,8 +264,12 @@ function forkPeriod(period, options) {
     fail(500, 'J 版快照解析失败：' + e.message);
   }
 
+  // 规范化分发列配置
+  var distributedCols = normalizeDistributedColumns(options.distributedColumns || null);
+  var distributedColsJson = distributedCols ? JSON.stringify(distributedCols) : null;
+
   var insertLine = db.prepare(
-    'INSERT INTO report_lines (sector_code, period, status, baseline_version) VALUES (?, ?, ?, ?)'
+    'INSERT INTO report_lines (sector_code, period, status, baseline_version, distributed_columns) VALUES (?, ?, ?, ?, ?)'
   );
   var insertPmStatus = db.prepare(
     'INSERT INTO report_line_pm_status (report_line_id, pm_name, status) VALUES (?, ?, ?)'
@@ -231,7 +293,7 @@ function forkPeriod(period, options) {
         return;
       }
 
-      var info = insertLine.run(normalCode, period, 'open', latestJVersion);
+      var info = insertLine.run(normalCode, period, 'open', latestJVersion, distributedColsJson);
       var lineId = Number(info.lastInsertRowid);
 
       // 从 J 版快照中取该板块项目数据（作为 baseline 一致的初始数据）
@@ -263,7 +325,7 @@ function forkPeriod(period, options) {
     projectNo: '—',
     projectName: '填报管理',
     fieldName: 'report_line_fork',
-    fieldCN: '手动发起填报',
+    fieldCN: '发起填报',
     oldVal: '—',
     newVal: '周期 ' + period + '，baseline ' + latestJVersion
       + '，新建 ' + created.length + ' 条，跳过 ' + skipped.length + ' 条',
@@ -331,6 +393,8 @@ function getReportLines(user, filters) {
   var rows = params.length ? stmt.all.apply(stmt, params) : stmt.all();
 
   return rows.map(function (r) {
+    var dc = null;
+    try { dc = r.distributed_columns ? JSON.parse(r.distributed_columns) : null; } catch (e) { /* ignore */ }
     return {
       id: r.id,
       sector_code: r.sector_code,
@@ -338,6 +402,8 @@ function getReportLines(user, filters) {
       status: r.status,
       approval_node: r.approval_node,
       baseline_version: r.baseline_version,
+      distributed_columns: dc,
+      created_at: r.created_at,
       updated_at: r.updated_at,
       projects_count: r.projects_count
     };
@@ -399,9 +465,13 @@ function getReportLineDetail(id) {
       comment: r.comment,
       from_status: r.from_status,
       to_status: r.to_status,
+      snapshot_version: r.snapshot_version || null,
       created_at: r.created_at
     };
   });
+
+  var dc = null;
+  try { dc = line.distributed_columns ? JSON.parse(line.distributed_columns) : null; } catch (e) { /* ignore */ }
 
   return {
     id: line.id,
@@ -410,6 +480,7 @@ function getReportLineDetail(id) {
     status: line.status,
     approval_node: line.approval_node,
     baseline_version: line.baseline_version,
+    distributed_columns: dc,
     created_at: line.created_at,
     updated_at: line.updated_at,
     projects: projects,
@@ -588,6 +659,15 @@ function submitApproval(id, sectorAdminName) {
     approvalNode = 'leader';
   }
 
+  // 提交审批前先固化当前数据为 D 版快照
+  var snapshotVersion = null;
+  try {
+    snapshotVersion = saveReportLineSnapshot(db, id, line.sector_code);
+  } catch (e) {
+    // 快照失败不阻断提交
+    console.error('[report-line] snapshot failed:', e.message);
+  }
+
   var tx = db.transaction(function () {
     // 自动关闭未提交PM
     db.prepare(
@@ -600,13 +680,13 @@ function submitApproval(id, sectorAdminName) {
       'UPDATE report_lines SET status = ?, approval_node = ?, updated_at = datetime(\'now\',\'localtime\') WHERE id = ?'
     ).run(toStatus, approvalNode, id);
 
-    // 写入审批记录
+    // 写入审批记录（含快照版本）
     db.prepare(
-      'INSERT INTO report_line_approvals (report_line_id, action, actor_role, actor_name, comment, from_status, to_status) '
-      + 'VALUES (?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO report_line_approvals (report_line_id, action, actor_role, actor_name, comment, from_status, to_status, snapshot_version) '
+      + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(id, 'submit', 'sector_admin', sectorAdminName,
       skipDirector ? '板块管理员提交审批（自动跳过总监节点）' : '板块管理员提交审批',
-      fromStatus, toStatus);
+      fromStatus, toStatus, snapshotVersion);
 
     if (skipDirector) {
       // 记录跳过动作
@@ -846,15 +926,56 @@ function exportReportLine(id, options) {
     fail(400, '报告线无项目数据可导出');
   }
 
-  // 构建导出数据：以项目对象的所有 key 为列
+  // 解析分发列配置
+  var dcRaw = null;
+  try { dcRaw = line.distributed_columns ? JSON.parse(line.distributed_columns) : null; } catch (e) { /* ignore */ }
+  // COL_TO_KEY 映射（与 js/field-config.js 保持一致）
+  var COL_TO_KEY = {
+    A:'new_existing', B:'start_date', C:'end_date', D:'unit_code',
+    E:'pm_name', F:'project_no', G:'project_name', H:'client_name',
+    I:'enterprise_type', J:'industry', K:'business_type',
+    L:'signed', M:'progress',
+    N:'prev_year_contract', O:'adj_value', P:'total_contract', Q:'contract_excl_tax',
+    R:'contract_minus_invoice', S:'contract_minus_completed',
+    T:'prev_year_completion', U:'cum_completed', V:'opening_backlog',
+    W:'current_completed', X:'ytd_completed', Y:'tax_rate', Z:'ytd_completed_excl_tax',
+    AA:'prev_year_invoice', AB:'ytd_invoice', AC:'cum_invoice',
+    AD:'prev_year_payment', AE:'ytd_payment', AF:'cum_payment',
+    AG:'wip_incl_tax', AH:'wip_excl_tax', AI:'ar_incl_advance',
+    AJ:'ar_for_collection', AK:'opening_ar', AL:'wip_pending_invoice',
+    AM:'wip_cause', AN:'cause_desc', AO:'high_risk_wip',
+    AP:'opening_wip', AQ:'wip_3mo_plus', AR:'wip_3mo_adjusted',
+    AS:'factor_analysis', AT:'action_plan', AU:'forecast_invoice_date',
+    AV:'mc_0', AW:'mc_1', AX:'mc_2', AY:'mc_3', AZ:'mc_4',
+    BA:'mc_5', BB:'mc_6', BC:'mc_7', BD:'mc_8', BE:'mc_9', BF:'mc_10', BG:'mc_11',
+    BH:'mi_0', BI:'mp_0', BJ:'mi_1', BK:'mp_1', BL:'mi_2', BM:'mp_2',
+    BN:'mi_3', BO:'mp_3', BP:'mi_4', BQ:'mp_4', BR:'mi_5', BS:'mp_5',
+    BT:'mi_6', BU:'mp_6', BV:'mi_7', BW:'mp_7', BX:'mi_8', BY:'mp_8',
+    BZ:'mi_9', CA:'mp_9', CB:'mi_10', CC:'mp_10', CD:'mi_11', CE:'mp_11'
+  };
+  // 构建允许导出的 field key 集合（有 distributed_columns 时按列过滤）
+  var allowedKeys = null;
+  if (dcRaw && dcRaw.length) {
+    allowedKeys = new Set();
+    dcRaw.forEach(function (col) {
+      var key = COL_TO_KEY[col];
+      if (key) allowedKeys.add(key);
+      // 月度数组列：mc_X / mi_X / mp_X 对应 monthly_completion 等
+      // 也保留 mc_0..mc_11 形式
+    });
+    // 始终包含 project_no 以保证行唯一性
+    allowedKeys.add('project_no');
+  }
+
+  // 构建导出数据：以项目对象的所有 key 为列（受分发列过滤）
   var allKeys = [];
   var keySet = new Set();
   projects.forEach(function (p) {
     Object.keys(p).forEach(function (k) {
-      if (!keySet.has(k)) {
-        keySet.add(k);
-        allKeys.push(k);
-      }
+      if (keySet.has(k)) return;
+      if (allowedKeys && !allowedKeys.has(k)) return;
+      keySet.add(k);
+      allKeys.push(k);
     });
   });
 
@@ -885,6 +1006,78 @@ function exportReportLine(id, options) {
 }
 
 // ---------------------------------------------------------------------------
+// 11. exportApprovalSnapshot — 导出提交时刻的快照 Excel
+// ---------------------------------------------------------------------------
+
+function exportApprovalSnapshot(lineId, approvalId) {
+  var db = dbm.getDb();
+
+  var approval = db.prepare(
+    'SELECT * FROM report_line_approvals WHERE id = ? AND report_line_id = ?'
+  ).get(approvalId, lineId);
+  if (!approval) fail(404, '审批记录不存在');
+
+  var line = db.prepare('SELECT * FROM report_lines WHERE id = ?').get(lineId);
+  if (!line) fail(404, '报告线不存在 (id=' + lineId + ')');
+
+  var snapshotVersion = approval.snapshot_version;
+  if (!snapshotVersion) {
+    if (approval.action !== 'submit' || approval.actor_role !== 'sector_admin') {
+      fail(404, '该审批节点未关联快照');
+    }
+    snapshotVersion = saveReportLineSnapshot(db, lineId, line.sector_code);
+    db.prepare('UPDATE report_line_approvals SET snapshot_version = ? WHERE id = ?')
+      .run(snapshotVersion, approval.id);
+  }
+
+  var snapRow = db.prepare('SELECT payload FROM snapshots WHERE version = ?').get(snapshotVersion);
+  if (!snapRow) fail(404, '快照数据不存在（version=' + snapshotVersion + '）');
+
+  var snap;
+  try { snap = JSON.parse(snapRow.payload); } catch (e) { fail(500, '快照数据解析失败'); }
+
+  var projects = snap.projects || [];
+  if (!projects.length) fail(400, '快照无项目数据');
+
+  var sectorCode = (line && line.sector_code) || snap.sector || 'unknown';
+  var period = (line && line.period) || '';
+
+  // 构建表格
+  var allKeys = [];
+  var keySet = new Set();
+  projects.forEach(function (p) {
+    Object.keys(p).forEach(function (k) {
+      if (keySet.has(k)) return;
+      keySet.add(k);
+      allKeys.push(k);
+    });
+  });
+
+  var header = allKeys.slice();
+  var rows = [header];
+  projects.forEach(function (p) {
+    rows.push(allKeys.map(function (k) {
+      var v = p[k];
+      if (v == null) return '';
+      if (typeof v === 'object') return JSON.stringify(v);
+      return v;
+    }));
+  });
+
+  var sheetName = (sectorCode + '_' + period).slice(0, 31);
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+  var buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  var timeStr = (snap.time || '').replace(/[T:]/g, '-').slice(0, 16);
+  return {
+    buffer: buf,
+    filename: '提交快照_' + sectorCode + '_' + period + '_' + timeStr + '.xlsx'
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
 
@@ -900,5 +1093,6 @@ module.exports = {
   reviewApproval: reviewApproval,
   shouldSkipNode: shouldSkipNode,
   getDiff: getDiff,
-  exportReportLine: exportReportLine
+  exportReportLine: exportReportLine,
+  exportApprovalSnapshot: exportApprovalSnapshot
 };

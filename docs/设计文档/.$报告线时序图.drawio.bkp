@@ -57,7 +57,7 @@
         </mxCell>
 
         <!-- 1. 系统管理员点击发起填报 -->
-        <mxCell id="msg1" value="点击「手动发起填报」" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1" source="actor_admin" target="actor_fe">
+        <mxCell id="msg1" value="点击「发起填报」" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1" source="actor_admin" target="actor_fe">
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="110" y="200" as="sourcePoint" />
             <mxPoint x="610" y="200" as="targetPoint" />

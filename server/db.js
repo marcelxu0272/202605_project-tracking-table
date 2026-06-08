@@ -87,6 +87,7 @@ function openDb() {
       status TEXT NOT NULL DEFAULT 'open',
       approval_node TEXT,
       baseline_version TEXT,
+      distributed_columns TEXT,
       created_at TEXT DEFAULT (datetime('now','localtime')),
       updated_at TEXT DEFAULT (datetime('now','localtime')),
       UNIQUE(sector_code, period)
@@ -133,6 +134,16 @@ function openDb() {
     CREATE INDEX IF NOT EXISTS idx_rld_report_line ON report_line_data(report_line_id);
     CREATE INDEX IF NOT EXISTS idx_rld_project ON report_line_data(project_no);
   `);
+
+  // 迁移：为已有数据库补加 distributed_columns 列
+  try {
+    db.exec('ALTER TABLE report_lines ADD COLUMN distributed_columns TEXT');
+  } catch (e) { /* 列已存在，忽略 */ }
+
+  // 迁移：为审批记录表补加 snapshot_version 列（板块管理员提交审批时写入 D 版快照键）
+  try {
+    db.exec('ALTER TABLE report_line_approvals ADD COLUMN snapshot_version TEXT');
+  } catch (e) { /* 列已存在，忽略 */ }
 
   return db;
 }

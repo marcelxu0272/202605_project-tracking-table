@@ -2631,7 +2631,7 @@
               :disabled="!canClearCurrentMonthCompletion"
               @click="handleClearCurrentMonthCompletion"
             >清零当月完成额</el-button>
-            <template v-if="canImport && user.role === 'system_admin'">
+            <template v-if="canImport">
               <input
                 ref="importFileInput"
                 type="file"

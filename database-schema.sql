@@ -335,16 +335,17 @@ CREATE TABLE IF NOT EXISTS project_alert_dismissals (
 -- 存储按板块×周期创建的报告线，支持多级审批流程
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS report_lines (
-    id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    sector_code       TEXT    NOT NULL,                -- 板块代码，如 'SAS520'
-    period            TEXT    NOT NULL,                -- 周期，如 '2026-06'
-    status            TEXT    NOT NULL DEFAULT 'open', -- open/reviewing_director/reviewing_leader/completed/rejected/closed
-    approval_node     TEXT,                            -- 当前审批节点: director/leader/null
-    baseline_version  TEXT,                            -- fork时的基线版本(J版key)
-    created_at        TEXT DEFAULT (datetime('now', 'localtime')),
-    updated_at        TEXT DEFAULT (datetime('now', 'localtime')),
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    sector_code          TEXT    NOT NULL,                -- 板块代码，如 'SAS520'
+    period               TEXT    NOT NULL,                -- 周期，如 '2026-06'
+    status               TEXT    NOT NULL DEFAULT 'open', -- open/reviewing_director/reviewing_leader/completed/rejected/closed
+    approval_node        TEXT,                            -- 当前审批节点: director/leader/null
+    baseline_version     TEXT,                            -- fork时的基线版本(J版key)
+    distributed_columns  TEXT,                            -- 分发列配置：列字母数组 JSON，如["F","G","E","AV"]；null表示显示全部列
+    created_at           TEXT DEFAULT (datetime('now', 'localtime')),
+    updated_at           TEXT DEFAULT (datetime('now', 'localtime')),
 
-    UNIQUE(sector_code, period)                       -- 每板块每周期唯一
+    UNIQUE(sector_code, period)                          -- 每板块每周期唯一
 );
 
 CREATE INDEX IF NOT EXISTS idx_rl_sector  ON report_lines (sector_code);
@@ -374,15 +375,16 @@ CREATE INDEX IF NOT EXISTS idx_rlpm_status       ON report_line_pm_status (statu
 -- 记录报告线审批流程的每一步操作
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS report_line_approvals (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    report_line_id  INTEGER NOT NULL,
-    action          TEXT    NOT NULL,                -- submit/approve/reject/auto_skip/close_pm
-    actor_role      TEXT    NOT NULL,
-    actor_name      TEXT    NOT NULL,
-    comment         TEXT,
-    from_status     TEXT,
-    to_status       TEXT,
-    created_at      TEXT DEFAULT (datetime('now', 'localtime')),
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    report_line_id   INTEGER NOT NULL,
+    action           TEXT    NOT NULL,               -- submit/approve/reject/auto_skip/close_pm
+    actor_role       TEXT    NOT NULL,
+    actor_name       TEXT    NOT NULL,
+    comment          TEXT,
+    from_status      TEXT,
+    to_status        TEXT,
+    snapshot_version TEXT,                           -- 板块管理员 submit 时写入 D 版快照键，其余 action 为 NULL
+    created_at       TEXT DEFAULT (datetime('now', 'localtime')),
 
     FOREIGN KEY (report_line_id) REFERENCES report_lines(id)
 );

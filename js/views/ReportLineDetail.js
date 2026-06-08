@@ -122,11 +122,26 @@
         return list;
       },
 
+      // ── 分发列：将 distributed_columns 列字母数组转为 colIdx Set ──
+      distributedColumnSet: function () {
+        var dc = this.reportLine.distributed_columns;
+        if (!dc || !dc.length) return null; // null = 显示全部列
+        var set = new Set();
+        dc.forEach(function (col) {
+          var idx = FieldConfig.colToIdx(col);
+          if (idx >= 0) set.add(idx);
+        });
+        return set;
+      },
+
       // ── 覆盖父类：隐藏主追踪表专属按钮 ──
       canShowAlertsButton:         function () { return false; },
       canShowRefreshButton:         function () { return false; },
       canShowClearCompletionButton: function () { return false; },
-      canImport:                    function () { return false; },
+      canImport: function () {
+        var role = (Store.currentUser || {}).role;
+        return this.canEdit && ['pm', 'sector_admin', 'system_admin'].indexOf(role) >= 0;
+      },
       canShowArchiveButton:         function () { return false; },
       showReportLineHint:           function () { return false; },
       isViewingSnapshot:            function () { return false; },
@@ -218,6 +233,19 @@
             console.error('[ReportLineDetail] loadDetail 失败:', e);
           })
           .finally(function () { self.rlLoading = false; });
+      },
+
+      // ── 覆盖父类：按分发列配置叠加列隐藏 ──
+      buildLuckysheetColhidden: function () {
+        // 先取父类的紧凑列隐藏结果（报告线场景下一般为空对象）
+        var hidden = window.ProjectEditorView.methods.buildLuckysheetColhidden.call(this);
+        var dcSet = this.distributedColumnSet;
+        if (!dcSet) return hidden; // null → 无分发列限制，显示全部
+        var fields = this.tableFields || [];
+        fields.forEach(function (field, c) {
+          if (!dcSet.has(c)) hidden[String(c)] = 0;
+        });
+        return hidden;
       },
 
       // ── 覆盖 buildTableData：从报告线项目构建 ──
@@ -362,6 +390,88 @@
         }
       },
 
+      /** 报告线导入：复用导入合并规则，但保存到 report_line_data 而不是主项目表 */
+      onImportFileChange: function (e) {
+        var file = e.target && e.target.files && e.target.files[0];
+        if (!file) return;
+        var self = this;
+        var rlId = this.reportLine.id;
+        var visibleNoSet = new Set((this.scopedProjects || []).map(function (p) { return p.project_no; }));
+        var distributedSet = this.distributedColumnSet;
+
+        function sanitizeByDistributedColumns(projects) {
+          if (!distributedSet) return projects;
+          var allowedKeys = new Set(['project_no']);
+          (self.tableFields || []).forEach(function (field, idx) {
+            if (!field || !distributedSet.has(idx)) return;
+            var key = FieldConfig.COL_TO_KEY[field.col];
+            if (key) allowedKeys.add(key);
+          });
+          return (projects || []).map(function (p) {
+            var flat = FieldConfig.arraysToFlat(p);
+            var clean = { project_no: flat.project_no || p.project_no };
+            allowedKeys.forEach(function (key) {
+              if (flat[key] !== undefined) clean[key] = flat[key];
+            });
+            return clean;
+          });
+        }
+
+        this.importLoading = true;
+        XlsxImporter.importFromFile(file)
+          .then(function (result) {
+            var imported = sanitizeByDistributedColumns(result.projects || []);
+            if (imported.length === 0) {
+              self.$message.error('未识别到有效数据，请检查文件格式');
+              return null;
+            }
+            var merged = ImportMerge.mergeImportedProjects(
+              imported,
+              self.tableProjects || [],
+              {
+                role: (self.user || {}).role,
+                user: self.user,
+                lockStatus: self.lockStatus,
+                monthIdx: self.monthIdx,
+                scopeFilter: function (p) { return visibleNoSet.has(p.project_no); }
+              }
+            );
+            if (merged.updates.length === 0) {
+              self.$message.warning(
+                '没有可合并的更新（跳过 ' + merged.skipped.length + ' 条）'
+              );
+              return null;
+            }
+            return self.$confirm(
+              '将按项目号更新当前报告线内 ' + merged.updates.length + ' 条项目的可编辑字段' +
+              (merged.skipped.length ? '，跳过 ' + merged.skipped.length + ' 条' : '') +
+              '。确认导入？',
+              '上传导入确认',
+              { confirmButtonText: '确认导入', cancelButtonText: '取消', type: 'warning' }
+            ).then(function () {
+              var chain = Promise.resolve();
+              merged.updates.forEach(function (p) {
+                chain = chain.then(function () {
+                  return Store.saveReportLineData(rlId, p.project_no, p);
+                });
+              });
+              return chain.then(function () {
+                return self.loadDetail();
+              }).then(function () {
+                self.$message.success('成功导入并更新 ' + merged.updates.length + ' 条项目');
+              });
+            });
+          })
+          .catch(function (err) {
+            if (err === 'cancel' || err === 'close') return;
+            self.$message.error('导入失败：' + (err && err.message ? err.message : err));
+          })
+          .finally(function () {
+            self.importLoading = false;
+            if (e.target) e.target.value = '';
+          });
+      },
+
       /** 将 Luckysheet 当前数据批量写入报告线 */
       _flushRlLuckysheet: async function () {
         if (typeof luckysheet === 'undefined') return;
@@ -378,10 +488,13 @@
           if (!project) continue;
           var changed = {};
           var hasChange = false;
+          var dcSet = this.distributedColumnSet;
           for (var c = 0; c < this.tableFields.length; c++) {
             var fld = this.tableFields[c];
             if (!fld || !this.canEditField(fld)) continue;
             if (fld.source_type === 'auto_calc') continue;
+            // 跳过未分发列（隐藏列），避免意外覆盖原始数据
+            if (dcSet && !dcSet.has(c)) continue;
             var cell = row[c];
             var nv = this.coerceFieldValue(this.extractLuckysheetInput(cell), fld);
             var k = FieldConfig.COL_TO_KEY[fld.col];

@@ -665,7 +665,12 @@
     });
   };
 
-  /** 获取手动发起填报的预览数据（板块人员核对表） */
+  /** 获取报告线审批流转记录 */
+  Store.fetchReportLineApprovals = async function (id) {
+    return await apiFetch('/report-lines/' + encodeURIComponent(id) + '/approvals');
+  };
+
+  /** 获取发起填报的预览数据（板块人员核对表） */
   Store.fetchForkPreview = async function () {
     var u = Store.currentUser || {};
     var role = u.role || '';
@@ -673,12 +678,16 @@
     return data;
   };
 
-  /** 手动发起填报 */
-  Store.forkReportPeriod = async function (period) {
+  /** 发起填报 */
+  Store.forkReportPeriod = async function (period, distributedColumns) {
     var u = Store.currentUser || {};
+    var body = { period: period, role: u.role, userName: u.name };
+    if (Array.isArray(distributedColumns) && distributedColumns.length) {
+      body.distributedColumns = distributedColumns;
+    }
     var result = await apiFetch('/report-lines/fork-period', {
       method: 'POST',
-      body: { period: period, role: u.role, userName: u.name }
+      body: body
     });
     if (result && result.state) {
       applyBootstrap(result.state);
@@ -712,55 +721,55 @@
 
     // 历史月份不再允许填报/审批，只提供查看与导出。
     if (reportLine.period && currentPeriod && reportLine.period !== currentPeriod) {
-      return ['view', 'export'];
+      return ['view', 'export', 'trace'];
     }
 
     if (role === 'system_admin') {
-      return ['view', 'export'];
+      return ['view', 'export', 'trace'];
     }
 
     if (role === 'pm') {
       switch (status) {
-        case 'open': return ['fill'];
-        case 'submitted': return ['view'];
-        case 'completed': return ['view', 'export'];
-        case 'closed': return ['view', 'export'];
-        default: return [];
+        case 'open': return ['fill', 'trace'];
+        case 'submitted': return ['view', 'trace'];
+        case 'completed': return ['view', 'export', 'trace'];
+        case 'closed': return ['view', 'export', 'trace'];
+        default: return ['trace'];
       }
     }
 
     if (role === 'sector_admin') {
       switch (status) {
-        case 'open': return ['fill', 'export'];
-        case 'submitted': return ['submit_approval', 'export'];
-        case 'reviewing_director': return ['view', 'export'];
-        case 'reviewing_leader': return ['view', 'export'];
-        case 'returned': return ['fill', 'export'];
-        case 'completed': return ['view', 'export'];
-        case 'closed': return ['view', 'export'];
-        default: return [];
+        case 'open': return ['fill', 'export', 'trace'];
+        case 'submitted': return ['submit_approval', 'export', 'trace'];
+        case 'reviewing_director': return ['view', 'export', 'trace'];
+        case 'reviewing_leader': return ['view', 'export', 'trace'];
+        case 'returned': return ['fill', 'export', 'trace'];
+        case 'completed': return ['view', 'export', 'trace'];
+        case 'closed': return ['view', 'export', 'trace'];
+        default: return ['trace'];
       }
     }
 
     if (role === 'sector_director') {
       switch (status) {
-        case 'open': return ['view'];
-        case 'submitted': return [];
-        case 'reviewing_director': return ['approve', 'view', 'export'];
-        case 'reviewing_leader': return ['view', 'export'];
-        case 'returned': return ['view', 'export'];
-        case 'completed': return ['view', 'export'];
-        case 'closed': return ['view', 'export'];
-        default: return [];
+        case 'open': return ['view', 'trace'];
+        case 'submitted': return ['trace'];
+        case 'reviewing_director': return ['approve', 'view', 'export', 'trace'];
+        case 'reviewing_leader': return ['view', 'export', 'trace'];
+        case 'returned': return ['view', 'export', 'trace'];
+        case 'completed': return ['view', 'export', 'trace'];
+        case 'closed': return ['view', 'export', 'trace'];
+        default: return ['trace'];
       }
     }
 
     if (role === 'group_leader') {
       switch (status) {
-        case 'reviewing_leader': return ['approve', 'view', 'export'];
-        case 'completed': return ['view', 'export'];
-        case 'closed': return ['view', 'export'];
-        default: return ['view', 'export'];
+        case 'reviewing_leader': return ['approve', 'view', 'export', 'trace'];
+        case 'completed': return ['view', 'export', 'trace'];
+        case 'closed': return ['view', 'export', 'trace'];
+        default: return ['view', 'export', 'trace'];
       }
     }
 

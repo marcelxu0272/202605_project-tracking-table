@@ -883,7 +883,7 @@ app.put('/api/admin/fields', (req, res) => {
 
 // ============ 报告线 API ============
 
-// 手动发起填报预览（需 system_admin）
+// 发起填报预览（需 system_admin）
 app.get('/api/report-lines/fork-preview', (req, res) => {
   try {
     const { role } = req.query;
@@ -1005,6 +1005,18 @@ app.post('/api/report-lines/:id/submit-approval', (req, res) => {
   }
 });
 
+// 导出提交节点快照 Excel
+app.get('/api/report-lines/:id/approvals/:approvalId/export', (req, res) => {
+  try {
+    const result = reportLineService.exportApprovalSnapshot(req.params.id, req.params.approvalId);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + encodeURIComponent(result.filename) + '"');
+    res.send(result.buffer);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: String(e.message) });
+  }
+});
+
 // 审批通过/退回
 app.post('/api/report-lines/:id/review', (req, res) => {
   try {
@@ -1027,7 +1039,7 @@ app.post('/api/report-lines/:id/review', (req, res) => {
 // 创建新周期
 app.post('/api/report-lines/fork-period', (req, res) => {
   try {
-    const { period, role, userName } = req.body || {};
+    const { period, role, userName, distributedColumns } = req.body || {};
     if (role !== 'system_admin') {
       res.status(403).json({ error: '仅系统管理员可创建新周期' });
       return;
@@ -1036,7 +1048,10 @@ app.post('/api/report-lines/fork-period', (req, res) => {
       res.status(400).json({ error: 'period 必填' });
       return;
     }
-    const result = reportLineService.forkPeriod(period, { userName: userName || '系统管理员' });
+    const result = reportLineService.forkPeriod(period, {
+      userName: userName || '系统管理员',
+      distributedColumns: Array.isArray(distributedColumns) ? distributedColumns : null
+    });
     const state = dbm.getBootstrapState(db);
     res.json({ ok: true, created: result.created, skipped: result.skipped, baselineVersion: result.baselineVersion, period: result.period, state });
   } catch (e) {

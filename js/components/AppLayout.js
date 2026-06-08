@@ -73,10 +73,14 @@
       },
       pageTitle() {
         const item = NAV_ITEMS.find(n => this.activePath === n.path);
-        return item ? item.label : '项目执行追踪平台';
+        return item ? item.label : '项目追踪表';
       },
       reportingMonth() { return Store.reportingMonth; },
-      sidebarCollapsed() { return Store.sidebarCollapsed; }
+      sidebarCollapsed() { return Store.sidebarCollapsed; },
+      contentNoPadding() {
+        const path = this.activePath || '';
+        return path === '/editor' || path.indexOf('/report-lines/') === 0;
+      }
     },
     methods: {
       goTo(path) { if (this.$route.path !== path) this.$router.push(path); },
@@ -212,7 +216,7 @@
             </el-dropdown>
           </div>
 
-          <div class="app-content" :class="{'no-padding': activePath === '/editor'}">
+          <div class="app-content" :class="{'no-padding': contentNoPadding}">
             <router-view></router-view>
           </div>
         </div>
