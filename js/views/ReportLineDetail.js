@@ -412,7 +412,7 @@
         }));
       },
 
-      /** 将服务端 change_diff 转为 Luckysheet 批注所需的 _field_change_log */
+      /** 将服务端 change_diff 转为 Luckysheet 批注所需的 _field_change_log（仅作回退，不用当前查看者角色） */
       changeDiffToChangeMeta: function (changeDiff, meta) {
         var log = {};
         var changedCols = [];
@@ -427,12 +427,12 @@
           var k = FieldConfig.COL_TO_KEY[f.col];
           if (k) keyToField[k] = f;
         });
-        var roleLabel = 'PM';
-        if (window.ChangeMeta) {
-          roleLabel = ChangeMeta.roleLabel(this.user || { role: 'pm' });
-        }
-        var userName = (meta && meta.updated_by) || (this.user && this.user.name) || '—';
-        var userId = (this.user && this.user.role) || 'pm';
+        // change_diff 是相对 baseline 的历史填报差异，默认按 PM 展示，避免板块管理员查看时误标为本人
+        var roleLabel = window.ChangeMeta
+          ? ChangeMeta.roleLabel({ role: 'pm' })
+          : 'PM';
+        var userName = (meta && meta.updated_by) || '—';
+        var userId = 'pm';
         var at = (meta && meta.updated_at) || new Date().toISOString();
         changeDiff.forEach(function (d) {
           if (!d || !d.field_key) return;
@@ -457,8 +457,26 @@
         if (!project) return project;
         var out = Object.assign({}, project);
         if (!window.ChangeMeta) return out;
+
+        var existingLog = (out._field_change_log && typeof out._field_change_log === 'object')
+          ? out._field_change_log
+          : {};
         var fromDiff = this.changeDiffToChangeMeta(changeDiff, meta);
-        var merged = ChangeMeta.mergeChangeTracking(out, fromDiff);
+
+        // 已有持久化批注的列不再从 change_diff 重复合成，避免 PM 提交后板块管理员看到双份批注
+        var filteredLog = {};
+        var filteredCols = [];
+        Object.keys(fromDiff._field_change_log || {}).forEach(function (col) {
+          var existing = existingLog[col];
+          if (existing && Array.isArray(existing) && existing.length) return;
+          filteredLog[col] = fromDiff._field_change_log[col];
+          filteredCols.push(col);
+        });
+
+        var merged = ChangeMeta.mergeChangeTracking(out, {
+          _field_change_log: filteredLog,
+          _changed_fields: filteredCols
+        });
         out._field_change_log = merged._field_change_log;
         out._changed_fields = merged._changed_fields;
         return out;

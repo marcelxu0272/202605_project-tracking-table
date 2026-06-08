@@ -4,6 +4,7 @@ const dbm = require('./db');
 const sw = require('./sector-workflow');
 const snapSvc = require('./snapshot-service');
 const XLSX = require('xlsx');
+const fieldDict = require('./fields/dictionary');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -33,6 +34,111 @@ function syncMonthlyFlatFields(data) {
   syncArray('monthly_invoice', 'mi');
   syncArray('monthly_payment', 'mp');
   return data;
+}
+
+function expandIncomingMonthlyArrays(data) {
+  if (!data || typeof data !== 'object') return data;
+  [
+    { arrayKey: 'monthly_completion', prefix: 'mc' },
+    { arrayKey: 'monthly_invoice', prefix: 'mi' },
+    { arrayKey: 'monthly_payment', prefix: 'mp' }
+  ].forEach(function (item) {
+    if (!Array.isArray(data[item.arrayKey])) return;
+    for (var i = 0; i < 12; i++) {
+      data[item.prefix + '_' + i] = data[item.arrayKey][i] || 0;
+    }
+  });
+  return data;
+}
+
+const COL_TO_KEY = {
+  A: 'new_existing', B: 'start_date', C: 'end_date', D: 'unit_code',
+  E: 'pm_name', F: 'project_no', G: 'project_name', H: 'client_name',
+  I: 'enterprise_type', J: 'industry', K: 'business_type',
+  L: 'signed', M: 'progress',
+  N: 'prev_year_contract', O: 'adj_value', P: 'total_contract', Q: 'contract_excl_tax',
+  R: 'contract_minus_invoice', S: 'contract_minus_completed',
+  T: 'prev_year_completion', U: 'cum_completed', V: 'opening_backlog',
+  W: 'current_completed', X: 'ytd_completed', Y: 'tax_rate', Z: 'ytd_completed_excl_tax',
+  AA: 'prev_year_invoice', AB: 'ytd_invoice', AC: 'cum_invoice',
+  AD: 'prev_year_payment', AE: 'ytd_payment', AF: 'cum_payment',
+  AG: 'wip_incl_tax', AH: 'wip_excl_tax', AI: 'ar_incl_advance',
+  AJ: 'ar_for_collection', AK: 'opening_ar', AL: 'wip_pending_invoice',
+  AM: 'wip_cause', AN: 'cause_desc', AO: 'high_risk_wip',
+  AP: 'opening_wip', AQ: 'wip_3mo_plus', AR: 'wip_3mo_adjusted',
+  AS: 'factor_analysis', AT: 'action_plan', AU: 'forecast_invoice_date',
+  AV: 'mc_0', AW: 'mc_1', AX: 'mc_2', AY: 'mc_3', AZ: 'mc_4',
+  BA: 'mc_5', BB: 'mc_6', BC: 'mc_7', BD: 'mc_8', BE: 'mc_9', BF: 'mc_10', BG: 'mc_11',
+  BH: 'mi_0', BI: 'mp_0', BJ: 'mi_1', BK: 'mp_1', BL: 'mi_2', BM: 'mp_2',
+  BN: 'mi_3', BO: 'mp_3', BP: 'mi_4', BQ: 'mp_4', BR: 'mi_5', BS: 'mp_5',
+  BT: 'mi_6', BU: 'mp_6', BV: 'mi_7', BW: 'mp_7', BX: 'mi_8', BY: 'mp_8',
+  BZ: 'mi_9', CA: 'mp_9', CB: 'mi_10', CC: 'mp_10', CD: 'mi_11', CE: 'mp_11'
+};
+
+function getAuditFieldMap() {
+  var out = {};
+  try {
+    fieldDict.readFields().forEach(function (field) {
+      var key = COL_TO_KEY[String(field.col || '').toUpperCase()];
+      if (key) {
+        out[key] = {
+          col: field.col,
+          name_cn: field.name_cn,
+          data_type: field.data_type
+        };
+      }
+    });
+  } catch (e) { /* fallback below */ }
+  return out;
+}
+
+function formatAuditValue(value, dataType) {
+  if (value === null || value === undefined || value === '') return '—';
+  if (dataType === '金额') {
+    var amount = Number(value);
+    return isNaN(amount)
+      ? String(value)
+      : amount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  if (dataType === '比率') {
+    var rate = Number(value);
+    return isNaN(rate) ? String(value) : Math.round(rate * 100) + '%';
+  }
+  if (dataType === '布尔') {
+    if (value === true || value === '是' || value === 1) return '是';
+    if (value === false || value === '否' || value === 0) return '否';
+  }
+  return String(value);
+}
+
+function isAuditDataKey(key) {
+  if (!key || key.charAt(0) === '_') return false;
+  return ['monthly_completion', 'monthly_invoice', 'monthly_payment'].indexOf(key) < 0;
+}
+
+function pushReportLineDataAudits(db, line, projectNo, project, auditChanges, userName) {
+  if (!auditChanges || !auditChanges.length) return;
+  var fieldMap = getAuditFieldMap();
+  var timestamp = new Date().toISOString();
+  auditChanges.forEach(function (change, idx) {
+    var field = fieldMap[change.key] || {};
+    dbm.pushAudit(db, {
+      id: Date.now() + '_rld_' + idx + '_' + Math.random().toString(36).slice(2, 6),
+      timestamp: timestamp,
+      operation_type: 'report_line_data',
+      reportLineId: line.id,
+      reportMonth: line.period,
+      sectorCode: line.sector_code,
+      projectNo: projectNo,
+      projectName: (project && project.project_name) || '',
+      fieldName: field.col || change.key,
+      fieldCN: field.name_cn || change.key,
+      oldVal: formatAuditValue(change.old_value, field.data_type),
+      newVal: formatAuditValue(change.new_value, field.data_type),
+      userId: 'report_line',
+      userName: userName || '—'
+    });
+  });
 }
 
 /**
@@ -560,8 +666,24 @@ function saveData(id, projectNo, fieldData, userName) {
     }
   }
 
-  var mergedFieldData = Object.assign({}, baselineData, existingData, fieldData || {}, { project_no: projectNo });
+  var currentFieldData = Object.assign({}, baselineData, existingData, { project_no: projectNo });
+  syncMonthlyFlatFields(currentFieldData);
+
+  var incomingFieldData = Object.assign({}, fieldData || {});
+  expandIncomingMonthlyArrays(incomingFieldData);
+
+  var mergedFieldData = Object.assign({}, currentFieldData, incomingFieldData, { project_no: projectNo });
   syncMonthlyFlatFields(mergedFieldData);
+
+  var auditChanges = [];
+  Object.keys(incomingFieldData).forEach(function (key) {
+    if (!isAuditDataKey(key)) return;
+    if (key === 'project_no') return;
+    var oldValue = currentFieldData[key];
+    var newValue = mergedFieldData[key];
+    if (valuesEqual(oldValue, newValue)) return;
+    auditChanges.push({ key: key, old_value: oldValue, new_value: newValue });
+  });
 
   // 计算 change_diff：对比 baseline 中该项目的字段数据
   var changeDiff = computeChangeDiff(db, line, projectNo, mergedFieldData);
@@ -583,6 +705,8 @@ function saveData(id, projectNo, fieldData, userName) {
   db.prepare(
     'UPDATE report_lines SET updated_at = datetime(\'now\',\'localtime\') WHERE id = ?'
   ).run(id);
+
+  pushReportLineDataAudits(db, line, projectNo, mergedFieldData, auditChanges, userName);
 
   return { project_no: projectNo, change_diff: changeDiff };
 }

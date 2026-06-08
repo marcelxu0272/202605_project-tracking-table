@@ -22,12 +22,19 @@
       allLogs() { return Store.auditLog; },
       filteredLogs() {
         return this.allLogs.filter(log => {
-          if (this.filterUser && !log.userName.includes(this.filterUser)) return false;
-          if (this.filterProject && !((log.projectNo || '').includes(this.filterProject) || (log.projectName || '').includes(this.filterProject))) return false;
-          if (this.filterField && !(log.fieldCN || '').includes(this.filterField)) return false;
+          const userName = this.logText(log.userName);
+          const projectNo = this.logText(log.projectNo);
+          const projectName = this.logText(log.projectName);
+          const fieldText = this.logText(log.fieldCN || log.fieldName);
+          if (this.filterUser && !userName.includes(this.filterUser)) return false;
+          if (this.filterProject && !(projectNo.includes(this.filterProject) || projectName.includes(this.filterProject))) return false;
+          if (this.filterField && !fieldText.includes(this.filterField)) return false;
           if (this.filterDateRange && this.filterDateRange.length === 2) {
             const t = new Date(log.timestamp);
-            if (t < this.filterDateRange[0] || t > this.filterDateRange[1]) return false;
+            const start = new Date(this.filterDateRange[0]);
+            const end = new Date(this.filterDateRange[1]);
+            end.setHours(23, 59, 59, 999);
+            if (t < start || t > end) return false;
           }
           return true;
         });
@@ -46,9 +53,19 @@
       }
     },
     methods: {
+      logText(val) {
+        return val === null || val === undefined ? '' : String(val);
+      },
+      hasValue(val) {
+        return val !== null && val !== undefined && val !== '';
+      },
+      displayValue(val) {
+        return this.hasValue(val) ? String(val) : '—';
+      },
       formatTime(iso) {
         if (!iso) return '—';
         const d = new Date(iso);
+        if (isNaN(d.getTime())) return '—';
         return d.toLocaleDateString('zh-CN') + ' ' + d.toLocaleTimeString('zh-CN');
       },
       clearFilters() {
@@ -69,8 +86,8 @@
             l.projectNo || '',
             l.projectName || '',
             l.fieldCN || l.fieldName || '',
-            l.oldVal || '',
-            l.newVal || ''
+            this.displayValue(l.oldVal),
+            this.displayValue(l.newVal)
           ])
         ];
         const ws = XLSX.utils.aoa_to_sheet(data);
@@ -80,7 +97,7 @@
         this.$message.success('导出成功');
       },
       rowClassName({ row }) {
-        if (!row.oldVal && row.newVal) return 'audit-row-add';
+        if (!this.hasValue(row.oldVal) && this.hasValue(row.newVal)) return 'audit-row-add';
         if (row.fieldName === 'approvalStatus') return 'audit-row-system';
         return '';
       }
@@ -194,8 +211,8 @@
                 <span
                   class="diff-remove amount"
                   style="padding:2px 6px;border-radius:3px;font-size:12px;"
-                  v-if="row.oldVal"
-                >{{ row.oldVal }}</span>
+                  v-if="hasValue(row.oldVal)"
+                >{{ displayValue(row.oldVal) }}</span>
                 <span v-else style="color:#94a3b8;font-size:12px;">—</span>
               </template>
             </el-table-column>
@@ -205,8 +222,8 @@
                 <span
                   class="diff-change amount"
                   style="padding:2px 6px;border-radius:3px;font-size:12px;"
-                  v-if="row.newVal"
-                >{{ row.newVal }}</span>
+                  v-if="hasValue(row.newVal)"
+                >{{ displayValue(row.newVal) }}</span>
                 <span v-else style="color:#94a3b8;font-size:12px;">—</span>
               </template>
             </el-table-column>
@@ -224,14 +241,7 @@
           </div>
         </div>
 
-        <!-- 空状态 -->
-        <div v-if="allLogs.length === 0" class="empty-state card" style="margin-top:16px;">
-          <i class="el-icon-document-checked"></i>
-          <div>暂无操作日志</div>
-          <div style="font-size:12px;color:#94a3b8;margin-top:4px;">
-            在项目追踪表中进行数据修改后，操作记录将自动显示于此
-          </div>
-        </div>
+
       </div>
     `
   };
