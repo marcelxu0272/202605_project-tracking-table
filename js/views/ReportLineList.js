@@ -142,7 +142,13 @@
       },
       handleAction(action, row) {
         if (action === 'export') {
-          window.open('/api/report-lines/' + row.id + '/export', '_blank');
+          var u = Store.currentUser || {};
+          var qs = [];
+          if (u.role) qs.push('role=' + encodeURIComponent(u.role));
+          if (u.pmName || u.name) qs.push('pmName=' + encodeURIComponent(u.pmName || u.name));
+          if (u.sector || u.sectorCode) qs.push('sectorCode=' + encodeURIComponent(u.sector || u.sectorCode));
+          var query = qs.length ? '?' + qs.join('&') : '';
+          window.open('/api/report-lines/' + row.id + '/export' + query, '_blank');
           return;
         }
         this.$router.push({ path: '/report-lines/' + row.id, query: { mode: action } });

@@ -1,0 +1,273 @@
+<mxGraphModel adaptiveColors="auto">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="title" value="&lt;b&gt;报告线月度填报与审批流程&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;业务流程全景图 — 面向管理层&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;fontSize=16;" vertex="1" parent="1">
+      <mxGeometry x="300" y="10" width="600" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="ll_admin" value="系统管理员" style="shape=umlLifeline;perimeter=lifelinePerimeter;size=40;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=center;verticalAlign=top;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="40" y="80" width="140" height="3200" as="geometry"/>
+    </mxCell>
+    <mxCell id="ll_pm" value="PM（项目经理）" style="shape=umlLifeline;perimeter=lifelinePerimeter;size=40;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=center;verticalAlign=top;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="240" y="80" width="140" height="3200" as="geometry"/>
+    </mxCell>
+    <mxCell id="ll_mgr" value="板块管理员" style="shape=umlLifeline;perimeter=lifelinePerimeter;size=40;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=center;verticalAlign=top;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="440" y="80" width="140" height="3200" as="geometry"/>
+    </mxCell>
+    <mxCell id="ll_dir" value="板块总监" style="shape=umlLifeline;perimeter=lifelinePerimeter;size=40;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=center;verticalAlign=top;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="640" y="80" width="140" height="3200" as="geometry"/>
+    </mxCell>
+    <mxCell id="ll_owner" value="群主" style="shape=umlLifeline;perimeter=lifelinePerimeter;size=40;html=1;fillColor=#fce5cd;strokeColor=#d79b00;align=center;verticalAlign=top;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="840" y="80" width="140" height="3200" as="geometry"/>
+    </mxCell>
+    <mxCell id="ll_sys" value="系统" style="shape=umlLifeline;perimeter=lifelinePerimeter;size=40;html=1;fillColor=#E6E6E6;strokeColor=#666666;align=center;verticalAlign=top;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="1040" y="80" width="140" height="3200" as="geometry"/>
+    </mxCell>
+    <mxCell id="ph1" value="阶段1：发起月度填报" style="rounded=1;fillColor=#007069;fontColor=#FFFFFF;strokeColor=none;html=1;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="-220" y="155" width="200" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="ph2" value="阶段2：PM 填写数据" style="rounded=1;fillColor=#007069;fontColor=#FFFFFF;strokeColor=none;html=1;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="-220" y="435" width="200" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="ph3" value="阶段3：管理员汇总提审" style="rounded=1;fillColor=#007069;fontColor=#FFFFFF;strokeColor=none;html=1;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="-220" y="785" width="200" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="ph4" value="阶段4：总监审批" style="rounded=1;fillColor=#007069;fontColor=#FFFFFF;strokeColor=none;html=1;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="-220" y="1165" width="200" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="ph5" value="阶段5：群主终审" style="rounded=1;fillColor=#007069;fontColor=#FFFFFF;strokeColor=none;html=1;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="-220" y="1455" width="200" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="ph6" value="阶段6：退回重新填报" style="rounded=1;fillColor=#007069;fontColor=#FFFFFF;strokeColor=none;html=1;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="-220" y="1750" width="200" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="ph7" value="阶段7：月度归档" style="rounded=1;fillColor=#007069;fontColor=#FFFFFF;strokeColor=none;html=1;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="-220" y="2215" width="200" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="m1" value="发起新月度填报周期（如2026年6月）" style="html=1;endArrow=block;endSize=8;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="110" y="180" as="sourcePoint"/>
+        <mxPoint x="1110" y="180" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="n2" value="从上月已归档数据中复制各板块项目清单作为本月基准" style="shape=note;size=14;fillColor=#FFFFCC;strokeColor=#CCCC00;html=1;align=left;verticalAlign=middle;spacingLeft=5;whiteSpace=wrap;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="1180" y="205" width="280" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="m3" value="为全部12个板块创建本月报告线，状态「开放填报」" style="html=1;dashed=1;endArrow=open;endSize=8;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="1110" y="270" as="sourcePoint"/>
+        <mxPoint x="110" y="270" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m4" value="通知各PM：本月填报已开放，请填写项目数据" style="html=1;dashed=1;endArrow=open;endSize=8;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="1110" y="320" as="sourcePoint"/>
+        <mxPoint x="310" y="320" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m5" value="通知板块管理员：填报周期已启动" style="html=1;dashed=1;endArrow=open;endSize=8;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="1110" y="370" as="sourcePoint"/>
+        <mxPoint x="510" y="370" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m6" value="进入报告线，查看自己负责的项目列表" style="html=1;endArrow=block;endSize=8;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="310" y="460" as="sourcePoint"/>
+        <mxPoint x="1110" y="460" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m7" value="展示项目清单（仅显示该PM负责的项目）" style="html=1;dashed=1;endArrow=open;endSize=8;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="1110" y="500" as="sourcePoint"/>
+        <mxPoint x="310" y="500" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m8" value="逐项填写：本月产值、累计产值、收款进度等" style="html=1;endArrow=block;endSize=8;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="310" y="550" as="sourcePoint"/>
+        <mxPoint x="1110" y="550" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="n9" value="自动计算：完成比例、偏差率等公式字段" style="shape=note;size=14;fillColor=#FFFFCC;strokeColor=#CCCC00;html=1;align=left;verticalAlign=middle;spacingLeft=5;whiteSpace=wrap;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="1180" y="575" width="280" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="m10" value="实时保存并标记变更字段（与基准对比）" style="html=1;dashed=1;endArrow=open;endSize=8;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="1110" y="630" as="sourcePoint"/>
+        <mxPoint x="310" y="630" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m11" value="确认数据无误，点击「提交」" style="html=1;endArrow=block;endSize=8;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="310" y="680" as="sourcePoint"/>
+        <mxPoint x="1110" y="680" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m12" value="PM 个人状态变为「已提交」，等待管理员汇总" style="html=1;dashed=1;endArrow=open;endSize=8;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="1110" y="720" as="sourcePoint"/>
+        <mxPoint x="310" y="720" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m13" value="进入报告线，查看本板块全部项目" style="html=1;endArrow=block;endSize=8;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="510" y="810" as="sourcePoint"/>
+        <mxPoint x="1110" y="810" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m14" value="展示：各PM填报状态（已提交/未提交）+ 全部项目数据" style="html=1;dashed=1;endArrow=open;endSize=8;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="1110" y="850" as="sourcePoint"/>
+        <mxPoint x="510" y="850" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m15" value="审核数据，可修改或补充任何项目的字段" style="html=1;endArrow=block;endSize=8;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="510" y="900" as="sourcePoint"/>
+        <mxPoint x="1110" y="900" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m16" value="确认无误，点击「提交审批」" style="html=1;endArrow=block;endSize=8;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="510" y="950" as="sourcePoint"/>
+        <mxPoint x="1110" y="950" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="n17" value="自动关闭未提交的PM（标记为「已截止」）" style="shape=note;size=14;fillColor=#FFFFCC;strokeColor=#CCCC00;html=1;align=left;verticalAlign=middle;spacingLeft=5;whiteSpace=wrap;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="1180" y="985" width="280" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="n18" value="检查：管理员是否兼任总监？若是则自动跳过总监审批" style="shape=note;size=14;fillColor=#FFFFCC;strokeColor=#CCCC00;html=1;align=left;verticalAlign=middle;spacingLeft=5;whiteSpace=wrap;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="1180" y="1035" width="280" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="m19" value="报告线状态变为「总监审批中」，通知总监审核" style="html=1;dashed=1;endArrow=open;endSize=8;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="1110" y="1100" as="sourcePoint"/>
+        <mxPoint x="710" y="1100" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m20" value="进入审批页面，查看板块所有项目数据及变更对比" style="html=1;endArrow=block;endSize=8;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="710" y="1190" as="sourcePoint"/>
+        <mxPoint x="1110" y="1190" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m21" value="展示：项目数据 + 相对基准的变更明细（红色/绿色标注）" style="html=1;dashed=1;endArrow=open;endSize=8;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="1110" y="1230" as="sourcePoint"/>
+        <mxPoint x="710" y="1230" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m22" value="审批通过（可附审批意见）" style="html=1;endArrow=block;endSize=8;fontSize=11;strokeColor=#009900;fontColor=#009900;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="710" y="1290" as="sourcePoint"/>
+        <mxPoint x="1110" y="1290" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="n23" value="检查：总监是否兼任群主？若是则自动跳过群主审批" style="shape=note;size=14;fillColor=#FFFFCC;strokeColor=#CCCC00;html=1;align=left;verticalAlign=middle;spacingLeft=5;whiteSpace=wrap;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="1180" y="1325" width="280" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="m24" value="报告线状态变为「群主审批中」，通知群主审核" style="html=1;dashed=1;endArrow=open;endSize=8;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="1110" y="1390" as="sourcePoint"/>
+        <mxPoint x="910" y="1390" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m25" value="进入审批页面，查看数据及变更详情" style="html=1;endArrow=block;endSize=8;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="910" y="1480" as="sourcePoint"/>
+        <mxPoint x="1110" y="1480" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m26" value="展示完整数据 + 总监审批意见" style="html=1;dashed=1;endArrow=open;endSize=8;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="1110" y="1520" as="sourcePoint"/>
+        <mxPoint x="910" y="1520" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m27" value="终审通过（可附意见）" style="html=1;endArrow=block;endSize=8;fontSize=11;strokeColor=#009900;fontColor=#009900;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="910" y="1580" as="sourcePoint"/>
+        <mxPoint x="1110" y="1580" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m28" value="报告线状态变为「已完成」✓" style="html=1;dashed=1;endArrow=open;endSize=8;fontSize=11;strokeColor=#009900;fontColor=#009900;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="1110" y="1640" as="sourcePoint"/>
+        <mxPoint x="110" y="1640" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m29" value="通知：本板块本月报告线审批已通过" style="html=1;dashed=1;endArrow=open;endSize=8;fontSize=11;strokeColor=#009900;fontColor=#009900;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="1110" y="1680" as="sourcePoint"/>
+        <mxPoint x="510" y="1680" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m30" value="退回（附退回原因：如&quot;数据有误需核实&quot;）" style="html=1;endArrow=block;endSize=8;fontSize=11;strokeColor=#CC0000;fontColor=#CC0000;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="710" y="1790" as="sourcePoint"/>
+        <mxPoint x="1110" y="1790" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m31" value="报告线退回至「开放填报」，请重新修改" style="html=1;dashed=1;endArrow=open;endSize=8;fontSize=11;strokeColor=#CC0000;fontColor=#CC0000;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="1110" y="1840" as="sourcePoint"/>
+        <mxPoint x="510" y="1840" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m32" value="所有PM状态重置为「开放」，可重新填报" style="html=1;dashed=1;endArrow=open;endSize=8;fontSize=11;strokeColor=#CC0000;fontColor=#CC0000;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="1110" y="1890" as="sourcePoint"/>
+        <mxPoint x="310" y="1890" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m33" value="退回（附退回原因）" style="html=1;endArrow=block;endSize=8;fontSize=11;strokeColor=#CC0000;fontColor=#CC0000;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="910" y="1960" as="sourcePoint"/>
+        <mxPoint x="1110" y="1960" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m34" value="报告线退回至「开放填报」，请重新修改" style="html=1;dashed=1;endArrow=open;endSize=8;fontSize=11;strokeColor=#CC0000;fontColor=#CC0000;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="1110" y="2010" as="sourcePoint"/>
+        <mxPoint x="510" y="2010" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m35" value="所有PM状态重置为「开放」，可重新填报" style="html=1;dashed=1;endArrow=open;endSize=8;fontSize=11;strokeColor=#CC0000;fontColor=#CC0000;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="1110" y="2060" as="sourcePoint"/>
+        <mxPoint x="310" y="2060" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m36" value="修改数据后重新提交（回到阶段2~5循环）" style="html=1;endArrow=block;endSize=8;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="310" y="2120" as="sourcePoint"/>
+        <mxPoint x="1110" y="2120" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="m37" value="确认所有板块已完成审批，执行月度归档" style="html=1;endArrow=block;endSize=8;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="110" y="2250" as="sourcePoint"/>
+        <mxPoint x="1110" y="2250" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="n38" value="将审批通过的数据合并为新版本存档（J版）" style="shape=note;size=14;fillColor=#FFFFCC;strokeColor=#CCCC00;html=1;align=left;verticalAlign=middle;spacingLeft=5;whiteSpace=wrap;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="1180" y="2285" width="280" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="n39" value="新版本成为下月填报的基准数据" style="shape=note;size=14;fillColor=#FFFFCC;strokeColor=#CCCC00;html=1;align=left;verticalAlign=middle;spacingLeft=5;whiteSpace=wrap;fontSize=10;" vertex="1" parent="1">
+      <mxGeometry x="1180" y="2335" width="280" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="m40" value="归档完成，本月数据已锁定不可修改" style="html=1;dashed=1;endArrow=open;endSize=8;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry">
+        <mxPoint x="1110" y="2400" as="sourcePoint"/>
+        <mxPoint x="110" y="2400" as="targetPoint"/>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="legend1" value="&lt;b&gt;流程要点说明&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;● 状态流转：&lt;/b&gt;开放填报 → 总监审批中 → 群主审批中 → 已完成&lt;br&gt;&lt;b&gt;● PM 填报：&lt;/b&gt;PM 仅能查看和编辑自己负责的项目数据&lt;br&gt;&lt;b&gt;● 未提交自动截止：&lt;/b&gt;管理员提交审批时，尚未提交的 PM 自动截止&lt;br&gt;&lt;b&gt;● 角色兼任跳过：&lt;/b&gt;若管理员同时担任总监，则自动跳过总监审批环节&lt;br&gt;&lt;b&gt;● 退回机制：&lt;/b&gt;总监或群主均可退回，退回后所有 PM 可重新编辑&lt;br&gt;&lt;b&gt;● 基准对比：&lt;/b&gt;系统自动标记相对上月归档数据的变更，便于审批人快速定位&lt;br&gt;&lt;b&gt;● 月度归档：&lt;/b&gt;审批通过后由管理员归档，归档数据自动成为下月基准" style="rounded=1;fillColor=#F5F5F5;strokeColor=#CCCCCC;html=1;align=left;verticalAlign=top;spacingLeft=12;spacingTop=8;whiteSpace=wrap;" vertex="1" parent="1">
+      <mxGeometry x="40" y="2520" width="600" height="180" as="geometry"/>
+    </mxCell>
+    <mxCell id="legend2" value="&lt;b&gt;角色职责&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;系统管理员：&lt;/b&gt;发起每月填报周期、执行归档、管理系统设置&lt;br&gt;&lt;b&gt;PM（项目经理）：&lt;/b&gt;按月填写自己所管项目的产值、收款等数据&lt;br&gt;&lt;b&gt;板块管理员：&lt;/b&gt;审核本板块所有项目数据，汇总后提交审批&lt;br&gt;&lt;b&gt;板块总监：&lt;/b&gt;初审，确认数据准确性后通过或退回&lt;br&gt;&lt;b&gt;群主：&lt;/b&gt;终审，最终确认数据后通过或退回" style="rounded=1;fillColor=#E6F3FF;strokeColor=#6c8ebf;html=1;align=left;verticalAlign=top;spacingLeft=12;spacingTop=8;whiteSpace=wrap;" vertex="1" parent="1">
+      <mxGeometry x="680" y="2520" width="500" height="180" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>

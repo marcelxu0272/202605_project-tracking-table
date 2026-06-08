@@ -822,7 +822,8 @@ function getDiff(id) {
 // 10. exportReportLine — 导出 Excel
 // ---------------------------------------------------------------------------
 
-function exportReportLine(id) {
+function exportReportLine(id, options) {
+  options = options || {};
   var db = dbm.getDb();
 
   var line = db.prepare('SELECT * FROM report_lines WHERE id = ?').get(id);
@@ -835,6 +836,11 @@ function exportReportLine(id) {
   var projects = dataRows.map(function (r) {
     try { return JSON.parse(r.field_data); } catch (e) { return { project_no: r.project_no }; }
   });
+
+  if (options.role === 'pm') {
+    var pmName = options.pmName || '';
+    projects = projects.filter(function (p) { return p.pm_name === pmName; });
+  }
 
   if (!projects.length) {
     fail(400, '报告线无项目数据可导出');

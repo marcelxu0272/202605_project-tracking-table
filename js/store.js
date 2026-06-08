@@ -708,6 +708,12 @@
     if (!reportLine) return [];
     var role = (Store.currentUser || {}).role;
     var status = reportLine.status;
+    var currentPeriod = Store.reportingMonth || (Store.periodConfig && Store.periodConfig.reportingMonth);
+
+    // 历史月份不再允许填报/审批，只提供查看与导出。
+    if (reportLine.period && currentPeriod && reportLine.period !== currentPeriod) {
+      return ['view', 'export'];
+    }
 
     if (role === 'system_admin') {
       return ['view', 'export'];
@@ -717,7 +723,8 @@
       switch (status) {
         case 'open': return ['fill'];
         case 'submitted': return ['view'];
-        case 'closed': return ['view'];
+        case 'completed': return ['view', 'export'];
+        case 'closed': return ['view', 'export'];
         default: return [];
       }
     }

@@ -1,0 +1,485 @@
+<mxfile host="app.diagrams.net" modified="2026-06-08T10:30:00.000Z" agent="draw.io" type="device">
+  <diagram id="report-line-sequence" name="报告线生成与填报时序图">
+    <mxGraphModel dx="1800" dy="2400" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="1600" pageHeight="2800" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ========== 标题 ========== -->
+        <mxCell id="title" value="&lt;b&gt;报告线生成与填报时序图&lt;/b&gt;&lt;br&gt;Report Line Lifecycle Sequence Diagram" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="400" y="10" width="420" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- ========== 参与者 (Lifelines) ========== -->
+        <!-- 系统管理员 -->
+        <mxCell id="actor_admin" value="系统管理员" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;sourcePerimeterSpacing&quot;:0};size=40;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="60" y="80" width="100" height="2650" as="geometry" />
+        </mxCell>
+
+        <!-- PM -->
+        <mxCell id="actor_pm" value="PM（项目经理）" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;sourcePerimeterSpacing&quot;:0};size=40;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="220" y="80" width="100" height="2650" as="geometry" />
+        </mxCell>
+
+        <!-- 板块管理员 -->
+        <mxCell id="actor_sector" value="板块管理员" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;sourcePerimeterSpacing&quot;:0};size=40;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="380" y="80" width="100" height="2650" as="geometry" />
+        </mxCell>
+
+        <!-- 前端 -->
+        <mxCell id="actor_fe" value="前端 (Vue)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;sourcePerimeterSpacing&quot;:0};size=40;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="560" y="80" width="100" height="2650" as="geometry" />
+        </mxCell>
+
+        <!-- 后端API -->
+        <mxCell id="actor_api" value="后端 API&lt;br&gt;(Express)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;sourcePerimeterSpacing&quot;:0};size=40;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="740" y="80" width="100" height="2650" as="geometry" />
+        </mxCell>
+
+        <!-- 报告线服务 -->
+        <mxCell id="actor_svc" value="报告线服务&lt;br&gt;(Service)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;sourcePerimeterSpacing&quot;:0};size=40;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="920" y="80" width="100" height="2650" as="geometry" />
+        </mxCell>
+
+        <!-- 数据库 -->
+        <mxCell id="actor_db" value="SQLite 数据库" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;sourcePerimeterSpacing&quot;:0};size=40;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="80" width="100" height="2650" as="geometry" />
+        </mxCell>
+
+        <!-- 审批人 -->
+        <mxCell id="actor_approver" value="审批人&lt;br&gt;(总监/群主)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;sourcePerimeterSpacing&quot;:0};size=40;fillColor=#fce5cd;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="1280" y="80" width="100" height="2650" as="geometry" />
+        </mxCell>
+
+        <!-- ========== 阶段1: 报告线生成 (Fork) ========== -->
+        <mxCell id="phase1" value="阶段1: 报告线生成 (Fork Period)" style="shape=mxgraph.uml25.actionFrame;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;fillColor=#f0f0f0;strokeColor=#999999;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="150" width="1180" height="420" as="geometry" />
+        </mxCell>
+
+        <!-- 1. 系统管理员点击发起填报 -->
+        <mxCell id="msg1" value="点击「手动发起填报」" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1" source="actor_admin" target="actor_fe">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="110" y="200" as="sourcePoint" />
+            <mxPoint x="610" y="200" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 2. 前端请求预览 -->
+        <mxCell id="msg2" value="GET /api/report-lines/fork-preview" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#0000CC;" edge="1" parent="1" source="actor_fe" target="actor_api">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="610" y="240" as="sourcePoint" />
+            <mxPoint x="790" y="240" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 3. API调用服务 -->
+        <mxCell id="msg3" value="getForkPreview()" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1" source="actor_api" target="actor_svc">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="790" y="270" as="sourcePoint" />
+            <mxPoint x="970" y="270" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 4. 服务查数据库 -->
+        <mxCell id="msg4" value="SELECT 最新J版快照 +&lt;br&gt;按板块分组项目/PM" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#996600;" edge="1" parent="1" source="actor_svc" target="actor_db">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="970" y="300" as="sourcePoint" />
+            <mxPoint x="1150" y="300" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 5. 返回预览数据 -->
+        <mxCell id="msg5" value="返回 12板块预览（项目数、PM列表）" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#666666;" edge="1" parent="1" source="actor_db" target="actor_fe">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1150" y="340" as="sourcePoint" />
+            <mxPoint x="610" y="340" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 6. 展示预览弹窗 -->
+        <mxCell id="msg6" value="展示预览弹窗（板块、项目数）" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#666666;" edge="1" parent="1" source="actor_fe" target="actor_admin">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="610" y="375" as="sourcePoint" />
+            <mxPoint x="110" y="375" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 7. 确认发起 -->
+        <mxCell id="msg7" value="确认发起" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1" source="actor_admin" target="actor_fe">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="110" y="410" as="sourcePoint" />
+            <mxPoint x="610" y="410" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 8. POST fork -->
+        <mxCell id="msg8" value="POST /api/report-lines/fork-period&lt;br&gt;{ period: '2026-06' }" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#0000CC;" edge="1" parent="1" source="actor_fe" target="actor_api">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="610" y="445" as="sourcePoint" />
+            <mxPoint x="790" y="445" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 9. forkPeriod -->
+        <mxCell id="msg9" value="forkPeriod(period)" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1" source="actor_api" target="actor_svc">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="790" y="480" as="sourcePoint" />
+            <mxPoint x="970" y="480" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 10. 写入DB -->
+        <mxCell id="msg10" value="FOR EACH 板块:&lt;br&gt;INSERT report_lines (status=open)&lt;br&gt;INSERT report_line_pm_status&lt;br&gt;INSERT report_line_data (from J版快照)" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#996600;" edge="1" parent="1" source="actor_svc" target="actor_db">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="970" y="510" as="sourcePoint" />
+            <mxPoint x="1150" y="510" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 11. 返回结果 -->
+        <mxCell id="msg11" value="返回 { created: 12, skipped: 0 }" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#666666;" edge="1" parent="1" source="actor_db" target="actor_fe">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1150" y="560" as="sourcePoint" />
+            <mxPoint x="610" y="560" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ========== 阶段2: PM 填报 ========== -->
+        <mxCell id="phase2" value="阶段2: PM 填报 (Data Editing)" style="shape=mxgraph.uml25.actionFrame;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;fillColor=#f0f0f0;strokeColor=#999999;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="600" width="1180" height="450" as="geometry" />
+        </mxCell>
+
+        <!-- PM进入详情页 -->
+        <mxCell id="msg20" value="进入报告线详情页" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1" source="actor_pm" target="actor_fe">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="270" y="650" as="sourcePoint" />
+            <mxPoint x="610" y="650" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 加载详情 -->
+        <mxCell id="msg21" value="GET /api/report-lines/:id" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#0000CC;" edge="1" parent="1" source="actor_fe" target="actor_api">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="610" y="685" as="sourcePoint" />
+            <mxPoint x="790" y="685" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 查询详情 -->
+        <mxCell id="msg22" value="getReportLineDetail(id, role)" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1" source="actor_api" target="actor_svc">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="790" y="715" as="sourcePoint" />
+            <mxPoint x="970" y="715" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 查DB -->
+        <mxCell id="msg23" value="SELECT projects + pm_status&lt;br&gt;+ approvals + baseline" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#996600;" edge="1" parent="1" source="actor_svc" target="actor_db">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="970" y="745" as="sourcePoint" />
+            <mxPoint x="1150" y="745" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 返回详情 -->
+        <mxCell id="msg24" value="返回 { projects[], pmStatuses[], approvals[] }" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#666666;" edge="1" parent="1" source="actor_db" target="actor_fe">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1150" y="780" as="sourcePoint" />
+            <mxPoint x="610" y="780" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Luckysheet渲染 -->
+        <mxCell id="note1" value="Luckysheet 渲染表格&#xa;+ 公式引擎计算" style="shape=note;size=15;align=left;spacingLeft=5;fillColor=#FFFFCC;strokeColor=#CCCC00;" vertex="1" parent="1">
+          <mxGeometry x="520" y="795" width="170" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- PM编辑 -->
+        <mxCell id="msg25" value="编辑项目字段（如 monthly_output）" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1" source="actor_pm" target="actor_fe">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="270" y="860" as="sourcePoint" />
+            <mxPoint x="610" y="860" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 保存数据 -->
+        <mxCell id="msg26" value="PUT /api/report-lines/:id/data&lt;br&gt;{ projectNo, fieldData }" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#0000CC;" edge="1" parent="1" source="actor_fe" target="actor_api">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="610" y="895" as="sourcePoint" />
+            <mxPoint x="790" y="895" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- saveData -->
+        <mxCell id="msg27" value="saveData(id, projectNo, fieldData)" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1" source="actor_api" target="actor_svc">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="790" y="930" as="sourcePoint" />
+            <mxPoint x="970" y="930" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- computeChangeDiff + INSERT -->
+        <mxCell id="msg28" value="① computeChangeDiff(baseline, new)&lt;br&gt;② INSERT/UPDATE report_line_data&lt;br&gt;   (field_data + change_diff)" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#996600;" edge="1" parent="1" source="actor_svc" target="actor_db">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="970" y="960" as="sourcePoint" />
+            <mxPoint x="1150" y="960" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 返回diff -->
+        <mxCell id="msg29" value="返回 { project_no, change_diff }" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#666666;" edge="1" parent="1" source="actor_db" target="actor_fe">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1150" y="1010" as="sourcePoint" />
+            <mxPoint x="610" y="1010" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 刷新UI -->
+        <mxCell id="msg30" value="Luckysheet 行刷新 + 变更标记" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#666666;" edge="1" parent="1" source="actor_fe" target="actor_pm">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="610" y="1040" as="sourcePoint" />
+            <mxPoint x="270" y="1040" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ========== 阶段3: PM 提交 ========== -->
+        <mxCell id="phase3" value="阶段3: PM 提交 (PM Submit)" style="shape=mxgraph.uml25.actionFrame;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;fillColor=#f0f0f0;strokeColor=#999999;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1080" width="1180" height="280" as="geometry" />
+        </mxCell>
+
+        <!-- PM点击提交 -->
+        <mxCell id="msg40" value="点击「提交」" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1" source="actor_pm" target="actor_fe">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="270" y="1130" as="sourcePoint" />
+            <mxPoint x="610" y="1130" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- POST pm-submit -->
+        <mxCell id="msg41" value="POST /api/report-lines/:id/pm-submit&lt;br&gt;{ pmName }" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#0000CC;" edge="1" parent="1" source="actor_fe" target="actor_api">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="610" y="1165" as="sourcePoint" />
+            <mxPoint x="790" y="1165" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- pmSubmit -->
+        <mxCell id="msg42" value="pmSubmit(id, pmName)" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1" source="actor_api" target="actor_svc">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="790" y="1200" as="sourcePoint" />
+            <mxPoint x="970" y="1200" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 写DB -->
+        <mxCell id="msg43" value="UPDATE pm_status SET status='submitted'&lt;br&gt;INSERT approvals (action='submit', role='pm')" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#996600;" edge="1" parent="1" source="actor_svc" target="actor_db">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="970" y="1235" as="sourcePoint" />
+            <mxPoint x="1150" y="1235" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 注意：报告线状态不变 -->
+        <mxCell id="note2" value="⚠️ 报告线 status 仍为 open&#xa;仅 PM 个人状态变为 submitted" style="shape=note;size=15;align=left;spacingLeft=5;fillColor=#FFFFCC;strokeColor=#CCCC00;" vertex="1" parent="1">
+          <mxGeometry x="920" y="1275" width="240" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- 返回成功 -->
+        <mxCell id="msg44" value="返回 { status: 'submitted' }" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#666666;" edge="1" parent="1" source="actor_db" target="actor_pm">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1150" y="1325" as="sourcePoint" />
+            <mxPoint x="270" y="1325" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ========== 阶段4: 板块管理员提交审批 ========== -->
+        <mxCell id="phase4" value="阶段4: 板块管理员提交审批 (Submit Approval)" style="shape=mxgraph.uml25.actionFrame;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;fillColor=#f0f0f0;strokeColor=#999999;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1390" width="1180" height="380" as="geometry" />
+        </mxCell>
+
+        <!-- 板块管理员点击提交审批 -->
+        <mxCell id="msg50" value="点击「提交审批」" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1" source="actor_sector" target="actor_fe">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="430" y="1440" as="sourcePoint" />
+            <mxPoint x="610" y="1440" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- POST submit-approval -->
+        <mxCell id="msg51" value="POST /api/report-lines/:id/submit-approval&lt;br&gt;{ userName }" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#0000CC;" edge="1" parent="1" source="actor_fe" target="actor_api">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="610" y="1475" as="sourcePoint" />
+            <mxPoint x="790" y="1475" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- submitApproval -->
+        <mxCell id="msg52" value="submitApproval(id, userName)" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1" source="actor_api" target="actor_svc">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="790" y="1510" as="sourcePoint" />
+            <mxPoint x="970" y="1510" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 自动关闭未提交PM -->
+        <mxCell id="msg53" value="① UPDATE pm_status SET status='closed'&lt;br&gt;    WHERE status='open' (未提交PM自动关闭)&lt;br&gt;② shouldSkipNode() 检查兼任&lt;br&gt;③ UPDATE report_lines status='reviewing_director'&lt;br&gt;④ INSERT approvals (action='submit')" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#996600;" edge="1" parent="1" source="actor_svc" target="actor_db">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="970" y="1545" as="sourcePoint" />
+            <mxPoint x="1150" y="1545" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 状态说明 -->
+        <mxCell id="note3" value="状态流转:&lt;br&gt;open → reviewing_director&lt;br&gt;(若管理员=总监: → reviewing_leader)&lt;br&gt;(若管理员=群主: → completed)" style="shape=note;size=15;align=left;spacingLeft=5;fillColor=#FFFFCC;strokeColor=#CCCC00;html=1;" vertex="1" parent="1">
+          <mxGeometry x="920" y="1640" width="260" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- 返回新状态 -->
+        <mxCell id="msg54" value="返回 { status: 'reviewing_director', approval_node: 'director' }" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#666666;" edge="1" parent="1" source="actor_db" target="actor_sector">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1150" y="1725" as="sourcePoint" />
+            <mxPoint x="430" y="1725" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ========== 阶段5: 总监审批 ========== -->
+        <mxCell id="phase5" value="阶段5: 板块总监审批 (Director Review)" style="shape=mxgraph.uml25.actionFrame;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;fillColor=#f0f0f0;strokeColor=#999999;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1800" width="1360" height="300" as="geometry" />
+        </mxCell>
+
+        <!-- 总监审批 -->
+        <mxCell id="msg60" value="审批通过" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1" source="actor_approver" target="actor_fe">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1330" y="1850" as="sourcePoint" />
+            <mxPoint x="610" y="1850" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- POST review -->
+        <mxCell id="msg61" value="POST /api/report-lines/:id/review&lt;br&gt;{ action:'approve', role:'sector_director' }" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#0000CC;" edge="1" parent="1" source="actor_fe" target="actor_api">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="610" y="1890" as="sourcePoint" />
+            <mxPoint x="790" y="1890" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- reviewApproval -->
+        <mxCell id="msg62" value="reviewApproval(id, 'approve', ...)" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1" source="actor_api" target="actor_svc">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="790" y="1930" as="sourcePoint" />
+            <mxPoint x="970" y="1930" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 写DB -->
+        <mxCell id="msg63" value="UPDATE report_lines&lt;br&gt;status='reviewing_leader'&lt;br&gt;approval_node='leader'&lt;br&gt;INSERT approvals (action='approve')" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#996600;" edge="1" parent="1" source="actor_svc" target="actor_db">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="970" y="1965" as="sourcePoint" />
+            <mxPoint x="1150" y="1965" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 返回 -->
+        <mxCell id="msg64" value="返回 { status: 'reviewing_leader' }" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#666666;" edge="1" parent="1" source="actor_db" target="actor_approver">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1150" y="2050" as="sourcePoint" />
+            <mxPoint x="1330" y="2050" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ========== 阶段6: 群主终审 ========== -->
+        <mxCell id="phase6" value="阶段6: 群主终审 (Leader Final Review)" style="shape=mxgraph.uml25.actionFrame;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;fillColor=#f0f0f0;strokeColor=#999999;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="2130" width="1360" height="280" as="geometry" />
+        </mxCell>
+
+        <!-- 群主审批 -->
+        <mxCell id="msg70" value="终审通过" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1" source="actor_approver" target="actor_fe">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1330" y="2180" as="sourcePoint" />
+            <mxPoint x="610" y="2180" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- POST review leader -->
+        <mxCell id="msg71" value="POST /api/report-lines/:id/review&lt;br&gt;{ action:'approve', role:'group_leader' }" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#0000CC;" edge="1" parent="1" source="actor_fe" target="actor_api">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="610" y="2220" as="sourcePoint" />
+            <mxPoint x="790" y="2220" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- reviewApproval final -->
+        <mxCell id="msg72" value="reviewApproval(id, 'approve', ...)" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;" edge="1" parent="1" source="actor_api" target="actor_svc">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="790" y="2260" as="sourcePoint" />
+            <mxPoint x="970" y="2260" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 写DB completed -->
+        <mxCell id="msg73" value="UPDATE report_lines&lt;br&gt;status='completed'&lt;br&gt;approval_node=NULL&lt;br&gt;INSERT approvals (action='approve')" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#996600;" edge="1" parent="1" source="actor_svc" target="actor_db">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="970" y="2295" as="sourcePoint" />
+            <mxPoint x="1150" y="2295" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 返回completed -->
+        <mxCell id="msg74" value="返回 { status: 'completed' } ✅ 流程结束" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#009900;fontStyle=1;" edge="1" parent="1" source="actor_db" target="actor_approver">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1150" y="2370" as="sourcePoint" />
+            <mxPoint x="1330" y="2370" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ========== 退回分支说明 ========== -->
+        <mxCell id="phase7" value="退回流程 (Reject - 任意审批节点)" style="shape=mxgraph.uml25.actionFrame;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=10;fillColor=#fff0f0;strokeColor=#CC0000;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="2440" width="1360" height="250" as="geometry" />
+        </mxCell>
+
+        <!-- 退回 -->
+        <mxCell id="msg80" value="退回（reject）" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#CC0000;" edge="1" parent="1" source="actor_approver" target="actor_fe">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1330" y="2500" as="sourcePoint" />
+            <mxPoint x="610" y="2500" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- POST reject -->
+        <mxCell id="msg81" value="POST /api/report-lines/:id/review&lt;br&gt;{ action:'reject', comment:'...' }" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#CC0000;" edge="1" parent="1" source="actor_fe" target="actor_api">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="610" y="2540" as="sourcePoint" />
+            <mxPoint x="790" y="2540" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 退回处理 -->
+        <mxCell id="msg82" value="① status → 'open'&lt;br&gt;② approval_node → NULL&lt;br&gt;③ 重置所有 PM status → 'open'&lt;br&gt;④ INSERT approvals (action='reject')" style="html=1;verticalAlign=bottom;endArrow=block;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#CC0000;" edge="1" parent="1" source="actor_api" target="actor_db">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="790" y="2580" as="sourcePoint" />
+            <mxPoint x="1150" y="2580" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 退回通知 -->
+        <mxCell id="msg83" value="通知 PM/管理员重新填报" style="html=1;verticalAlign=bottom;endArrow=open;dashed=1;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;fontColor=#CC0000;" edge="1" parent="1" source="actor_db" target="actor_pm">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1150" y="2650" as="sourcePoint" />
+            <mxPoint x="270" y="2650" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ========== 状态机说明 ========== -->
+        <mxCell id="legend" value="&lt;b&gt;状态机总览&lt;/b&gt;&lt;br&gt;&lt;br&gt;open → reviewing_director → reviewing_leader → completed&lt;br&gt;          ↑_________________________↓ (reject 退回 open)&lt;br&gt;&lt;br&gt;&lt;b&gt;角色兼任自动跳过:&lt;/b&gt;&lt;br&gt;• 管理员 = 总监 → 跳过 director 节点&lt;br&gt;• 总监 = 群主 → 跳过 leader 节点" style="text;html=1;align=left;verticalAlign=top;fillColor=#E6F3FF;strokeColor=#6c8ebf;rounded=1;arcSize=10;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="2720" width="400" height="130" as="geometry" />
+        </mxCell>
+
+        <!-- 图例 -->
+        <mxCell id="legend2" value="&lt;b&gt;图例&lt;/b&gt;&lt;br&gt;&lt;br&gt;━━━▶ 请求/操作&lt;br&gt;- - -▶ 响应/返回&lt;br&gt;&lt;font color=&quot;#0000CC&quot;&gt;蓝色&lt;/font&gt; = HTTP API 调用&lt;br&gt;&lt;font color=&quot;#996600&quot;&gt;棕色&lt;/font&gt; = 数据库操作&lt;br&gt;&lt;font color=&quot;#CC0000&quot;&gt;红色&lt;/font&gt; = 退回流程" style="text;html=1;align=left;verticalAlign=top;fillColor=#F5F5F5;strokeColor=#999999;rounded=1;arcSize=10;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="480" y="2720" width="200" height="130" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

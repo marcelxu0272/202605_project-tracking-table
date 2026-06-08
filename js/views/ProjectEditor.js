@@ -202,6 +202,12 @@
       handleRlSubmit()  {},
       handleRlApprove() {},
       handleRlReject()  {},
+      formatPmSubmissionMeta(sub) {
+        var time = sub && sub.submittedAt
+          ? new Date(sub.submittedAt).toLocaleString('zh-CN', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})
+          : '—';
+        return (sub.projectCount || 0) + ' 个项目 · ' + time;
+      },
       // ────────────────────────────────────────────────────
 
       /** 字段字典就绪后重建表格 / Luckysheet（避免空表头） */
@@ -2846,9 +2852,9 @@
           <div class="sector-admin-pm-dock-head">
             <span class="sector-admin-pm-dock-title">
               <i class="el-icon-user" style="margin-right:4px;"></i>
-              本月已提交 PM（{{ submittedPmSubmissions.length }} 人）
+              {{ pmSubmissionDockTitle }}
             </span>
-            <span class="sector-admin-pm-dock-hint">提交后已自动进入板块汇总；</span>
+            <span class="sector-admin-pm-dock-hint">{{ pmSubmissionDockHint }}</span>
             <el-button type="text" size="mini" class="sector-admin-pm-dock-toggle" @click="togglePmDock">
               <i :class="pmDockExpanded ? 'el-icon-arrow-down' : 'el-icon-arrow-up'"></i>
               {{ pmDockExpanded ? '收起' : '展开' }}
@@ -2863,7 +2869,7 @@
               <div>
                 <div class="sector-admin-pm-card-name">{{ sub.pmName }}</div>
                 <div class="sector-admin-pm-card-meta">
-                  {{ sub.projectCount || 0 }} 个项目 · {{ sub.submittedAt ? new Date(sub.submittedAt).toLocaleString('zh-CN', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—' }}
+                  {{ formatPmSubmissionMeta(sub) }}
                 </div>
               </div>
               <el-button size="mini" @click="showPmDiff(sub.pmName)">查看变更</el-button>
@@ -3026,6 +3032,12 @@
           .sort(function (a, b) {
             return String(b.submittedAt || '').localeCompare(String(a.submittedAt || ''));
           });
+      },
+      pmSubmissionDockTitle() {
+        return '本月已提交 PM（' + this.submittedPmSubmissions.length + ' 人）';
+      },
+      pmSubmissionDockHint() {
+        return '提交后已自动进入板块汇总；';
       },
       canShowRefreshButton() {
         return !this.isViewingSnapshot &&

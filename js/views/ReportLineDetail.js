@@ -109,8 +109,18 @@
         return period ? FormulaEngine.getMonthIdx(period) : Store.getMonthIdx();
       },
 
-      // ── 覆盖父类：scopedProjects 直接用 tableProjects（不再按板块二次过滤） ──
-      scopedProjects: function () { return this.tableProjects; },
+      // ── 覆盖父类：报告线数据容器是板块级，但展示范围仍按当前角色过滤 ──
+      scopedProjects: function () {
+        var list = this.tableProjects || [];
+        if (window.DataScope) {
+          return DataScope.filterProjects(this.user, list, Store.groupRegistry);
+        }
+        if (this.isPm) {
+          var pm = this.pmName;
+          return list.filter(function (p) { return p.pm_name === pm; });
+        }
+        return list;
+      },
 
       // ── 覆盖父类：隐藏主追踪表专属按钮 ──
       canShowAlertsButton:         function () { return false; },
@@ -141,7 +151,46 @@
 
       rlCanReject: function () { return this.rlCanApprove; },
 
-      rlSubmitting: function () { return this._rlSubmitting; }
+      rlSubmitting: function () { return this._rlSubmitting; },
+
+      // ── 覆盖父类：报告线体系下 PM 提交状态来自 reportLine.pmStatuses，需展示全部 PM ──
+      submittedPmSubmissions: function () {
+        if (!this.isSectorAdmin) return [];
+        var pmProjectCounts = {};
+        (this.tableProjects || []).forEach(function (p) {
+          if (!p.pm_name) return;
+          pmProjectCounts[p.pm_name] = (pmProjectCounts[p.pm_name] || 0) + 1;
+        });
+        return (this.reportLine.pmStatuses || [])
+          .filter(function (row) { return !!row; })
+          .map(function (row) {
+            return {
+              pmName: row.pm_name,
+              status: row.status,
+              submittedAt: row.submitted_at,
+              projectCount: pmProjectCounts[row.pm_name] || 0
+            };
+          })
+          .sort(function (a, b) {
+            var priority = { submitted: 0, received: 0, rejected: 1, open: 2, closed: 3 };
+            var pa = priority[a.status] == null ? 9 : priority[a.status];
+            var pb = priority[b.status] == null ? 9 : priority[b.status];
+            if (pa !== pb) return pa - pb;
+            return String(b.submittedAt || '').localeCompare(String(a.submittedAt || ''));
+          });
+      },
+
+      pmSubmissionDockTitle: function () {
+        var list = this.submittedPmSubmissions || [];
+        var done = list.filter(function (x) {
+          return x.status === 'submitted' || x.status === 'received';
+        }).length;
+        return '项目经理提交情况（已提交 ' + done + ' / 共 ' + list.length + ' 人）';
+      },
+
+      pmSubmissionDockHint: function () {
+        return 'PM 提交后自动进入板块汇总；';
+      }
     },
 
     watch: {
@@ -183,6 +232,60 @@
           if (projs[i].project_no === projectNo) return projs[i];
         }
         return null;
+      },
+
+      // ── 覆盖父类：板块管理员查看 PM 变更时使用报告线数据 + 报告线 baseline ──
+      showPmDiff: function (pmName) {
+        var self = this;
+        var baselineVersion = this.reportLine.baseline_version;
+        var loading = this.$loading({ lock: true, text: '加载对比…', background: 'rgba(0,0,0,0.15)' });
+        Store.fetchSnapshot(baselineVersion)
+          .then(function (snap) {
+            self.renderPmDiff(pmName, snap);
+          })
+          .catch(function () {
+            self.$message.error('加载对比失败');
+          })
+          .finally(function () { loading.close(); });
+      },
+
+      renderPmDiff: function (pmName, baselineSnap) {
+        var fields = FieldConfig.buildFieldConfig();
+        var compareFields = fields.filter(function (f) {
+          return f.source_type === 'manual_input';
+        });
+        var baselineProjects = (baselineSnap && baselineSnap.projects) || [];
+        var currentProjects = FormulaEngine.computeAll(
+          (this.tableProjects || []).filter(function (p) { return p.pm_name === pmName; }),
+          this.monthIdx
+        );
+
+        var results = this.diffProjectSets(baselineProjects, currentProjects, compareFields);
+        this.pmDiffColLeft = baselineSnap ? '报告线基准' : '—';
+        this.pmDiffColRight = '当前报告线';
+
+        if (results.length === 0) {
+          this.$message.info(pmName + ' 相对当前报告线基准未检测到可编辑字段差异。');
+          return;
+        }
+        this.pmDiffName = pmName;
+        this.pmDiffResults = results;
+        this.pmDiffVisible = true;
+      },
+
+      formatPmSubmissionMeta: function (sub) {
+        var statusMap = {
+          open: '未提交',
+          submitted: '已提交',
+          received: '已接收',
+          rejected: '已退回',
+          closed: '已关闭'
+        };
+        var label = statusMap[sub.status] || sub.status || '—';
+        var time = sub.submittedAt
+          ? new Date(sub.submittedAt).toLocaleString('zh-CN', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})
+          : '—';
+        return (sub.projectCount || 0) + ' 个项目 · ' + label + ' · ' + time;
       },
 
       // ── 覆盖 handleCellEdit：写报告线 API，不写主项目表 ──
@@ -347,7 +450,13 @@
       // ── 导出：走报告线 export 接口 ──
       handleExport: function () {
         if (this.reportLine && this.reportLine.id) {
-          window.open('/api/report-lines/' + this.reportLine.id + '/export', '_blank');
+          var u = Store.currentUser || {};
+          var qs = [];
+          if (u.role) qs.push('role=' + encodeURIComponent(u.role));
+          if (u.pmName || u.name) qs.push('pmName=' + encodeURIComponent(u.pmName || u.name));
+          if (u.sector || u.sectorCode) qs.push('sectorCode=' + encodeURIComponent(u.sector || u.sectorCode));
+          var query = qs.length ? '?' + qs.join('&') : '';
+          window.open('/api/report-lines/' + this.reportLine.id + '/export' + query, '_blank');
         }
       }
     }

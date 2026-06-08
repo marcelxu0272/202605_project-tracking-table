@@ -947,7 +947,11 @@ app.get('/api/report-lines/:id/approvals', (req, res) => {
 // 导出 Excel
 app.get('/api/report-lines/:id/export', (req, res) => {
   try {
-    const result = reportLineService.exportReportLine(req.params.id);
+    const result = reportLineService.exportReportLine(req.params.id, {
+      role: req.query.role,
+      pmName: req.query.pmName,
+      sectorCode: req.query.sectorCode
+    });
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename=' + encodeURIComponent(result.filename));
     res.send(result.buffer);
