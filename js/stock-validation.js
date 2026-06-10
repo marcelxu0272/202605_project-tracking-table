@@ -12,6 +12,7 @@
   };
 
   const MSG_COMPLETION_EXCEEDS = '累计完成额将超过总合同额（存量合同额将为负）。请调减完成额，或先在 CRB 办理合同额变更后再填报。';
+  const MSG_FORECAST_COMPLETION_EXCEEDS = '已完成额加未来月份预测完成额将超过总合同额。请调整完成额预测，或先完成 CRB 合同额变更后再填报。';
   const MSG_COMPLETION_NEGATIVE = '月度完成额不能小于 0。';
 
   const EPS = 0.005;
@@ -42,6 +43,27 @@
 
   function contractStock(project) {
     return Number(project && project.contract_minus_completed) || 0;
+  }
+
+  function totalContract(project) {
+    var p = project || {};
+    var n = Number(p.total_contract);
+    if (!isNaN(n)) return n;
+    return (Number(p.prev_year_contract) || 0) + (Number(p.adj_value) || 0);
+  }
+
+  function projectedCompletionTotal(project) {
+    if (!project) return 0;
+    var flat = window.FieldConfig ? FieldConfig.arraysToFlat(project) : Object.assign({}, project);
+    var total = Number(flat.prev_year_completion) || 0;
+    for (var i = 0; i < 12; i++) {
+      total += Number(flat['mc_' + i]) || 0;
+    }
+    return total;
+  }
+
+  function hasProjectedCompletionViolation(project) {
+    return projectedCompletionTotal(project) - totalContract(project) > EPS;
   }
 
   function hasInvoiceStockWarning(project, monthIdx) {
@@ -120,6 +142,9 @@
     if (contractStock(next) < -EPS) {
       return { ok: false, message: MSG_COMPLETION_EXCEEDS };
     }
+    if (hasProjectedCompletionViolation(next)) {
+      return { ok: false, message: MSG_FORECAST_COMPLETION_EXCEEDS };
+    }
     return { ok: true };
   }
 
@@ -136,20 +161,55 @@
     });
   }
 
-  function validateProjectsForSubmit(projects, monthIdx, lockStatus) {
-    var list = (projects || []).slice();
-    const violations = listContractViolations(list, monthIdx);
-    if (!violations.length) return { ok: true, violations: [] };
-    const n = violations.length;
+  function listProjectedCompletionViolations(projects, monthIdx) {
+    return (projects || []).filter(function (p) {
+      var computed = computeProject(p, monthIdx);
+      return hasProjectedCompletionViolation(computed);
+    }).map(function (p) {
+      var computed = computeProject(p, monthIdx);
+      return {
+        project_no: p.project_no,
+        project_name: p.project_name,
+        total_contract: totalContract(computed),
+        projected_completion_total: projectedCompletionTotal(computed)
+      };
+    });
+  }
+
+  function buildViolationMessage(count, violations, prefix) {
     const sample = violations.slice(0, 3).map(function (v) {
       return v.project_no + (v.project_name ? '（' + v.project_name + '）' : '');
     }).join('、');
-    const suffix = n > 3 ? ' 等' : '';
+    const suffix = count > 3 ? ' 等' : '';
+    return prefix + (sample ? ' 例如：' + sample + suffix : '');
+  }
+
+  function validateProjectsForSubmit(projects, monthIdx, lockStatus) {
+    var list = (projects || []).slice();
+    const violations = listContractViolations(list, monthIdx);
+    if (!violations.length) {
+      const forecastViolations = listProjectedCompletionViolations(list, monthIdx);
+      if (!forecastViolations.length) return { ok: true, violations: [] };
+      const forecastN = forecastViolations.length;
+      return {
+        ok: false,
+        violations: forecastViolations,
+        message: buildViolationMessage(
+          forecastN,
+          forecastViolations,
+          '有 ' + forecastN + ' 个项目已完成额加未来月份预测完成额超过总合同额，请调整完成额预测或完成 CRB 合同额变更后再提交。'
+        )
+      };
+    }
+    const n = violations.length;
     return {
       ok: false,
       violations: violations,
-      message: '有 ' + n + ' 个项目存量合同额为负（累计完成已超过总合同额），请调减完成额或完成 CRB 合同变更后再提交。'
-        + (sample ? ' 例如：' + sample + suffix : '')
+      message: buildViolationMessage(
+        n,
+        violations,
+        '有 ' + n + ' 个项目存量合同额为负（累计完成已超过总合同额），请调减完成额或完成 CRB 合同变更后再提交。'
+      )
     };
   }
 
@@ -166,6 +226,7 @@
   window.StockValidation = {
     STOCK_WARNING_STYLE: STOCK_WARNING_STYLE,
     MSG_COMPLETION_EXCEEDS: MSG_COMPLETION_EXCEEDS,
+    MSG_FORECAST_COMPLETION_EXCEEDS: MSG_FORECAST_COMPLETION_EXCEEDS,
     MSG_COMPLETION_NEGATIVE: MSG_COMPLETION_NEGATIVE,
     parseCompletionAmount: parseCompletionAmount,
     isCompletionField: isCompletionField,
@@ -173,6 +234,7 @@
     hasStockWarning: hasStockWarning,
     hasInvoiceStockWarning: hasInvoiceStockWarning,
     hasContractStockViolation: hasContractStockViolation,
+    hasProjectedCompletionViolation: hasProjectedCompletionViolation,
     isStockWarningCell: isStockWarningCell,
     applyOpenPeriodStockHedge: applyOpenPeriodStockHedge,
     syncOpenPeriodStockHedge: syncOpenPeriodStockHedge,
@@ -180,6 +242,8 @@
     validateProjectsForSubmit: validateProjectsForSubmit,
     countWarnings: countWarnings,
     countContractViolations: countContractViolations,
-    listContractViolations: listContractViolations
+    listContractViolations: listContractViolations,
+    listProjectedCompletionViolations: listProjectedCompletionViolations,
+    projectedCompletionTotal: projectedCompletionTotal
   };
 })(window);

@@ -1925,6 +1925,47 @@
         return cell;
       },
 
+      countNumberFormatDecimals(format) {
+        if (!format || typeof format !== 'string') return null;
+        var dot = format.indexOf('.');
+        if (dot < 0) return 0;
+        var tail = format.slice(dot + 1);
+        var match = tail.match(/[0#]+/);
+        return match ? match[0].length : 0;
+      },
+
+      countDisplayDecimals(value) {
+        if (value == null || value === '') return null;
+        var s = String(value).replace(/,/g, '').trim();
+        var match = s.match(/^-?\d+\.(\d+)/);
+        return match ? match[1].length : null;
+      },
+
+      formatNumberWithDecimals(value, decimals) {
+        var n = Number(value);
+        if (isNaN(n) || decimals == null) return value != null ? String(value) : '';
+        return n.toLocaleString('zh-CN', {
+          minimumFractionDigits: decimals,
+          maximumFractionDigits: decimals
+        });
+      },
+
+      preserveLuckysheetNumberFormat(nextCell, oldCell, field) {
+        if (!nextCell || !oldCell || !field) return nextCell;
+        if (field.data_type !== '金额' && field.data_type !== '比率') return nextCell;
+        if (oldCell.ct) nextCell.ct = Object.assign({}, oldCell.ct);
+        if (oldCell.ht != null) nextCell.ht = oldCell.ht;
+
+        var decimals = this.countDisplayDecimals(oldCell.m);
+        if (decimals == null && oldCell.ct) {
+          decimals = this.countNumberFormatDecimals(oldCell.ct.fa);
+        }
+        if (decimals != null && nextCell.v != null && nextCell.v !== '') {
+          nextCell.m = this.formatNumberWithDecimals(nextCell.v, decimals);
+        }
+        return nextCell;
+      },
+
       /** 就地更新 Luckysheet 该行单元格值（不整表 refresh） */
       syncLuckysheetProjectRowValues(dataRowIndex, project) {
         if (!project || dataRowIndex < 0) return;
@@ -1937,7 +1978,9 @@
         for (let c = 0; c < this.tableFields.length; c++) {
           const field = this.tableFields[c];
           if (!field) continue;
-          row[c] = this.makeLuckysheetDataCell(project, field, r, dataRowIndex);
+          const oldCell = row[c];
+          const nextCell = this.makeLuckysheetDataCell(project, field, r, dataRowIndex);
+          row[c] = this.preserveLuckysheetNumberFormat(nextCell, oldCell, field);
         }
         try {
           if (typeof luckysheet.jfrefreshgrid === 'function') luckysheet.jfrefreshgrid();

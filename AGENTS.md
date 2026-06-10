@@ -157,7 +157,7 @@ npm run sync:fields
 | `js/formula-engine.js` | ⚙️ 公式引擎 | ~8KB | 83 字段 `auto_calc` 逻辑与汇总。 |
 | `js/field-config.js` | 🔐 字段权限 | ~7KB | 角色 × 锁定期字段可写矩阵。 |
 | `js/change-meta.js` | 📝 变更批注 | ~7KB | `_field_change_log`；`CHANGED_FIELD_STYLE` / `EDITABLE_FIELD_STYLE`。 |
-| `js/stock-validation.js` | ⚠️ 存量校验 | ~3KB | R/S 列预警、完成额调增阻断提交。 |
+| `js/stock-validation.js` | ⚠️ 存量校验 | ~3KB | R/S 列预警、完成额调增与未来预测超合同额阻断提交。 |
 | `js/wip-validation.js` | ⚠️ WIP 校验 | ~3KB | AL 非零时 AM/AO 必填提交校验；AL 归零时清空 AM/AN/AO。 |
 | `js/project-alerts.js` | ⚠️ 项目预警 | ~3KB | Drawer 四类预警标签计算（存量 R/S、完成额 vs 工时）。 |
 | `js/sector-workflow.js` | 🔀 板块流程 | ~4KB | 十二板块名称、快照键、前端流程展示。 |
@@ -191,6 +191,7 @@ npm run sync:fields
 | `test/email-reminder.test.js` | ✅ Node 测试 | 覆盖邮件提醒场景判断、收件人解析、防重逻辑、板块数据聚合。 |
 | `test/initial-import-merge.test.js` | ✅ Node 测试 | 覆盖初始化导入平台合并：全匹配/未匹配/值差异/平台独有不插入/NewExistingRef 保留/混合场景/空值等价。 |
 | `test/wip-validation.test.js` | ✅ Node 测试 | 覆盖 WIP 催开票非零时 AM/AO 必填，以及 AL 归零自动清空 AM/AN/AO。 |
+| `test/completion-forecast-validation.test.js` | ✅ Node 测试 | 覆盖未来月份完成额预测加已完成额不得超过总合同额，以及合同额核减后的提交阻断。 |
 
 ### `docs/` 文档（已整理）
 
