@@ -65,7 +65,6 @@
     name: 'ProjectEditor',
     components: (function () {
       var c = {};
-      if (window.SystemAdminSectorDock) c.SystemAdminSectorDock = window.SystemAdminSectorDock;
       if (window.ProjectDetailDrawer) c.ProjectDetailDrawer = window.ProjectDetailDrawer;
       if (window.AlertsDrawer) c.AlertsDrawer = window.AlertsDrawer;
       return c;
@@ -737,11 +736,27 @@
           flat[ch.key] = ch.newVal;
         });
         const updated = FieldConfig.flatToArrays(flat);
+        let recomputed = FormulaEngine.compute(updated, self.monthIdx);
+        const allChanges = changes.slice();
+        if (window.WipValidation) {
+          const wipClear = WipValidation.clearWhenPendingInvoiceWipBecomesZero(storeProject, recomputed);
+          if (wipClear.changed) {
+            ['AM', 'AN', 'AO'].forEach(function (col) {
+              const key = FieldConfig.COL_TO_KEY[col];
+              const field = self.tableFields.find(function (f) { return f.col === col; });
+              if (!key || !field) return;
+              const oldVal = recomputed[key];
+              if (oldVal == null || String(oldVal).trim() === '') return;
+              allChanges.push({ field: field, key: key, oldVal: oldVal, newVal: '' });
+            });
+            recomputed = wipClear.project;
+          }
+        }
         const tracking = window.ChangeMeta
           ? ChangeMeta.mergeChangeTracking(storeProject)
           : { _field_change_log: {}, _changed_fields: [] };
         const changeLog = tracking._field_change_log;
-        changes.forEach(function (ch) {
+        allChanges.forEach(function (ch) {
           if (window.ChangeMeta) {
             ChangeMeta.recordFieldChangeLog(
               { _field_change_log: changeLog }, ch.field, ch.oldVal, ch.newVal, user
@@ -753,10 +768,9 @@
             changeLog[col] = ChangeMeta.dedupeChangeLogList(changeLog[col]);
           });
         }
-        const recomputed = FormulaEngine.compute(updated, self.monthIdx);
         recomputed._field_change_log = changeLog;
         recomputed._changed_fields = tracking._changed_fields.slice();
-        changes.forEach(function (ch) {
+        allChanges.forEach(function (ch) {
           if (recomputed._changed_fields.indexOf(ch.field.col) < 0) {
             recomputed._changed_fields.push(ch.field.col);
           }
@@ -768,8 +782,8 @@
         });
 
         await Store.updateProject(recomputed);
-        for (let i = 0; i < changes.length; i++) {
-          const ch = changes[i];
+        for (let i = 0; i < allChanges.length; i++) {
+          const ch = allChanges[i];
           await Store.addAuditLog({
             projectNo:   storeProject.project_no,
             projectName: storeProject.project_name,
@@ -793,6 +807,37 @@
         let updated = SystemRefMeta.applyOverride(storeProject, field, newVal, user, self.monthIdx);
         updated = FormulaEngine.compute(updated, self.monthIdx);
         updated = this.applySystemRefContractHedge(updated, field);
+        var wipAutoClearChanges = [];
+        if (window.WipValidation) {
+          var wipClear = WipValidation.clearWhenPendingInvoiceWipBecomesZero(storeProject, updated);
+          if (wipClear.changed) {
+            ['AM', 'AN', 'AO'].forEach(function (col) {
+              var clearKey = FieldConfig.COL_TO_KEY[col];
+              var clearField = self.tableFields.find(function (f) { return f.col === col; });
+              if (!clearKey || !clearField) return;
+              var clearOldVal = updated[clearKey];
+              if (clearOldVal == null || String(clearOldVal).trim() === '') return;
+              wipAutoClearChanges.push({
+                field: clearField,
+                key: clearKey,
+                oldVal: clearOldVal,
+                newVal: ''
+              });
+            });
+            updated = wipClear.project;
+            if (window.ChangeMeta && wipAutoClearChanges.length) {
+              wipAutoClearChanges.forEach(function (ch) {
+                ChangeMeta.recordFieldChangeLog(updated, ch.field, ch.oldVal, ch.newVal, user);
+              });
+              updated._changed_fields = updated._changed_fields || [];
+              wipAutoClearChanges.forEach(function (ch) {
+                if (updated._changed_fields.indexOf(ch.field.col) < 0) {
+                  updated._changed_fields.push(ch.field.col);
+                }
+              });
+            }
+          }
+        }
         await Store.updateProject(updated);
         await Store.addAuditLog({
           projectNo: storeProject.project_no,
@@ -805,6 +850,20 @@
           userId: user.role,
           userName: user.name
         });
+        for (var i = 0; i < wipAutoClearChanges.length; i++) {
+          var ch = wipAutoClearChanges[i];
+          await Store.addAuditLog({
+            projectNo: storeProject.project_no,
+            projectName: storeProject.project_name,
+            fieldName: ch.field.col,
+            fieldCN: ch.field.name_cn,
+            operation_type: 'wip_auto_clear',
+            oldVal: Formatters.formatByType(ch.oldVal, ch.field.data_type),
+            newVal: '',
+            userId: user.role,
+            userName: user.name
+          });
+        }
         self.buildTableData();
         if (
           SystemRefMeta.isEmptyDisplayValue(field, newVal) &&
@@ -1379,10 +1438,26 @@
         return StockValidation.validateProjectsForSubmit(list, this.monthIdx, this.lockStatus);
       },
 
+      validateWipBeforeSubmit() {
+        const scope = this.scopedProjects.map(function (p) {
+          return this.getStoreProject(p.project_no) || p;
+        }.bind(this));
+        const list = scope.map(function (p) {
+          return FormulaEngine.compute(p, this.monthIdx);
+        }.bind(this));
+        if (!window.WipValidation) return { ok: true, violations: [] };
+        return WipValidation.validateProjectsForSubmit(list);
+      },
+
       assertStockBeforeSubmit() {
         const check = this.validateStockBeforeSubmit();
         if (!check.ok) {
           this.$message.error(check.message);
+          return false;
+        }
+        const wipCheck = this.validateWipBeforeSubmit();
+        if (!wipCheck.ok) {
+          this.$message.error(wipCheck.message);
           return false;
         }
         return true;
@@ -2837,12 +2912,6 @@
           </table>
           </div>
         </div>
-
-        <system-admin-sector-dock
-          v-if="isSystemAdmin"
-          :table-projects="tableProjects"
-          @archived="onCompanyArchived"
-        ></system-admin-sector-dock>
 
         <!-- 板块管理员：本月已提交 PM（自动进入汇总，可查看更新内容） -->
         <div

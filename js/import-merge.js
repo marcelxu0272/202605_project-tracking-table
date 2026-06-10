@@ -86,7 +86,26 @@
         merged._added_this_month = existing._added_this_month;
         merged._changed_fields = tracking._changed_fields;
         merged._field_change_log = changeLog;
-        const recomputed = FormulaEngine.compute(merged, monthIdx);
+        let recomputed = FormulaEngine.compute(merged, monthIdx);
+        if (window.WipValidation) {
+          const wipClear = WipValidation.clearWhenPendingInvoiceWipBecomesZero(existing, recomputed);
+          if (wipClear.changed) {
+            ['AM', 'AN', 'AO'].forEach(function (col) {
+              const key = FieldConfig.COL_TO_KEY[col];
+              const field = fields.find(function (f) { return f.col === col; });
+              if (!key || !field) return;
+              const oldVal = recomputed[key];
+              if (oldVal == null || String(oldVal).trim() === '') return;
+              if (window.ChangeMeta) {
+                ChangeMeta.recordFieldChangeLog(
+                  { _field_change_log: changeLog }, field, oldVal, '', user
+                );
+              }
+              if (tracking._changed_fields.indexOf(col) < 0) tracking._changed_fields.push(col);
+            });
+            recomputed = wipClear.project;
+          }
+        }
         recomputed._changed_fields = tracking._changed_fields;
         recomputed._field_change_log = changeLog;
         updates.push(recomputed);

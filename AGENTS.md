@@ -1,7 +1,7 @@
 # 📁 项目追踪表线上化 — 目录说明
 
 > **项目目标：** 将项目执行追踪 Excel 表的填写、汇总、统计与展示线上化  
-> **最后更新：** 2026-05-29
+> **最后更新：** 2026-06-10
 
 ---
 
@@ -158,12 +158,13 @@ npm run sync:fields
 | `js/field-config.js` | 🔐 字段权限 | ~7KB | 角色 × 锁定期字段可写矩阵。 |
 | `js/change-meta.js` | 📝 变更批注 | ~7KB | `_field_change_log`；`CHANGED_FIELD_STYLE` / `EDITABLE_FIELD_STYLE`。 |
 | `js/stock-validation.js` | ⚠️ 存量校验 | ~3KB | R/S 列预警、完成额调增阻断提交。 |
+| `js/wip-validation.js` | ⚠️ WIP 校验 | ~3KB | AL 非零时 AM/AO 必填提交校验；AL 归零时清空 AM/AN/AO。 |
 | `js/project-alerts.js` | ⚠️ 项目预警 | ~3KB | Drawer 四类预警标签计算（存量 R/S、完成额 vs 工时）。 |
 | `js/sector-workflow.js` | 🔀 板块流程 | ~4KB | 十二板块名称、快照键、前端流程展示。 |
 | `js/diff-utils.js` | 🔍 Diff 工具 | ~2KB | 快照/版本字段级对比。 |
 | `js/project-drawer-layout.js` | 📐 Drawer 布局 | ~5KB | 字段分区、控件类型、月度条带、批量 diff。 |
 | `js/baseline-diff.js` | 🆕 baseline diff | ~2KB | 相对 `baselineVersion`（I/J）标记新增项目与字段差异。 |
-| `js/import-merge.js` | 📥 导入合并 | ~2KB | 填报页按 `project_no` 合并可编辑字段。 |
+| `js/import-merge.js` | 📥 导入合并 | ~2KB | 填报页按 `project_no` 合并可编辑字段，并套用 WIP 归零清空规则。 |
 | `js/xlsx-importer.js` | 📥 导入导出 | ~6KB | SheetJS xlsx 解析/导出。 |
 | `js/mock-data.js` | 📦 备用示例 | ~31KB | 20 条示例；**不默认引入**。 |
 | `js/components/AppLayout.js` | 🖼️ 主布局 | ~7KB | 侧栏 + 顶栏 + 路由出口；总监/群主精简导航。 |
@@ -189,6 +190,7 @@ npm run sync:fields
 | `test/sector-admin-skip-director.test.js` | ✅ Node 测试 | 覆盖板块管理员兼任总监时由平台用户权限自动跳过总监初审。 |
 | `test/email-reminder.test.js` | ✅ Node 测试 | 覆盖邮件提醒场景判断、收件人解析、防重逻辑、板块数据聚合。 |
 | `test/initial-import-merge.test.js` | ✅ Node 测试 | 覆盖初始化导入平台合并：全匹配/未匹配/值差异/平台独有不插入/NewExistingRef 保留/混合场景/空值等价。 |
+| `test/wip-validation.test.js` | ✅ Node 测试 | 覆盖 WIP 催开票非零时 AM/AO 必填，以及 AL 归零自动清空 AM/AN/AO。 |
 
 ### `docs/` 文档（已整理）
 

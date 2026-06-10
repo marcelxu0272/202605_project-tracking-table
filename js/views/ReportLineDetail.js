@@ -345,6 +345,30 @@
         return (sub.projectCount || 0) + ' 个项目 · ' + label + ' · ' + time;
       },
 
+      applyReportLineWipAutoClear: function (previousProject, nextProject) {
+        if (!window.WipValidation) {
+          return { project: nextProject, changes: [] };
+        }
+        var before = FormulaEngine.compute(Object.assign({}, previousProject), this.monthIdx);
+        var after = FormulaEngine.compute(Object.assign({}, nextProject), this.monthIdx);
+        var clear = WipValidation.clearWhenPendingInvoiceWipBecomesZero(before, after);
+        if (!clear.changed) {
+          return { project: nextProject, changes: [] };
+        }
+        var out = Object.assign({}, nextProject, clear.project);
+        var changes = [];
+        var self = this;
+        ['AM', 'AN', 'AO'].forEach(function (col) {
+          var key = FieldConfig.COL_TO_KEY[col];
+          var field = (self.tableFields || []).find(function (f) { return f.col === col; });
+          if (!key || !field) return;
+          var oldVal = after[key];
+          if (oldVal == null || String(oldVal).trim() === '') return;
+          changes.push({ field: field, key: key, oldVal: oldVal, newVal: '' });
+        });
+        return { project: out, changes: changes };
+      },
+
       // ── 覆盖 handleCellEdit：写报告线 API，不写主项目表 ──
       handleCellEdit: async function (project, field, newVal, opts) {
         if (!this.canEditField(field)) return;
@@ -370,14 +394,25 @@
                 fd = {};
                 try { fd = JSON.parse(rl.projects[i].field_data || '{}'); } catch (e) { /**/ }
               }
+              var previousFd = Object.assign({}, fd);
               fd[key] = newVal;
               this.syncMonthlyFieldValue(fd, key, newVal);
+              var wipResult = this.applyReportLineWipAutoClear(previousFd, fd);
+              fd = wipResult.project;
               if (window.ChangeMeta) {
                 ChangeMeta.recordFieldChangeLog(fd, field, oldVal, newVal, self.user);
+                wipResult.changes.forEach(function (item) {
+                  ChangeMeta.recordFieldChangeLog(fd, item.field, item.oldVal, item.newVal, self.user);
+                });
                 if (!fd._changed_fields) fd._changed_fields = [];
                 if (fd._changed_fields.indexOf(field.col) < 0) {
                   fd._changed_fields.push(field.col);
                 }
+                wipResult.changes.forEach(function (item) {
+                  if (fd._changed_fields.indexOf(item.field.col) < 0) {
+                    fd._changed_fields.push(item.field.col);
+                  }
+                });
               }
               rl.projects[i].field_data = fd;
               break;
@@ -390,6 +425,14 @@
           var storeProj = self.getStoreProject(projectNo) || project;
           var changed = self.buildReportLineSavePayload(storeProj, {});
           changed[key] = newVal;
+          if (window.WipValidation) {
+            ['AM', 'AN', 'AO'].forEach(function (col) {
+              var clearKey = FieldConfig.COL_TO_KEY[col];
+              if (storeProj && clearKey && storeProj[clearKey] === '') {
+                changed[clearKey] = '';
+              }
+            });
+          }
           await Store.saveReportLineData(rlId, projectNo, changed);
 
           // 刷新 Luckysheet 行
@@ -410,6 +453,141 @@
           await self.loadDetail();
           throw e;
         }));
+      },
+
+      // ── 覆盖 Drawer 保存：写报告线 API，并同步当前报告线表格数据源 ──
+      handleProjectDrawerSave: async function (draftFlat) {
+        if (!this.projectDrawerProject || !this.canEdit) return;
+        var project = this.projectDrawerProject;
+        var projectNo = project.project_no;
+        var storeProj = Object.assign({}, this.getStoreProject(projectNo) || project);
+        var originalFlat = FieldConfig.arraysToFlat(storeProj);
+        var coerced = Object.assign({}, draftFlat);
+        var self = this;
+
+        this.tableFields.forEach(function (field) {
+          if (!self.canEditField(field)) return;
+          var key = FieldConfig.COL_TO_KEY[field.col];
+          if (key != null && coerced[key] !== undefined) {
+            coerced[key] = self.coerceFieldValue(coerced[key], field);
+          }
+        });
+
+        if (!window.ProjectDrawerLayout) {
+          this.$message.error('Drawer 布局模块未加载');
+          return;
+        }
+
+        var changes = ProjectDrawerLayout.collectDrawerChanges(
+          originalFlat, coerced, this.tableFields, this.canEditField.bind(this)
+        );
+        if (!changes.length) {
+          this.$message.info('无更新内容');
+          return;
+        }
+
+        for (var i = 0; i < changes.length; i++) {
+          var ch = changes[i];
+          if (window.StockValidation && StockValidation.isCompletionField(ch.field)) {
+            var check = StockValidation.validateCompletionEdit(
+              storeProj, ch.field, ch.newVal, this.monthIdx
+            );
+            if (!check.ok) {
+              this.$message.warning(check.message);
+              return;
+            }
+          }
+        }
+
+        this.projectDrawerSaving = true;
+        try {
+          await this._trackCellSave((async function () {
+            var flat = FieldConfig.arraysToFlat(storeProj);
+            var changed = {};
+            changes.forEach(function (item) {
+              flat[item.key] = item.newVal;
+              changed[item.key] = item.newVal;
+            });
+
+            var updated = FormulaEngine.compute(FieldConfig.flatToArrays(flat), self.monthIdx);
+            var wipResult = self.applyReportLineWipAutoClear(storeProj, updated);
+            updated = wipResult.project;
+            wipResult.changes.forEach(function (item) {
+              changed[item.key] = item.newVal;
+              changes.push(item);
+            });
+            var tracking = window.ChangeMeta
+              ? ChangeMeta.mergeChangeTracking(storeProj)
+              : { _field_change_log: {}, _changed_fields: [] };
+            updated._field_change_log = tracking._field_change_log;
+            updated._changed_fields = tracking._changed_fields.slice();
+
+            changes.forEach(function (item) {
+              self.syncMonthlyFieldValue(updated, item.key, item.newVal);
+              if (window.ChangeMeta) {
+                ChangeMeta.recordFieldChangeLog(updated, item.field, item.oldVal, item.newVal, self.user);
+              }
+              if (updated._changed_fields.indexOf(item.field.col) < 0) {
+                updated._changed_fields.push(item.field.col);
+              }
+            });
+
+            await Store.saveReportLineData(
+              self.reportLine.id,
+              projectNo,
+              self.buildReportLineSavePayload(updated, changed)
+            );
+
+            var rl = Store.currentReportLine;
+            if (rl && rl.projects) {
+              for (var pi = 0; pi < rl.projects.length; pi++) {
+                if (rl.projects[pi].project_no !== projectNo) continue;
+                var fd = Object.assign(
+                  {},
+                  rl.projects[pi].field_data || {},
+                  changed
+                );
+                changes.forEach(function (item) {
+                  self.syncMonthlyFieldValue(fd, item.key, item.newVal);
+                });
+                fd._field_change_log = updated._field_change_log;
+                fd._changed_fields = updated._changed_fields;
+                if (window.Vue && Vue.set) {
+                  Vue.set(rl.projects[pi], 'field_data', fd);
+                } else {
+                  rl.projects[pi].field_data = fd;
+                }
+                break;
+              }
+            }
+
+            self.buildTableData();
+            var fresh = FormulaEngine.compute(
+              Object.assign({}, self.getStoreProject(projectNo) || updated),
+              self.monthIdx
+            );
+            var rowIdx = self.filteredProjects.findIndex(function (p) {
+              return p.project_no === projectNo;
+            });
+            self.projectDrawerRowIndex = rowIdx;
+            self.projectDrawerProject = fresh;
+
+            if (self.activeTab === 'luckysheet' && rowIdx >= 0) {
+              self.syncLuckysheetProjectRowValues(rowIdx, fresh);
+              self.recalcLuckysheetFormulas();
+              setTimeout(function () {
+                self.syncLuckysheetProjectRowDecor(rowIdx, fresh);
+              }, 320);
+            }
+            self.$message.success('已保存');
+          })().catch(async function (e) {
+            self.$message.error('保存失败：' + (e.message || e));
+            await self.loadDetail();
+            throw e;
+          }));
+        } finally {
+          this.projectDrawerSaving = false;
+        }
       },
 
       /** 将服务端 change_diff 转为 Luckysheet 批注所需的 _field_change_log（仅作回退，不用当前查看者角色） */
@@ -632,6 +810,7 @@
           var project = this.filteredProjects[i];
           if (!project) continue;
           var storeProj = Object.assign({}, this.getStoreProject(project.project_no) || project);
+          var originalStoreProj = Object.assign({}, storeProj);
           var changed = {};
           var hasChange = false;
           var dcSet = this.distributedColumnSet;
@@ -655,6 +834,18 @@
             }
           }
           if (hasChange) {
+            var wipResult = this.applyReportLineWipAutoClear(originalStoreProj, storeProj);
+            storeProj = wipResult.project;
+            wipResult.changes.forEach(function (item) {
+              changed[item.key] = item.newVal;
+              if (window.ChangeMeta) {
+                ChangeMeta.recordFieldChangeLog(storeProj, item.field, item.oldVal, item.newVal, this.user);
+              }
+              storeProj._changed_fields = storeProj._changed_fields || [];
+              if (storeProj._changed_fields.indexOf(item.field.col) < 0) {
+                storeProj._changed_fields.push(item.field.col);
+              }
+            }, this);
             await Store.saveReportLineData(
               rlId,
               project.project_no,
