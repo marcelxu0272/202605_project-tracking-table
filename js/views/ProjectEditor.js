@@ -1584,11 +1584,11 @@
         const lay = this.lsLayout();
         var cell;
         if (lay.dataEnd >= lay.dataStart) {
+          var seed = this.sumProjectsField(projs, fld);
           var range = this.lsRef(fld.col, lay.dataStart) + ':' + this.lsRef(fld.col, lay.dataEnd);
           var formula = rowKind === 'subtotal'
             ? '=SUBTOTAL(9,' + range + ')'
             : '=SUM(' + range + ')';
-          var seed = this.sumProjectsField(projs, fld);
           cell = this.makeLuckysheetFormulaCell(
             formula, fld, this.lsSeedProjectForAmount(fld, seed), '#e2e8f0'
           );
@@ -2101,9 +2101,9 @@
         return merge;
       },
 
-      buildLuckysheetTotalRowCells(r, label, rowKind) {
+      buildLuckysheetTotalRowCells(r, label, rowKind, projs) {
         const cells = [];
-        const projs = this.filteredProjects;
+        projs = projs || this.filteredProjects;
         const labelC = this.lsFieldColIndex('G');
         const labelCol = labelC >= 0 ? labelC : 6;
         const kind = rowKind === 'sum' ? 'sum' : 'subtotal';
@@ -2157,10 +2157,11 @@
         };
 
         // 行0–1：小计 / 合计（置于大分类之上，不参与筛选）
-        this.buildLuckysheetTotalRowCells(lay.subtotal, '小计 Subtotal', 'subtotal').forEach(function (item) {
+        const totalProjs = this.filteredProjects;
+        this.buildLuckysheetTotalRowCells(lay.subtotal, '小计 Subtotal', 'subtotal', totalProjs).forEach(function (item) {
           push(item.r, item.c, item.v);
         });
-        this.buildLuckysheetTotalRowCells(lay.sum, '合计 Total', 'sum').forEach(function (item) {
+        this.buildLuckysheetTotalRowCells(lay.sum, '合计 Total', 'sum', totalProjs).forEach(function (item) {
           push(item.r, item.c, item.v);
         });
 
@@ -2853,7 +2854,7 @@
             </el-checkbox>
           </div>
           <div :id="lsMountId" style="flex:1;min-height:360px;width:100%;"></div>
-          <div v-show="showLegacyHtmlTable && activeTab === 'table'" style="flex:1;overflow:auto;position:relative;min-height:200px;">
+          <div v-if="showLegacyHtmlTable && activeTab === 'table'" style="flex:1;overflow:auto;position:relative;min-height:200px;">
           <table class="editor-table" style="border-collapse:collapse;min-width:max-content;font-size:12px;">
             <!-- 分区标题行 -->
             <thead>
