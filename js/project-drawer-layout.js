@@ -18,6 +18,16 @@
   var MC_SET = new Set(['AV', 'AW', 'AX', 'AY', 'AZ', 'BA', 'BB', 'BC', 'BD', 'BE', 'BF', 'BG']);
   var MI_SET = new Set(['BH', 'BJ', 'BL', 'BN', 'BP', 'BR', 'BT', 'BV', 'BX', 'BZ', 'CB', 'CD']);
   var MP_SET = new Set(['BI', 'BK', 'BM', 'BO', 'BQ', 'BS', 'BU', 'BW', 'BY', 'CA', 'CC', 'CE']);
+  var MONTH_MATRIX_KINDS = ['completion', 'invoice', 'payment'];
+  var BASELINE_METRIC_COLS = ['S', 'R', 'AC', 'AF', 'AP', 'AL'];
+  /** 左侧完成率卡片已展示，延伸数据不再重复 */
+  var RATE_CARD_METRIC_COLS = ['P', 'U'];
+  var DRAWER_TAB_CONFIG = {
+    forecast: ['年度完成额申报', '完成额统计与预测', '开票与回款统计预测'],
+    status: ['合同签署与进展'],
+    wip: ['WIP分析与措施'],
+    extended: ['合同额', '存量指标', '始累完成合同额', '开票回款情况', '财务数据（WIP/应收）', '应收账款及WIP']
+  };
 
   function isMonthlyCol(col) {
     return MC_SET.has(col) || MI_SET.has(col) || MP_SET.has(col);
@@ -125,6 +135,129 @@
     };
   }
 
+  function fieldsBySection(tableFields) {
+    var out = {};
+    FieldConfig.getSections(tableFields).forEach(function (section) {
+      out[section.name] = section.fields || [];
+    });
+    return out;
+  }
+
+  function buildTabSection(name, fields, canEditFn) {
+    var regular = fields.filter(function (field) { return !isMonthlyCol(field.col); });
+    var monthly = groupMonthlyFields(fields.filter(function (field) { return isMonthlyCol(field.col); }));
+    return {
+      name: name,
+      fields: regular,
+      monthly: (monthly.completion.length || monthly.invoice.length || monthly.payment.length) ? monthly : null,
+      hasEditable: regular.some(function (field) { return canEditFn && canEditFn(field); })
+    };
+  }
+
+  function buildTabLayout(tableFields, canEditFn) {
+    var base = buildDrawerLayout(tableFields, canEditFn);
+    var sections = fieldsBySection(tableFields);
+    var usedBaselineCols = new Set(BASELINE_METRIC_COLS.concat(RATE_CARD_METRIC_COLS));
+    var baselineFields = BASELINE_METRIC_COLS.map(function (col) {
+      for (var i = 0; i < tableFields.length; i++) {
+        if (tableFields[i].col === col) return tableFields[i];
+      }
+      return null;
+    }).filter(Boolean);
+    var tabs = {};
+
+    Object.keys(DRAWER_TAB_CONFIG).forEach(function (tabName) {
+      tabs[tabName] = DRAWER_TAB_CONFIG[tabName].map(function (sectionName) {
+        var fields = (sections[sectionName] || []).filter(function (field) {
+          return tabName !== 'extended' || !usedBaselineCols.has(field.col);
+        });
+        return buildTabSection(sectionName, fields, canEditFn);
+      }).filter(function (section) {
+        return section.fields.length || section.monthly;
+      });
+    });
+
+    return {
+      summaryFields: base.summaryFields,
+      baselineFields: baselineFields,
+      editableSections: base.editableSections,
+      readonlySections: base.readonlySections,
+      tabs: tabs
+    };
+  }
+
+  function toNumber(value) {
+    var number = Number(value);
+    return isFinite(number) ? number : 0;
+  }
+
+  function futureTotal(flat, prefix, monthIdx) {
+    var total = 0;
+    for (var i = Math.max(0, monthIdx + 1); i < 12; i++) {
+      total += toNumber(flat[prefix + i]);
+    }
+    return total;
+  }
+
+  function throughMonthTotal(flat, prefix, monthIdx) {
+    var total = 0;
+    for (var i = 0; i <= Math.min(11, Math.max(0, monthIdx)); i++) {
+      total += toNumber(flat[prefix + i]);
+    }
+    return total;
+  }
+
+  function elapsedMonths(startDate, systemYear, monthIdx) {
+    if (!startDate) return null;
+    var start = new Date(startDate);
+    if (isNaN(start.getTime())) return null;
+    var report = new Date(Number(systemYear), Number(monthIdx) + 1, 0);
+    var months = (report.getFullYear() - start.getFullYear()) * 12 + report.getMonth() - start.getMonth() + 1;
+    return Math.max(0, months);
+  }
+
+  function computeDrawerMetrics(flat, monthIdx, systemYear) {
+    flat = flat || {};
+    var totalContract = toNumber(flat.total_contract);
+    var ytdCompletion = throughMonthTotal(flat, 'mc_', monthIdx);
+    var ytdInvoice = throughMonthTotal(flat, 'mi_', monthIdx);
+    var ytdPayment = throughMonthTotal(flat, 'mp_', monthIdx);
+    var forecastCompletion = futureTotal(flat, 'mc_', monthIdx);
+    var forecastInvoice = futureTotal(flat, 'mi_', monthIdx);
+    var forecastPayment = futureTotal(flat, 'mp_', monthIdx);
+    var completed = toNumber(flat.prev_year_completion) + ytdCompletion;
+    return {
+      completionRate: totalContract > 0 ? completed / totalContract * 100 : 0,
+      completed: completed,
+      totalContract: totalContract,
+      remainingContract: toNumber(flat.contract_minus_completed),
+      elapsedMonths: elapsedMonths(flat.start_date, systemYear, monthIdx),
+      kpis: [
+        {
+          key: 'completion',
+          label: '完成合同额',
+          actual: ytdCompletion,
+          forecast: forecastCompletion,
+          remaining: totalContract - ytdCompletion - forecastCompletion
+        },
+        {
+          key: 'invoice',
+          label: '开票',
+          actual: ytdInvoice,
+          forecast: forecastInvoice,
+          remaining: totalContract - ytdInvoice - forecastInvoice
+        },
+        {
+          key: 'payment',
+          label: '回款',
+          actual: ytdPayment,
+          forecast: forecastPayment,
+          remaining: totalContract - ytdPayment - forecastPayment
+        }
+      ]
+    };
+  }
+
   function collectDrawerChanges(originalFlat, draftFlat, tableFields, canEditFn) {
     var changes = [];
     tableFields.forEach(function (field) {
@@ -147,6 +280,12 @@
     getFieldWidgetType: getFieldWidgetType,
     groupMonthlyFields: groupMonthlyFields,
     buildDrawerLayout: buildDrawerLayout,
+    buildTabLayout: buildTabLayout,
+    computeDrawerMetrics: computeDrawerMetrics,
+    DRAWER_TAB_CONFIG: DRAWER_TAB_CONFIG,
+    BASELINE_METRIC_COLS: BASELINE_METRIC_COLS,
+    RATE_CARD_METRIC_COLS: RATE_CARD_METRIC_COLS,
+    MONTH_MATRIX_KINDS: MONTH_MATRIX_KINDS,
     collectDrawerChanges: collectDrawerChanges,
     MONTH_LABELS: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
   };

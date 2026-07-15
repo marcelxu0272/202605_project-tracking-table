@@ -1249,34 +1249,109 @@
         this.pmDiffResults = results;
         this.pmDiffVisible = true;
       },
+      buildExportFilename(suffix) {
+        var month = Store.reportingMonth || '2026-05';
+        if (suffix) return '项目执行追踪_' + suffix + '.xlsx';
+        var now = new Date();
+        var pad = function (n) { return String(n).padStart(2, '0'); };
+        var stamp = now.getFullYear()
+          + pad(now.getMonth() + 1)
+          + pad(now.getDate()) + '_'
+          + pad(now.getHours())
+          + pad(now.getMinutes())
+          + pad(now.getSeconds());
+        return '项目追踪表_' + month + '_' + stamp + '.xlsx';
+      },
+
+      /** 从当前 Luckysheet 视图导出（与屏幕所见一致：结构/样式/公式/格式） */
+      exportCurrentLuckysheetView(filename) {
+        if (!window.LuckysheetXlsxExport) {
+          throw new Error('LuckysheetXlsxExport 未加载');
+        }
+        if (typeof luckysheet !== 'undefined' && luckysheet && typeof luckysheet.exitEditMode === 'function') {
+          try { luckysheet.exitEditMode(); } catch (e) { /* ignore */ }
+        }
+
+        var file = this.lsGetActiveLuckysheetFile();
+        var lay = this.lsLayout();
+        var colEnd = Math.max(0, this.tableFields.length - 1);
+        var rowEnd = Math.max(lay.header, lay.dataEnd);
+
+        if (!file || !file.data) {
+          return this.exportBuiltLuckysheetView(filename);
+        }
+
+        var config = file.config || {};
+        LuckysheetXlsxExport.exportSheetToXlsx({
+          data: file.data,
+          merge: config.merge || {},
+          columnlen: config.columnlen || {},
+          colhidden: {},
+          rowStart: lay.subtotal,
+          rowEnd: rowEnd,
+          colStart: 0,
+          colEnd: colEnd,
+          sheetName: (file.name || Store.reportingMonth || '项目执行追踪').slice(0, 31),
+          filename: filename || this.buildExportFilename()
+        });
+      },
+
+      /** Luckysheet 未挂载时，按 celldata 重建矩阵后导出（快照/降级路径） */
+      exportBuiltLuckysheetView(filename) {
+        if (!window.LuckysheetXlsxExport) {
+          throw new Error('LuckysheetXlsxExport 未加载');
+        }
+        var lay = this.lsLayout();
+        var cols = Math.max(1, this.tableFields.length);
+        var rows = Math.max(48, lay.dataStart + Math.max(this.filteredProjects.length, 1) + 4);
+        var celldata = this.buildLuckysheetCelldata();
+        var merge = this.buildLuckysheetMerge();
+        var dataMatrix = this.buildLuckysheetDataMatrix(celldata, rows, cols, merge);
+        this.appendLuckysheetMergeCelldata(celldata, dataMatrix, merge);
+
+        LuckysheetXlsxExport.exportSheetToXlsx({
+          data: dataMatrix,
+          merge: merge,
+          columnlen: this.buildLuckysheetColumnlen(),
+          colhidden: {},
+          rowStart: lay.subtotal,
+          rowEnd: Math.max(lay.header, lay.dataEnd),
+          colStart: 0,
+          colEnd: cols - 1,
+          sheetName: (Store.reportingMonth || '项目执行追踪').slice(0, 31),
+          filename: filename || this.buildExportFilename()
+        });
+      },
+
       handleExport() {
+        var self = this;
         this.exportLoading = true;
-        setTimeout(() => {
+        setTimeout(function () {
           try {
-            XlsxImporter.exportToXlsx(Store.projects, Store.reportingMonth);
-            this.$message.success('导出成功');
+            self.exportCurrentLuckysheetView();
+            self.$message.success('导出成功');
           } catch (e) {
-            this.$message.error('导出失败：' + e.message);
+            self.$message.error('导出失败：' + (e.message || e));
           }
-          this.exportLoading = false;
-        }, 300);
+          self.exportLoading = false;
+        }, 100);
       },
       handleDownloadSnapshot() {
         if (!this.isViewingSnapshot || !this.snapshotProjects) return;
+        var self = this;
         this.downloadSnapshotLoading = true;
-        setTimeout(() => {
+        setTimeout(function () {
           try {
-            const snap = Store.snapshots[this.viewingVersion];
-            const reportingMonth = (snap && snap.reportingMonth) || Store.reportingMonth;
-            const label = (snap && snap.label) || this.viewingVersion;
-            const filename = '项目执行追踪_' + label + '.xlsx';
-            XlsxImporter.exportToXlsx(this.snapshotProjects, reportingMonth, filename);
-            this.$message.success('导出成功');
+            var snap = Store.snapshots[self.viewingVersion];
+            var label = (snap && snap.label) || self.viewingVersion;
+            var filename = '项目执行追踪_' + label + '.xlsx';
+            self.exportCurrentLuckysheetView(filename);
+            self.$message.success('导出成功');
           } catch (e) {
-            this.$message.error('导出失败：' + e.message);
+            self.$message.error('导出失败：' + (e.message || e));
           }
-          this.downloadSnapshotLoading = false;
-        }, 300);
+          self.downloadSnapshotLoading = false;
+        }, 100);
       },
       handleRefreshEditorData() {
         const self = this;

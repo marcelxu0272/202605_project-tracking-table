@@ -1,7 +1,7 @@
 # 📁 项目追踪表线上化 — 目录说明
 
 > **项目目标：** 将项目执行追踪 Excel 表的填写、汇总、统计与展示线上化  
-> **最后更新：** 2026-06-10
+> **最后更新：** 2026-07-13
 
 ---
 
@@ -142,7 +142,7 @@ npm run sync:fields
 
 | 文件 | 类型 | 大小 | 说明 |
 |---|---|---|---|
-| `css/style.css` | 🎨 全局样式 | ~22KB | 品牌色、Luckysheet、Drawer、预警抽屉等。 |
+| `css/style.css` | 🎨 全局样式 | ~22KB | 品牌色、Luckysheet、项目详情双栏 Drawer、预警抽屉等。 |
 | `css/field-dictionary.css` | 🎨 字段字典样式 | ~4KB | 字段字典页 `.field-manager-view` / `.fm-*`。 |
 | `css/element-theme.css` | 🎨 Element 主题 | ~6KB | 覆盖 Element UI 默认蓝色，对齐 `docs/设计文档/DESIGN.md` 品牌色 `#007069`。 |
 
@@ -162,13 +162,14 @@ npm run sync:fields
 | `js/project-alerts.js` | ⚠️ 项目预警 | ~3KB | Drawer 四类预警标签计算（存量 R/S、完成额 vs 工时）。 |
 | `js/sector-workflow.js` | 🔀 板块流程 | ~4KB | 十二板块名称、快照键、前端流程展示。 |
 | `js/diff-utils.js` | 🔍 Diff 工具 | ~2KB | 快照/版本字段级对比。 |
-| `js/project-drawer-layout.js` | 📐 Drawer 布局 | ~5KB | 字段分区、控件类型、月度条带、批量 diff。 |
+| `js/project-drawer-layout.js` | 📐 Drawer 布局 | ~5KB | 字段分区、业务 Tab 映射、经营指标计算、月度矩阵与批量 diff。 |
 | `js/baseline-diff.js` | 🆕 baseline diff | ~2KB | 相对 `baselineVersion`（I/J）标记新增项目与字段差异。 |
 | `js/import-merge.js` | 📥 导入合并 | ~2KB | 填报页按 `project_no` 合并可编辑字段，并套用 WIP 归零清空规则。 |
-| `js/xlsx-importer.js` | 📥 导入导出 | ~6KB | SheetJS xlsx 解析/导出。 |
+| `js/xlsx-importer.js` | 📥 导入导出 | ~6KB | SheetJS xlsx 解析/导出；**填报页导出已迁至** `luckysheet-xlsx-export.js` |
+| `js/luckysheet-xlsx-export.js` | 📥 LS 导出 | ~5KB | Luckysheet `file.data` → xlsx（公式/样式/合并）；见 `docs/设计文档/LUCKYSHEET_XLSX_EXPORT.md` |
 | `js/mock-data.js` | 📦 备用示例 | ~31KB | 20 条示例；**不默认引入**。 |
 | `js/components/AppLayout.js` | 🖼️ 主布局 | ~7KB | 侧栏 + 顶栏 + 路由出口；总监/群主精简导航。 |
-| `js/components/ProjectDetailDrawer.js` | 📝 项目详情 Drawer | ~12KB | F 列打开；Header 标签/切换；填报折叠区；浅绿可编辑态；WIP 自动折叠；保存回写 Sheet。 |
+| `js/components/ProjectDetailDrawer.js` | 📝 项目详情 Drawer | ~12KB | F 列打开；左侧项目基准 + 右侧业务 Tab；经营预测矩阵；WIP 提示；保存回写 Sheet。 |
 | `js/components/ApprovalReviewSheet.js` | 📋 审批表格 | ~5KB | 总监/群主审批 Luckysheet；继承 `ProjectEditorView`。 |
 | `js/components/SystemAdminSectorDock.js` | 📊 板块底栏 | ~4KB | 系统管理员十二板块进度底栏。 |
 | `js/components/SystemAdminApprovalBoard.js` | 📋 板块审批板 | ~4KB | 系统管理员各板块审批状态卡片。 |
@@ -192,6 +193,8 @@ npm run sync:fields
 | `test/initial-import-merge.test.js` | ✅ Node 测试 | 覆盖初始化导入平台合并：全匹配/未匹配/值差异/平台独有不插入/NewExistingRef 保留/混合场景/空值等价。 |
 | `test/wip-validation.test.js` | ✅ Node 测试 | 覆盖 WIP 催开票非零时 AM/AO 必填，以及 AL 归零自动清空 AM/AN/AO。 |
 | `test/completion-forecast-validation.test.js` | ✅ Node 测试 | 覆盖未来月份完成额预测加已完成额不得超过总合同额，以及合同额核减后的提交阻断。 |
+| `test/project-drawer-layout.test.js` | ✅ Node 测试 | 覆盖项目详情 Drawer 合同完成率、未来预测汇总及业务 Tab 字段映射。 |
+| `test/luckysheet-xlsx-export.test.js` | ✅ Node 测试 | 覆盖 Luckysheet 单元格 → SheetJS 映射与 `colhidden` 列过滤。 |
 
 ### `docs/` 文档（已整理）
 
@@ -211,6 +214,7 @@ npm run sync:fields
 | `docs/设计文档/LIST_FORM.md` | 📋 列表表单规范 | 筛选、表格、分页、表单弹窗交互标准。 |
 | `docs/设计文档/DASHBOARD.md` | 📊 看板规范（归档） | 原数据看板设计参考；**当前版本已移除看板页**，运营看板另立项目。 |
 | `docs/设计文档/EMAIL_REMINDER.md` | 📧 邮件提醒设计 | 邮件提醒功能设计文档：SMTP 集成、定时任务、邮件模板、审计集成、配置扩展。 |
+| `docs/设计文档/LUCKYSHEET_XLSX_EXPORT.md` | 📥 LS 导出开发说明 | Luckysheet 视图 WYSIWYG 导出 Excel：架构、文件清单、API、扩展与验收 |
 | **会议记录/** | 📝 | 业务讨论原始记录 |
 | `docs/会议记录/产值报告线上化讨论_精修版.md` | 📝 会议记录 | 产值报告线上化讨论精修全文。 |
 

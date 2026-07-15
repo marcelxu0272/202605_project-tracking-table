@@ -45,22 +45,23 @@
         draft: {},
         primaryActive: [],
         readonlyActive: [],
-        auxActive: [],
+        auxActive: ['工时数据', '成本数据'],
         timesheetStats: null,
         timesheetLoading: false,
         timesheetLoadFailed: false,
         completionAuxVisible: false,
         completionAuxBlurTimer: null,
-        numFocusKey: null
+        numFocusKey: null,
+        activeTab: 'forecast'
       };
     },
     computed: {
       layout: function () {
         if (!this.project || !window.ProjectDrawerLayout) {
-          return { summaryFields: [], editableSections: [], readonlySections: [] };
+          return { summaryFields: [], baselineFields: [], editableSections: [], readonlySections: [], tabs: { forecast: [], status: [], wip: [], extended: [] } };
         }
         var self = this;
-        return ProjectDrawerLayout.buildDrawerLayout(
+        return ProjectDrawerLayout.buildTabLayout(
           FieldConfig.buildFieldConfig(),
           function (f) { return self.fieldEditable(f); }
         );
@@ -93,16 +94,23 @@
         }
         return null;
       },
-      headerDateRange: function () {
-        var start = null;
-        var end = null;
+      headerStartField: function () {
         var list = this.headerSummaryFields;
         for (var i = 0; i < list.length; i++) {
-          if (list[i].col === 'B') start = list[i];
-          if (list[i].col === 'C') end = list[i];
+          if (list[i].col === 'B') return list[i];
         }
-        var s = start ? this.formatReadonly(start) : '';
-        var e = end ? this.formatReadonly(end) : '';
+        return null;
+      },
+      headerEndField: function () {
+        var list = this.headerSummaryFields;
+        for (var i = 0; i < list.length; i++) {
+          if (list[i].col === 'C') return list[i];
+        }
+        return null;
+      },
+      headerDateRange: function () {
+        var s = this.headerStartField ? this.formatReadonly(this.headerStartField) : '';
+        var e = this.headerEndField ? this.formatReadonly(this.headerEndField) : '';
         if (s === '—') s = '';
         if (e === '—') e = '';
         if (!s && !e) return '';
@@ -121,7 +129,11 @@
         }).filter(Boolean);
       },
       showSave: function () {
-        return this.canEdit;
+        // 右下角始终展示「保存」；不可编辑时按钮 disabled
+        return true;
+      },
+      saveDisabled: function () {
+        return !this.canEdit || !!this.saving;
       },
       hasNavPrev: function () {
         return this.navIndex > 0;
@@ -172,6 +184,52 @@
       },
       completionAuxLoading: function () {
         return this.timesheetLoading;
+      },
+      draftFlat: function () {
+        return this.draft || {};
+      },
+      drawerMetrics: function () {
+        return ProjectDrawerLayout.computeDrawerMetrics(this.draftFlat, this.monthIdx, this.systemYear);
+      },
+      forecastSections: function () {
+        return this.layout.tabs.forecast || [];
+      },
+      statusSections: function () {
+        return this.layout.tabs.status || [];
+      },
+      wipSections: function () {
+        return this.layout.tabs.wip || [];
+      },
+      formTabs: function () {
+        return [
+          { name: 'status', label: '项目状态', sections: this.statusSections },
+          { name: 'wip', label: 'WIP 分析', sections: this.wipSections }
+        ];
+      },
+      extendedSections: function () {
+        return this.layout.tabs.extended || [];
+      },
+      forecastMonthly: function () {
+        var merged = { completion: [], invoice: [], payment: [] };
+        this.forecastSections.forEach(function (section) {
+          if (!section.monthly) return;
+          ['completion', 'invoice', 'payment'].forEach(function (kind) {
+            merged[kind] = merged[kind].concat(section.monthly[kind] || []);
+          });
+        });
+        return merged;
+      },
+      monthMatrixRows: function () {
+        var self = this;
+        return this.monthLabels.map(function (label, monthIndex) {
+          return {
+            label: label,
+            monthIndex: monthIndex,
+            completion: self.fieldAtMonth(self.forecastMonthly, 'completion', monthIndex),
+            invoice: self.fieldAtMonth(self.forecastMonthly, 'invoice', monthIndex),
+            payment: self.fieldAtMonth(self.forecastMonthly, 'payment', monthIndex)
+          };
+        });
       }
     },
     watch: {
@@ -208,14 +266,18 @@
           return;
         }
         this.draft = Object.assign({}, FieldConfig.arraysToFlat(this.project));
-        var names = this.layout.editableSections.map(function (s) { return s.name; });
-        if (this.isWipExclTaxZero()) {
-          names = names.filter(function (n) { return n !== 'WIP分析与措施'; });
-        }
-        this.primaryActive = names.slice();
-        this.readonlyActive = [];
-        this.auxActive = [];
+        this.activeTab = 'forecast';
+        this.expandAllCollapseSections();
         this.numFocusKey = null;
+      },
+      /** 各折叠分区一律默认展开（含 WIP，不再因 WIP=0 自动收起） */
+      expandAllCollapseSections: function () {
+        var layout = this.layout || {};
+        var primary = (layout.editableSections || []).map(function (s) { return s.name; });
+        var readonly = (layout.readonlySections || []).map(function (s) { return s.name; });
+        this.primaryActive = primary;
+        this.readonlyActive = readonly;
+        this.auxActive = ['工时数据', '成本数据'];
       },
       numInputKey: function (field) {
         if (!field) return '';
@@ -333,10 +395,11 @@
         if (this.hasNavNext) this.$emit('nav-next');
       },
       handleSave: function () {
+        if (!this.canEdit || this.saving) return;
         this.$emit('save', Object.assign({}, this.draft));
       },
       monthlyRowLabel: function (kind) {
-        if (kind === 'completion') return '月度完成';
+        if (kind === 'completion') return '完成合同额';
         if (kind === 'invoice') return '月度开票';
         return '月度回款';
       },
@@ -409,6 +472,58 @@
         if (Math.abs(n) < 1e-9) return '—';
         return n.toFixed(1) + ' h';
       },
+      formatCompactAmount: function (val) {
+        var n = Number(val);
+        if (!isFinite(n)) return '—';
+        if (Math.abs(n) >= 10000) {
+          return (n / 10000).toLocaleString('zh-CN', { maximumFractionDigits: 1 }) + ' 万';
+        }
+        return n.toLocaleString('zh-CN', { maximumFractionDigits: 0 });
+      },
+      formatBaselineAmount: function (val) {
+        if (window.Formatters) {
+          var formatted = Formatters.formatAmount(val);
+          return formatted === '—' ? '—' : formatted;
+        }
+        var n = Number(val);
+        if (!isFinite(n)) return '—';
+        return n.toLocaleString('zh-CN', { maximumFractionDigits: 0 });
+      },
+      completionRateLabel: function () {
+        return this.drawerMetrics.completionRate.toFixed(1) + '%';
+      },
+      matrixCellClass: function (monthIndex, kind, field) {
+        if (monthIndex < this.monthIdx) return 'is-historical';
+        // 开票/回款报告月：与历史月同款只读样式（系统取值，无特殊底色/角标）
+        if (monthIndex === this.monthIdx && (kind === 'invoice' || kind === 'payment')) {
+          return 'is-historical';
+        }
+        if (monthIndex === this.monthIdx) return 'is-current';
+        if (this.isMatrixCellEditable(monthIndex, kind, field)) return 'is-forecast';
+        return 'is-readonly';
+      },
+      /**
+       * 月度矩阵可编辑判定：开票/回款报告月始终只读（系统取值），
+       * 即使 system_admin 在主表有覆盖权限，抽屉矩阵也不改为输入框。
+       */
+      isMatrixCellEditable: function (monthIndex, kind, field) {
+        if (!field) return false;
+        if ((kind === 'invoice' || kind === 'payment') && monthIndex === this.monthIdx) return false;
+        return !!this.fieldEditable(field);
+      },
+      /** 可编辑格角标：报告月完成合同额「当月」，未来月「预测」；开票/回款当月只读不标 */
+      matrixCellBadge: function (monthIndex, kind, field) {
+        if (!this.isMatrixCellEditable(monthIndex, kind, field)) return '';
+        if (kind === 'completion' && monthIndex === this.monthIdx) return '当月';
+        if (monthIndex > this.monthIdx) return '预测';
+        return '';
+      },
+      isCurrentCompletionField: function (row, kind) {
+        return kind === 'completion'
+          && row.monthIndex === this.monthIdx
+          && row[kind]
+          && this.isMatrixCellEditable(row.monthIndex, kind, row[kind]);
+      },
       showCompletionAux: function () {
         if (this.completionAuxBlurTimer) {
           clearTimeout(this.completionAuxBlurTimer);
@@ -451,7 +566,7 @@
           });
       }
     },
-    template: `
+    legacyTemplate: `
       <el-drawer
         :visible.sync="drawerVisible"
         :append-to-body="true"
@@ -549,7 +664,7 @@
               <el-tooltip placement="top-start" effect="light" popper-class="project-drawer-fill-tip">
                 <div slot="content" class="project-drawer-fill-tip-content">
                   <p><span class="drawer-tip-swatch"></span>浅黄色底色表示当前角色<strong>可编辑</strong>的字段（与 Luckysheet 表格一致）。</p>
-                  <p>若项目<strong>未产生 WIP</strong>（WIP 不含税为 0），「WIP分析与措施」分区将<strong>自动折叠</strong>，无需填写 WIP 成因、说明、措施等内容</p>
+                  <p>若项目<strong>未产生 WIP</strong>（WIP 不含税为 0），「WIP分析与措施」分区仍<strong>默认展开</strong>，标题旁会提示「本项目未产生WIP」，无需填写时可忽略</p>
                 </div>
                 <i class="el-icon-question project-drawer-section-tip" aria-label="填报说明"></i>
               </el-tooltip>
@@ -833,9 +948,311 @@
         <div class="project-drawer-footer">
           <el-button @click="handleClose">关闭</el-button>
           <el-button
-            v-if="showSave"
             type="primary"
             :loading="saving"
+            :disabled="saveDisabled"
+            :title="canEdit ? '' : '当前为只读，无法保存'"
+            @click="handleSave"
+          >保存</el-button>
+        </div>
+      </el-drawer>
+    `,
+    template: `
+      <el-drawer
+        :visible.sync="drawerVisible"
+        :append-to-body="true"
+        :size="'1280px'"
+        :wrapper-closable="true"
+        :destroy-on-close="false"
+        custom-class="project-drawer project-drawer--split"
+        @close="handleClose"
+      >
+        <div slot="title" class="project-drawer-header project-drawer-header--compact">
+          <div class="project-drawer-header-top">
+            <div class="project-drawer-title-block">
+              <div class="project-drawer-title project-drawer-title--inline">
+                <span class="project-drawer-title-no">{{ projectTitle }}</span>
+                <span v-if="projectSubtitle" class="project-drawer-title-name">{{ projectSubtitle }}</span>
+              </div>
+            </div>
+            <div v-if="navTotal > 1" class="project-drawer-nav">
+              <button type="button" class="drawer-nav-btn" :disabled="!hasNavPrev" aria-label="上一个项目" @click.stop="handleNavPrev">
+                <i class="el-icon-arrow-left"></i>
+              </button>
+              <span v-if="navPositionLabel" class="project-drawer-nav-pos">{{ navPositionLabel }}</span>
+              <button type="button" class="drawer-nav-btn" :disabled="!hasNavNext" aria-label="下一个项目" @click.stop="handleNavNext">
+                <i class="el-icon-arrow-right"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="project" class="project-drawer-workspace">
+          <section v-if="hasProjectAlerts" class="project-drawer-alerts project-drawer-alerts--bar">
+            <span class="project-drawer-alerts-title">项目预警</span>
+            <div class="drawer-alert-tags">
+              <span v-for="alert in projectAlerts" :key="alert.id" class="drawer-alert-tag">
+                <i class="el-icon-warning"></i>{{ alert.label }}
+              </span>
+            </div>
+          </section>
+
+          <div class="project-drawer-split">
+            <aside class="drawer-baseline-panel">
+              <section class="drawer-baseline-card drawer-baseline-card--identity">
+                <div class="drawer-baseline-card-title">项目基准</div>
+                <dl class="drawer-baseline-meta">
+                  <div v-if="headerClientField" class="drawer-baseline-meta-row drawer-baseline-meta-row--client">
+                    <dt>{{ headerClientField.name_cn }}</dt>
+                    <dd>{{ formatReadonly(headerClientField) }}</dd>
+                  </div>
+                  <div v-for="field in headerMetaItems" :key="'base-meta-' + field.col" class="drawer-baseline-meta-row">
+                    <dt>{{ field.name_cn }}</dt>
+                    <dd>{{ formatHeaderMetaValue(field) }}</dd>
+                  </div>
+                  <div v-if="headerDateRange" class="drawer-baseline-meta-row">
+                    <dt>项目周期</dt>
+                    <dd>{{ headerDateRange }}</dd>
+                  </div>
+                </dl>
+                <div v-if="headerTagFields.length" class="drawer-baseline-tags">
+                  <span
+                    v-for="field in headerTagFields"
+                    :key="'base-tag-' + field.col"
+                    class="drawer-baseline-tag"
+                    :class="headerTagClass(field)"
+                  >{{ formatReadonly(field) }}</span>
+                </div>
+              </section>
+
+              <section class="drawer-baseline-rate-card">
+                <div class="drawer-baseline-rate-main">
+                  <strong>{{ completionRateLabel() }}</strong>
+                </div>
+                <div class="drawer-baseline-rate-detail">
+                  <div class="drawer-baseline-rate-title">合同完成率</div>
+                  <div class="drawer-baseline-rate-metric">
+                    <span class="drawer-baseline-rate-metric-label">项目始累完成合同额</span>
+                    <span class="drawer-baseline-rate-metric-value">{{ formatBaselineAmount(drawerMetrics.completed) }}</span>
+                  </div>
+                  <div class="drawer-baseline-rate-metric">
+                    <span class="drawer-baseline-rate-metric-label">总合同额</span>
+                    <span class="drawer-baseline-rate-metric-value">{{ formatBaselineAmount(drawerMetrics.totalContract) }}</span>
+                  </div>
+                </div>
+              </section>
+
+              <section class="drawer-baseline-card">
+                <div class="drawer-baseline-card-title">合同与存量指标</div>
+                <dl class="drawer-baseline-metrics">
+                  <div v-for="field in layout.baselineFields" :key="'base-field-' + field.col">
+                    <dt>{{ field.name_cn }}</dt>
+                    <dd :class="{ 'drawer-stock-warn': isStockWarning(field) }">{{ formatReadonly(field) }}</dd>
+                  </div>
+                </dl>
+              </section>
+            </aside>
+
+            <main class="drawer-detail-panel">
+              <el-tabs v-model="activeTab" class="drawer-detail-tabs">
+                <el-tab-pane label="经营预测" name="forecast">
+                  <div class="drawer-tab-panel drawer-tab-panel--forecast">
+                    <div class="drawer-forecast-kpi-row">
+                      <article v-for="kpi in drawerMetrics.kpis" :key="kpi.key" class="drawer-forecast-kpi">
+                        <span class="drawer-forecast-kpi-name">{{ kpi.label }}</span>
+                        <div class="drawer-forecast-kpi-main">
+                          <span>当年累计</span>
+                          <strong>{{ formatBaselineAmount(kpi.actual) }}</strong>
+                        </div>
+                        <div class="drawer-forecast-kpi-future">
+                          <span>预测</span>
+                          <strong>{{ formatBaselineAmount(kpi.forecast) }}</strong>
+                        </div>
+                        <div class="drawer-forecast-kpi-remain">
+                          <span>剩余</span>
+                          <strong>{{ formatBaselineAmount(kpi.remaining) }}</strong>
+                        </div>
+                      </article>
+                    </div>
+
+                    <div class="drawer-month-matrix-wrap">
+                      <div class="drawer-month-matrix-title">
+                        <div>
+                          <strong>月度填报</strong>
+                          <span>历史锁定 · 当前月完成合同额 · 未来预测</span>
+                        </div>
+                        <el-tooltip placement="top" effect="light" popper-class="project-drawer-fill-tip">
+                          <div slot="content" class="project-drawer-fill-tip-content">
+                            <p>报告月「完成合同额」可填，标记为「当月」；未来月份为「预测」。</p>
+                            <p>报告月「开票」「回款」取系统实际值，样式与历史月一致，不可填写。</p>
+                          </div>
+                          <i class="el-icon-question project-drawer-section-tip" aria-label="填报说明"></i>
+                        </el-tooltip>
+                      </div>
+                      <div class="drawer-month-matrix-scroll">
+                      <table class="drawer-month-matrix">
+                        <thead>
+                          <tr><th>月</th><th>完成合同额</th><th>开票</th><th>回款</th></tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="row in monthMatrixRows" :key="'matrix-' + row.monthIndex" :class="{ 'is-report-row': row.monthIndex === monthIdx }">
+                            <th>{{ row.label }}</th>
+                            <td
+                              v-for="kind in ['completion', 'invoice', 'payment']"
+                              :key="kind"
+                              :class="matrixCellClass(row.monthIndex, kind, row[kind])"
+                            >
+                              <template v-if="row[kind]">
+                                <el-popover
+                                  v-if="isCurrentCompletionField(row, kind)"
+                                  placement="top"
+                                  trigger="manual"
+                                  v-model="completionAuxVisible"
+                                  popper-class="drawer-completion-aux-popover"
+                                >
+                                  <div class="drawer-completion-aux">
+                                    <div class="drawer-completion-aux-title">填报参考</div>
+                                    <dl v-if="completionFillAux" class="drawer-completion-aux-list">
+                                      <div class="drawer-completion-aux-item"><dt>总合同额</dt><dd>{{ formatAuxAmount(completionFillAux.totalContract) }}</dd></div>
+                                      <div class="drawer-completion-aux-item"><dt>截止上月始累完成合同额</dt><dd>{{ formatAuxAmount(completionFillAux.cumCompletedBeforeMonth) }}</dd></div>
+                                      <div class="drawer-completion-aux-item"><dt>当月上报工时</dt><dd>{{ completionAuxLoading ? '加载中…' : formatAuxHours(completionFillAux.monthHours) }}</dd></div>
+                                      <div class="drawer-completion-aux-item"><dt>当月工时成本</dt><dd>{{ completionAuxLoading ? '加载中…' : formatAuxAmount(completionFillAux.monthLaborCost) }}</dd></div>
+                                    </dl>
+                                  </div>
+                                  <div slot="reference" class="drawer-month-cell-stack">
+                                    <span class="drawer-month-badge is-current">当月</span>
+                                    <el-input
+                                      :value="formatNumInputDisplay(row[kind])"
+                                      size="mini"
+                                      class="drawer-month-input"
+                                      @focus="onMonthNumInputFocus(row[kind], true)"
+                                      @blur="onMonthNumInputBlur(row[kind], true)"
+                                      @input="onNumInputInput(row[kind], $event)"
+                                    ></el-input>
+                                  </div>
+                                </el-popover>
+                                <div
+                                  v-else-if="isMatrixCellEditable(row.monthIndex, kind, row[kind])"
+                                  class="drawer-month-cell-stack"
+                                >
+                                  <span
+                                    v-if="matrixCellBadge(row.monthIndex, kind, row[kind])"
+                                    class="drawer-month-badge is-forecast"
+                                  >{{ matrixCellBadge(row.monthIndex, kind, row[kind]) }}</span>
+                                  <el-input
+                                    :value="formatNumInputDisplay(row[kind])"
+                                    size="mini"
+                                    class="drawer-month-input"
+                                    @focus="onNumInputFocus(row[kind])"
+                                    @blur="onNumInputBlur(row[kind])"
+                                    @input="onNumInputInput(row[kind], $event)"
+                                  ></el-input>
+                                </div>
+                                <div v-else class="drawer-month-cell-stack drawer-month-cell-stack--ro">
+                                  <span class="drawer-month-ro">{{ formatReadonly(row[kind]) }}</span>
+                                </div>
+                              </template>
+                              <span v-else class="drawer-month-empty">—</span>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      </div>
+                      <div class="drawer-month-legend">
+                        <span><i class="is-historical"></i>历史锁定</span>
+                        <span><i class="is-current"></i>当前月·完成合同额</span>
+                        <span><i class="is-forecast"></i>未来预测</span>
+                      </div>
+                    </div>
+                  </div>
+                </el-tab-pane>
+
+                <el-tab-pane v-for="tab in formTabs" :key="tab.name" :label="tab.label" :name="tab.name">
+                  <div class="drawer-tab-panel">
+                    <div v-if="tab.name === 'wip' && isWipExclTaxZero()" class="drawer-tab-hint">
+                      <i class="el-icon-info"></i>本项目未产生 WIP，以下字段无需填写；如有特殊情况仍可录入。
+                    </div>
+                    <section v-for="section in tab.sections" :key="'tab-' + tab.name + section.name" class="drawer-tab-section">
+                      <div class="drawer-tab-section-title">
+                        <i :class="sectionIcon(section.name)"></i><span>{{ section.name }}</span>
+                      </div>
+                      <div class="drawer-field-grid">
+                        <div
+                          v-for="field in section.fields"
+                          :key="'tab-field-' + field.col"
+                          class="drawer-field-row"
+                          :class="{
+                            'drawer-field-row--full': widgetType(field) === 'longtext',
+                            'drawer-field-row--editable': isEditableField(field),
+                            'drawer-field-row--system-ref-override': isSystemRefOverridden(field)
+                          }"
+                          :title="isSystemRefOverridden(field) ? systemRefTooltip(field) : ''"
+                        >
+                          <label class="drawer-field-label">{{ field.name_cn }}</label>
+                          <div class="drawer-field-control">
+                            <div v-if="widgetType(field) === 'readonly'" class="drawer-field-readonly">{{ formatReadonly(field) }}</div>
+                            <el-select v-else-if="widgetType(field) === 'enum'" :value="draftVal(field)" size="small" filterable class="drawer-field-input" @input="setDraftVal(field, $event)">
+                              <el-option v-for="opt in field.enum_values" :key="opt" :label="opt" :value="opt"></el-option>
+                            </el-select>
+                            <el-input v-else-if="widgetType(field) === 'longtext'" type="textarea" :rows="3" :value="draftVal(field)" size="small" class="drawer-field-input" @input="setDraftVal(field, $event)"></el-input>
+                            <el-input v-else-if="widgetType(field) === 'amount'" :value="formatNumInputDisplay(field)" size="small" class="drawer-field-input drawer-field-input--num" @focus="onNumInputFocus(field)" @blur="onNumInputBlur(field)" @input="onNumInputInput(field, $event)"></el-input>
+                            <el-input v-else :value="draftVal(field)" size="small" class="drawer-field-input" @input="setDraftVal(field, $event)"></el-input>
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+                </el-tab-pane>
+
+                <el-tab-pane label="工时与成本" name="timesheet_cost">
+                  <div class="drawer-tab-panel">
+                    <section class="drawer-tab-section">
+                      <div class="drawer-tab-section-title">
+                        <i class="el-icon-time"></i><span>工时数据</span>
+                      </div>
+                      <project-timesheet-aux
+                        v-if="projectTitle"
+                        :project-no="projectTitle"
+                        :year="systemYear"
+                      ></project-timesheet-aux>
+                    </section>
+                    <section class="drawer-tab-section">
+                      <div class="drawer-tab-section-title">
+                        <i class="el-icon-data-analysis"></i><span>成本数据</span>
+                      </div>
+                      <project-cost-aux
+                        v-if="projectTitle"
+                        :project-no="projectTitle"
+                        :year="systemYear"
+                      ></project-cost-aux>
+                    </section>
+                  </div>
+                </el-tab-pane>
+
+                <el-tab-pane label="延伸数据" name="extended">
+                  <div class="drawer-tab-panel">
+                    <section v-for="section in extendedSections" :key="'extended-' + section.name" class="drawer-tab-section">
+                      <div class="drawer-tab-section-title"><i :class="sectionIcon(section.name)"></i><span>{{ section.name }}</span></div>
+                      <el-descriptions v-if="section.fields.length" :column="3" size="small" border class="project-drawer-desc">
+                        <el-descriptions-item v-for="field in section.fields" :key="'extended-field-' + field.col" :label="field.name_cn">
+                          <span :class="{ 'drawer-stock-warn': isStockWarning(field) }">{{ formatReadonly(field) }}</span>
+                        </el-descriptions-item>
+                      </el-descriptions>
+                    </section>
+                  </div>
+                </el-tab-pane>
+              </el-tabs>
+            </main>
+          </div>
+        </div>
+
+        <div class="project-drawer-footer">
+          <el-button @click="handleClose">关闭</el-button>
+          <el-button
+            type="primary"
+            :loading="saving"
+            :disabled="saveDisabled"
+            :title="canEdit ? '' : '当前为只读，无法保存'"
             @click="handleSave"
           >保存</el-button>
         </div>

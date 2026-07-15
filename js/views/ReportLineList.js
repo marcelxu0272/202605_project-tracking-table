@@ -116,6 +116,32 @@
         });
         return sectionOrder.map(function (n) { return sectionMap[n]; });
       },
+      reportingMonthLabel() {
+        var month = Store.reportingMonth || (Store.periodConfig && Store.periodConfig.reportingMonth) || '';
+        var parts = String(month).split('-');
+        if (parts.length >= 2) {
+          return parts[0] + '年' + parseInt(parts[1], 10) + '月';
+        }
+        return month || '—';
+      },
+      deadlineDay() {
+        var cfg = Store.periodConfig || {};
+        var day = Number(cfg.deadlineDay != null ? cfg.deadlineDay : cfg.lockDay);
+        if (!day || isNaN(day)) day = 25;
+        return Math.min(28, Math.max(1, day));
+      },
+      /** 当月填报截止提醒：仅展示报告月与截止日（几号） */
+      deadlineReminder() {
+        var monthLabel = this.reportingMonthLabel;
+        var day = this.deadlineDay;
+        if (!monthLabel || monthLabel === '—') {
+          return { visible: false, text: '' };
+        }
+        return {
+          visible: true,
+          text: '当前报告月 ' + monthLabel + '，填报截止日为每月 ' + day + ' 日。'
+        };
+      },
       forkSelectedCount() {
         if (this.forkDistMode === 'all') {
           return this.totalFieldCount;
@@ -431,7 +457,19 @@
     template: `
       <div class="report-line-list">
 
-        <!-- ① 筛选区 -->
+        <!-- ① 当月填报截止提醒 -->
+        <div
+          v-if="deadlineReminder.visible"
+          class="rl-deadline-banner"
+          role="status"
+        >
+          <i class="el-icon-time rl-deadline-banner__icon"></i>
+          <div class="rl-deadline-banner__body">
+            <span class="rl-deadline-banner__text">{{ deadlineReminder.text }}</span>
+          </div>
+        </div>
+
+        <!-- ② 筛选区 -->
         <div class="list-filter-bar card" style="padding:12px 16px;margin-bottom:12px;">
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
             <el-select

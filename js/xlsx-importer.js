@@ -28,7 +28,8 @@
   }
 
   /**
-   * 将 Luckysheet 导出的数据写入 xlsx 并下载
+   * @deprecated 填报页导出已改走 Luckysheet 视图导出（js/luckysheet-xlsx-export.js）。
+   * 仅保留供脚本/测试使用的纯数据导出；不保留样式与公式。
    */
   function exportToXlsx(projects, reportingMonth, filename) {
     if (!window.XLSX) { alert('SheetJS 未加载'); return; }
