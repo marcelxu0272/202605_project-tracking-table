@@ -3054,6 +3054,7 @@
               v-for="sub in submittedPmSubmissions"
               :key="sub.pmName"
               class="sector-admin-pm-card"
+              :class="{ 'is-submitted': sub.status === 'submitted' || sub.status === 'received' }"
             >
               <div>
                 <div class="sector-admin-pm-card-name">{{ sub.pmName }}</div>

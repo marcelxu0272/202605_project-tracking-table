@@ -933,6 +933,16 @@ body {
   gap: 10px;
   font-size: 12px;
 }
+.sector-admin-pm-card.is-submitted {
+  background: #ecfdf5;
+  border-color: #34d399;
+}
+.sector-admin-pm-card.is-submitted .sector-admin-pm-card-name {
+  color: #047857;
+}
+.sector-admin-pm-card.is-submitted .sector-admin-pm-card-meta {
+  color: #059669;
+}
 .sector-admin-pm-card-name {
   font-weight: 600;
   color: #1e293b;

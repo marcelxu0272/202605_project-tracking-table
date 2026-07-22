@@ -19,7 +19,14 @@
   var MI_SET = new Set(['BH', 'BJ', 'BL', 'BN', 'BP', 'BR', 'BT', 'BV', 'BX', 'BZ', 'CB', 'CD']);
   var MP_SET = new Set(['BI', 'BK', 'BM', 'BO', 'BQ', 'BS', 'BU', 'BW', 'BY', 'CA', 'CC', 'CE']);
   var MONTH_MATRIX_KINDS = ['completion', 'invoice', 'payment'];
-  var BASELINE_METRIC_COLS = ['S', 'R', 'AC', 'AF', 'AP', 'AL'];
+  var BASELINE_METRIC_COLS = ['S', 'R', 'AC', 'AF', 'AL', 'AJ'];
+  /** 抽屉左侧指标精简展示名（不改字段字典全局 name_cn） */
+  var BASELINE_METRIC_LABELS = {
+    AC: '始累开票',
+    AF: '始累回款',
+    AL: 'WIP',
+    AJ: '应收账款'
+  };
   /** 左侧完成率卡片已展示，延伸数据不再重复 */
   var RATE_CARD_METRIC_COLS = ['P', 'U'];
   var DRAWER_TAB_CONFIG = {
@@ -160,7 +167,10 @@
     var usedBaselineCols = new Set(BASELINE_METRIC_COLS.concat(RATE_CARD_METRIC_COLS));
     var baselineFields = BASELINE_METRIC_COLS.map(function (col) {
       for (var i = 0; i < tableFields.length; i++) {
-        if (tableFields[i].col === col) return tableFields[i];
+        if (tableFields[i].col !== col) continue;
+        var field = tableFields[i];
+        var label = BASELINE_METRIC_LABELS[col];
+        return label ? Object.assign({}, field, { name_cn: label }) : field;
       }
       return null;
     }).filter(Boolean);
@@ -219,13 +229,16 @@
   function computeDrawerMetrics(flat, monthIdx, systemYear) {
     flat = flat || {};
     var totalContract = toNumber(flat.total_contract);
+    var prevCompletion = toNumber(flat.prev_year_completion);
+    var prevInvoice = toNumber(flat.prev_year_invoice);
+    var prevPayment = toNumber(flat.prev_year_payment);
     var ytdCompletion = throughMonthTotal(flat, 'mc_', monthIdx);
     var ytdInvoice = throughMonthTotal(flat, 'mi_', monthIdx);
     var ytdPayment = throughMonthTotal(flat, 'mp_', monthIdx);
     var forecastCompletion = futureTotal(flat, 'mc_', monthIdx);
     var forecastInvoice = futureTotal(flat, 'mi_', monthIdx);
     var forecastPayment = futureTotal(flat, 'mp_', monthIdx);
-    var completed = toNumber(flat.prev_year_completion) + ytdCompletion;
+    var completed = prevCompletion + ytdCompletion;
     return {
       completionRate: totalContract > 0 ? completed / totalContract * 100 : 0,
       completed: completed,
@@ -238,21 +251,21 @@
           label: '完成合同额',
           actual: ytdCompletion,
           forecast: forecastCompletion,
-          remaining: totalContract - ytdCompletion - forecastCompletion
+          remaining: totalContract - prevCompletion - ytdCompletion - forecastCompletion
         },
         {
           key: 'invoice',
           label: '开票',
           actual: ytdInvoice,
           forecast: forecastInvoice,
-          remaining: totalContract - ytdInvoice - forecastInvoice
+          remaining: totalContract - prevInvoice - ytdInvoice - forecastInvoice
         },
         {
           key: 'payment',
           label: '回款',
           actual: ytdPayment,
           forecast: forecastPayment,
-          remaining: totalContract - ytdPayment - forecastPayment
+          remaining: totalContract - prevPayment - ytdPayment - forecastPayment
         }
       ]
     };
@@ -284,6 +297,7 @@
     computeDrawerMetrics: computeDrawerMetrics,
     DRAWER_TAB_CONFIG: DRAWER_TAB_CONFIG,
     BASELINE_METRIC_COLS: BASELINE_METRIC_COLS,
+    BASELINE_METRIC_LABELS: BASELINE_METRIC_LABELS,
     RATE_CARD_METRIC_COLS: RATE_CARD_METRIC_COLS,
     MONTH_MATRIX_KINDS: MONTH_MATRIX_KINDS,
     collectDrawerChanges: collectDrawerChanges,
