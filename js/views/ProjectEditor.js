@@ -79,7 +79,6 @@
         archiveLoading: false,
         importLoading: false,
         exportLoading: false,
-        syncLoading: false,
         clearCompletionLoading: false,
         showDiffHint: true,
         viewingVersion: '__current__',
@@ -1353,34 +1352,6 @@
           self.downloadSnapshotLoading = false;
         }, 100);
       },
-      handleRefreshEditorData() {
-        const self = this;
-        const isSector = this.isSectorAdmin;
-        this.$confirm(
-          isSector
-            ? '将从工程平台刷新系统引用列与新增项目，并重载库内最新数据（含本板块各 PM 已提交内容）。是否继续？'
-            : '将从工程平台刷新系统引用列与新增项目，并重载库内最新数据（含各 PM/板块已保存与审批中的更新内容）。是否继续？',
-          '刷新数据',
-          { confirmButtonText: '立即刷新', cancelButtonText: '取消', type: 'info' }
-        ).then(function () {
-          self.syncLoading = true;
-          return Store.refreshEditorData();
-        }).then(function (res) {
-          self.buildTableData();
-          self.$nextTick(function () { self.refreshLuckysheet(); });
-          const stats = res && res.stats ? res.stats : {};
-          self.$message.success(
-            '数据已刷新（引用更新 ' + (stats.refsUpdated || 0) + ' 条，新增项目 ' + (stats.added || 0) + ' 条）'
-          );
-        }).catch(function (err) {
-          if (err !== 'cancel' && err !== 'close') {
-            self.$message.error('刷新失败：' + (err.message || err));
-          }
-        }).finally(function () {
-          self.syncLoading = false;
-        });
-      },
-
       handleOpenAlertsDrawer() {
         this.alertsDrawerVisible = true;
       },
@@ -2805,13 +2776,6 @@
               @click="handleOpenAlertsDrawer"
             >项目预警</el-button>
             <el-button
-              v-if="canShowRefreshButton"
-              size="small"
-              icon="el-icon-refresh"
-              :loading="syncLoading"
-              @click="handleRefreshEditorData"
-            >刷新数据</el-button>
-            <el-button
               size="small"
               icon="el-icon-download"
               :loading="exportLoading"
@@ -3227,10 +3191,6 @@
       },
       pmSubmissionDockHint() {
         return '提交后已自动进入板块汇总；';
-      },
-      canShowRefreshButton() {
-        return !this.isViewingSnapshot &&
-          (this.user.role === 'system_admin' || this.user.role === 'sector_admin');
       },
       canShowAlertsButton() {
         return this.isSystemAdmin && !this.isViewingSnapshot;

@@ -1,7 +1,7 @@
 # 📁 项目追踪表线上化 — 目录说明
 
 > **项目目标：** 将项目执行追踪 Excel 表的填写、汇总、统计与展示线上化  
-> **最后更新：** 2026-07-17
+> **最后更新：** 2026-07-27
 
 ---
 
@@ -123,12 +123,12 @@ npm run sync:fields
 
 | 文件 | 类型 | 大小 | 说明 |
 |---|---|---|---|
-| `server/index.js` | 🖥 服务端入口 | ~9KB | Express：`/api/*` 读写 SQLite；I/D/J 快照、PM 提交、板块/J 版归档等。 |
+| `server/index.js` | 🖥 服务端入口 | ~41KB | Express：`/api/*` 读写 SQLite；I/D/J 快照、PM 提交、板块/J 版归档等；已移除人工平台刷新接口。 |
 | `server/db.js` | 🗃 SQLite 封装 | ~6KB | 库路径 `data/ptrack.sqlite`；bootstrap 含锁定状态、`baselineVersion` / `latestIVersion` / `latestJVersion`。 |
 | `server/snapshot-service.js` | 📸 快照服务 | ~4KB | I/D/J 版本键生成与写入；baseline meta 更新。 |
 | `server/load-modules.js` | 🔧 模块加载 | ~1KB | 在 Node 中 vm 执行 `fields-data.js`、`formula-engine.js`、`field-config.js`。 |
 | `server/xlsx-seed.js` | 📥 服务端解析 | ~3KB | xlsx → projects（与 `js/xlsx-importer.js` 对齐）。 |
-| `server/platform-sync.js` | 🔄 平台同步 | ~4KB | 从中台/CRB/财务合并 `system_sync` 字段；每日定时 + 管理员手动触发。 |
+| `server/platform-sync.js` | 🔄 Demo 平台同步 | ~13KB | 从中台/CRB/财务合并 `system_sync` 字段的原型桩；仅保留 Demo 定时触发，正式环境改为业务事件驱动且待重构。 |
 | `server/sector-workflow.js` | 🔀 板块流程 | ~4KB | 十二板块注册、流程状态（服务端）。 |
 | `server/dev-reset-seed.js` | 🔧 开发重置 | ~3KB | 重置后写 I 版 baseline（排除 demo 新增项目号）；预警演示数据。 |
 | `server/alert-demo-seed.js` | 🔧 预警演示 | ~3KB | 重导/重置后为 4 条项目注入 R/S、完成额 vs 工时预警场景及演示工时。 |
@@ -136,6 +136,7 @@ npm run sync:fields
 | `server/patch-init-xlsx-alerts.js` | 🔧 初始化补丁 | ~2KB | `npm run patch:init-alerts` 将预警演示字段写回 `初始数据.xlsx`。 |
 | `server/mailer.js` | 📧 SMTP 传输层 | ~3KB | nodemailer 封装；懒初始化 transporter；`isEmailEnabled` / `sendMail`。 |
 | `server/email-reminder.js` | 📧 邮件提醒 | ~10KB | 填报提醒日 + 锁定倒计时邮件；板块数据聚合；模板生成；审计记录。 |
+| `server/report-line-my-status.js` | 🏷️ 我的状态映射 | ~2KB | 填报管理列表「我的状态」按角色纯函数映射；`getReportLines` 写入 `my_status`。 |
 | `server/fields/dictionary.js` | 📄 字段字典 | ~2KB | 读写 `config/fields/fields.json` 并同步 `fields-data.js`。 |
 
 ### `css/` 样式
@@ -152,7 +153,7 @@ npm run sync:fields
 |---|---|---|---|
 | `js/app.js` | 🚀 应用初始化 | ~2KB | `Store.init()` 后挂载 Vue。 |
 | `js/router.js` | 🔀 路由配置 | ~2KB | Hash 路由 + 登录/角色守卫；默认首页按角色跳转填报或审批。 |
-| `js/store.js` | 🗄️ 状态管理 | ~12KB | Vue.observable + `/api`；板块流程、快照、锁定等。 |
+| `js/store.js` | 🗄️ 状态管理 | ~27KB | Vue.observable + `/api`；板块流程、快照、锁定等；不再提供人工平台刷新方法。 |
 | `js/formatters.js` | 🔧 格式化工具 | ~4KB | 金额、日期、百分比等。 |
 | `js/formula-engine.js` | ⚙️ 公式引擎 | ~8KB | 83 字段 `auto_calc` 逻辑与汇总。 |
 | `js/field-config.js` | 🔐 字段权限 | ~7KB | 角色 × 锁定期字段可写矩阵。 |
@@ -175,7 +176,9 @@ npm run sync:fields
 | `js/components/SystemAdminApprovalBoard.js` | 📋 板块审批板 | ~4KB | 系统管理员各板块审批状态卡片。 |
 | `js/components/AlertsDrawer.js` | ⚠️ 预警抽屉 | ~6KB | 系统管理员全局预警面板；四维筛选、分页、活跃/已消除状态、点击跳转项目。 |
 | `js/views/Login.js` | 🔑 登录页 | ~6KB | 6 角色卡片登录；登录后跳转填报或审批首页。 |
-| `js/views/ProjectEditor.js` | 📝 项目追踪表 | ~28KB | Luckysheet；F 列 Drawer；保存/导入/筛选；变更批注。 |
+| `js/views/ProjectEditor.js` | 📝 项目追踪表 | ~133KB | Luckysheet；F 列 Drawer；保存/导入/筛选；变更批注；已移除人工「刷新数据」入口。 |
+| `js/views/ReportLineList.js` | 📋 填报管理列表 | ~30KB | 报告线列表；「我的状态」+「报告线状态」列；发起填报、流转轨迹、截止提醒。 |
+| `js/views/ReportLineDetail.js` | 📝 报告线详情 | ~39KB | 继承项目追踪表视图，覆盖报告线数据源、权限、保存、提交、审批和导出。 |
 | `js/views/Approval.js` | ✅ 审批流程 | ~15KB | 流程进度时间轴；总监/群主/其他角色差异化视图。 |
 | `js/views/AuditLog.js` | 📋 审计日志 | ~9KB | 多维筛选 + 导出。 |
 | `js/field-dictionary/FieldManager.js` | 📄 表头配置 | ~12KB | 竖向字段列表；仅 `name_cn` 可编辑（`system_admin`）。 |
@@ -195,14 +198,15 @@ npm run sync:fields
 | `test/completion-forecast-validation.test.js` | ✅ Node 测试 | 覆盖未来月份完成额预测加已完成额不得超过总合同额，以及合同额核减后的提交阻断。 |
 | `test/project-drawer-layout.test.js` | ✅ Node 测试 | 覆盖项目详情 Drawer 合同完成率、未来预测汇总及业务 Tab 字段映射。 |
 | `test/luckysheet-xlsx-export.test.js` | ✅ Node 测试 | 覆盖 Luckysheet 单元格 → SheetJS 映射与 `colhidden` 列过滤。 |
+| `test/report-line-my-status.test.js` | ✅ Node 测试 | 覆盖填报管理「我的状态」：PM 三态、管理员、总监/群主四态、系统管理员 —。 |
 
 ### `docs/` 文档（已整理）
 
 | 路径 | 类型 | 说明 |
 |---|---|---|
 | **需求文档/** | 📋 | 产品与业务需求、规范、待办 |
-| `docs/需求文档/需求文档_开发版.md` | 📋 开发需求 | **面向开发团队的完整技术需求文档**（1618 行）：代码路径、API、实现细节、角色权限、审批流程等。 |
-| `docs/需求文档/需求文档_产品版.md` | 📋 产品需求 | **面向产品经理的纯业务需求文档**（1276 行）：业务流程、规则、交互设计，不含开发细节。 |
+| `docs/需求文档/需求文档_开发版.md` | 📋 开发需求 | **面向开发团队的完整技术需求文档**（约 2300 行）：代码路径、API、字段取值模型、角色权限、审批流程等。 |
+| `docs/需求文档/需求文档_产品版.md` | 📋 产品需求 | **面向产品经理的纯业务需求文档**（约 1630 行）：业务流程、字段取值模型、规则、交互设计，不含开发实现细节。 |
 | `docs/需求文档/技术栈与开发规范.md` | 🛠 技术规范 | 开发原则、技术栈清单、CDN、Luckysheet 权限说明。 |
 | `docs/需求文档/待确认项.md` | ❓ 待办 | Ethan 待拍板业务决策；已确认项迁入 `需求文档_开发版.md`。 |
 | `docs/需求文档/字段字典_备份.md` | 📄 字段备份 | 原 Markdown 版 83 字段字典归档；**运行时以 `config/fields/fields.json` 为准**。 |
@@ -215,6 +219,9 @@ npm run sync:fields
 | `docs/设计文档/DASHBOARD.md` | 📊 看板规范（归档） | 原数据看板设计参考；**当前版本已移除看板页**，运营看板另立项目。 |
 | `docs/设计文档/EMAIL_REMINDER.md` | 📧 邮件提醒设计 | 邮件提醒功能设计文档：SMTP 集成、定时任务、邮件模板、审计集成、配置扩展。 |
 | `docs/设计文档/LUCKYSHEET_XLSX_EXPORT.md` | 📥 LS 导出开发说明 | Luckysheet 视图 WYSIWYG 导出 Excel：架构、文件清单、API、扩展与验收 |
+| **技术调研/** | 🔬 | 技术选型、第三方组件能力与迁移评估 |
+| `docs/技术调研/Univer官方能力与许可调研.md` | 🔬 官方能力调研 | 基于 Univer 官方资料核对免费 OSS、Pro、许可限制与关键功能边界。 |
+| `docs/技术调研/Luckysheet迁移Univer评估.md` | 🔬 迁移评估 | 对照当前项目与 Univer 测试副本，梳理替换影响面、免费版可行性、实施路径与工作量。 |
 | **培训材料/** | 🎓 | 面向业务用户的平台培训讲师手册与配套材料 |
 | `docs/培训材料/项目追踪平台使用培训讲师手册.docx` | 🎓 培训手册 | 项目经理、板块管理员使用培训逐字讲稿；含会前准备、操作演示、讲师备注、异常兜底、实操验收与速查附录。 |
 | `docs/培训材料/平台为什么上线_培训单页.pptx` | 📊 培训单页 | 16:9 培训开场页；用数据口径、版本汇总、权限责任和过程追溯四个问题说明平台上线原因。 |
@@ -225,6 +232,7 @@ npm run sync:fields
 
 | 文件 | 类型 | 说明 |
 |---|---|---|
+| `CONTEXT.md` | 📚 领域词汇表 | 统一公式字段、人工维护字段、系统直取字段、系统调整字段、系统值/调整值/显示值及业务事件更新等术语。 |
 | `backup/column_analysis.py` | 🐍 分析脚本 | 字段级数据分析（可选运行）。 |
 | `backup/check_formulas.py` | 🐍 维护脚本 | 公式与字段字典一致性校验（可选）。 |
 | `backup/` | 📦 归档 | 历史文档备份。 |
@@ -287,7 +295,7 @@ npm run sync:fields
 | FieldConfig | `js/field-config.js` | 列映射、canEdit、Luckysheet 列宽 |
 | FormulaEngine | `js/formula-engine.js` | N/O/P 等 auto_calc |
 | ProjectEditor | `js/views/ProjectEditor.js` | 表头、导入列序 |
-| platform-sync | `server/platform-sync.js` | system_sync 引用键列表 |
+| platform-sync（Demo） | `server/platform-sync.js` | 当前原型 `system_sync` 引用键列表；正式环境事件驱动字段映射待重构 |
 | xlsx-seed | `server/xlsx-seed.js` | Excel 列 → project 字段 |
 
 ---
@@ -295,8 +303,9 @@ npm run sync:fields
 ## 📁 文件分类
 
 ### 核心资产（保留）
-- `docs/需求文档/需求文档_开发版.md` — 面向开发的完整技术需求文档（1618 行）
-- `docs/需求文档/需求文档_产品版.md` — 面向产品经理的纯业务需求文档（1276 行）
+- `CONTEXT.md` — 项目追踪表领域词汇表，定义四类字段和数据更新术语
+- `docs/需求文档/需求文档_开发版.md` — 面向开发的完整技术需求文档（约 2300 行）
+- `docs/需求文档/需求文档_产品版.md` — 面向产品经理的纯业务需求文档（约 1630 行）
 - `config/fields/fields.json` + `fields-data.js` — 83 字段定义与运行时（见上文 **字段字典模块**）
 - `docs/设计文档/DESIGN.md` — UI 设计系统
 - `初始数据.xlsx` — 平台首选初始化 Excel（根目录）
@@ -312,6 +321,7 @@ npm run sync:fields
 docs/
 ├── 需求文档/          需求文档（开发版/产品版）、技术规范、待确认项、字段字典备份、方案 pptx
 ├── 设计文档/          DESIGN（设计系统）、LIST_FORM、DASHBOARD
+├── 技术调研/          Univer 官方能力、许可边界与 Luckysheet 迁移评估
 ├── 培训材料/          培训讲师手册与“平台为什么上线”培训单页
 └── 会议记录/          产值报告线上化讨论精修版
 ```

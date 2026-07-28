@@ -5,6 +5,7 @@ const sw = require('./sector-workflow');
 const snapSvc = require('./snapshot-service');
 const XLSX = require('xlsx');
 const fieldDict = require('./fields/dictionary');
+const myStatus = require('./report-line-my-status');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -520,10 +521,28 @@ function getReportLines(user, filters) {
   var stmt = db.prepare(sql);
   var rows = params.length ? stmt.all.apply(stmt, params) : stmt.all();
 
+  // PM：批量查本人 pm_status，避免 N+1
+  var pmStatusByLineId = {};
+  if (user && user.role === 'pm' && rows.length) {
+    var pmName = user.pmName || user.name || '';
+    if (pmName) {
+      var ids = rows.map(function (r) { return r.id; });
+      var placeholders = ids.map(function () { return '?'; }).join(',');
+      var pmStmt = db.prepare(
+        'SELECT report_line_id, status, submitted_at FROM report_line_pm_status '
+        + 'WHERE pm_name = ? AND report_line_id IN (' + placeholders + ')'
+      );
+      var pmRows = pmStmt.all.apply(pmStmt, [pmName].concat(ids));
+      pmRows.forEach(function (pr) {
+        pmStatusByLineId[pr.report_line_id] = pr;
+      });
+    }
+  }
+
   return rows.map(function (r) {
     var dc = null;
     try { dc = r.distributed_columns ? JSON.parse(r.distributed_columns) : null; } catch (e) { /* ignore */ }
-    return {
+    var line = {
       id: r.id,
       sector_code: r.sector_code,
       period: r.period,
@@ -535,6 +554,8 @@ function getReportLines(user, filters) {
       updated_at: r.updated_at,
       projects_count: r.projects_count
     };
+    line.my_status = myStatus.resolveMyStatus(user, line, pmStatusByLineId[r.id] || null);
+    return line;
   });
 }
 
@@ -1331,5 +1352,6 @@ module.exports = {
   shouldSkipNode: shouldSkipNode,
   getDiff: getDiff,
   exportReportLine: exportReportLine,
-  exportApprovalSnapshot: exportApprovalSnapshot
+  exportApprovalSnapshot: exportApprovalSnapshot,
+  resolveMyStatus: myStatus.resolveMyStatus
 };

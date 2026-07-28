@@ -59,8 +59,20 @@ test('computes drawer completion and future forecast metrics', () => {
   }, 5, 2026);
 
   assert.equal(metrics.completionRate, 62.5);
+  assert.equal(metrics.invoiceRate, 45);
+  assert.equal(metrics.paymentRate, 35);
   assert.equal(metrics.remainingContract, 375);
   assert.equal(metrics.elapsedMonths, 6);
+  assert.equal(metrics.progressCards.length, 3);
+  assert.equal(metrics.progressCards[0].title, '合同完成率');
+  assert.equal(metrics.progressCards[0].amountLabel, '始累完成合同额');
+  assert.equal(metrics.progressCards[0].amount, 625);
+  assert.equal(metrics.progressCards[1].title, '开票进度');
+  assert.equal(metrics.progressCards[1].amountLabel, '始累开票');
+  assert.equal(metrics.progressCards[1].amount, 450);
+  assert.equal(metrics.progressCards[2].title, '回款进度');
+  assert.equal(metrics.progressCards[2].amountLabel, '始累回款');
+  assert.equal(metrics.progressCards[2].amount, 350);
   assert.equal(metrics.kpis[0].label, '完成合同额');
   assert.equal(metrics.kpis[0].forecast, 70);
   assert.equal(metrics.kpis[0].remaining, 305);
@@ -82,15 +94,13 @@ test('builds baseline metrics with drawer display labels and order', () => {
   ];
   const result = layout.buildTabLayout(fields, () => false);
 
-  assert.equal(result.baselineFields.length, 6);
+  assert.equal(result.baselineFields.length, 4);
   assert.equal(result.baselineFields[0].col, 'S');
-  assert.equal(result.baselineFields[2].col, 'AC');
-  assert.equal(result.baselineFields[2].name_cn, layout.BASELINE_METRIC_LABELS.AC);
-  assert.equal(result.baselineFields[3].name_cn, layout.BASELINE_METRIC_LABELS.AF);
-  assert.equal(result.baselineFields[4].col, 'AL');
-  assert.equal(result.baselineFields[4].name_cn, layout.BASELINE_METRIC_LABELS.AL);
-  assert.equal(result.baselineFields[5].col, 'AJ');
-  assert.equal(result.baselineFields[5].name_cn, layout.BASELINE_METRIC_LABELS.AJ);
+  assert.equal(result.baselineFields[1].col, 'R');
+  assert.equal(result.baselineFields[2].col, 'AL');
+  assert.equal(result.baselineFields[2].name_cn, layout.BASELINE_METRIC_LABELS.AL);
+  assert.equal(result.baselineFields[3].col, 'AJ');
+  assert.equal(result.baselineFields[3].name_cn, layout.BASELINE_METRIC_LABELS.AJ);
 });
 
 test('maps monthly fields to forecast and removes baseline duplicates from extended data', () => {

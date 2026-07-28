@@ -489,8 +489,10 @@
         if (!isFinite(n)) return '—';
         return n.toLocaleString('zh-CN', { maximumFractionDigits: 0 });
       },
-      completionRateLabel: function () {
-        return this.drawerMetrics.completionRate.toFixed(1) + '%';
+      progressRateLabel: function (rate) {
+        var n = Number(rate);
+        if (!isFinite(n)) return '—';
+        return n.toFixed(1) + '%';
       },
       matrixCellClass: function (monthIndex, kind, field) {
         if (monthIndex < this.monthIdx) return 'is-historical';
@@ -1025,15 +1027,19 @@
                 </div>
               </section>
 
-              <section class="drawer-baseline-rate-card">
+              <section
+                v-for="card in drawerMetrics.progressCards"
+                :key="'rate-' + card.key"
+                class="drawer-baseline-rate-card"
+              >
                 <div class="drawer-baseline-rate-main">
-                  <strong>{{ completionRateLabel() }}</strong>
+                  <strong>{{ progressRateLabel(card.rate) }}</strong>
                 </div>
                 <div class="drawer-baseline-rate-detail">
-                  <div class="drawer-baseline-rate-title">合同完成率</div>
+                  <div class="drawer-baseline-rate-title">{{ card.title }}</div>
                   <div class="drawer-baseline-rate-metric">
-                    <span class="drawer-baseline-rate-metric-label">项目始累完成合同额</span>
-                    <span class="drawer-baseline-rate-metric-value">{{ formatBaselineAmount(drawerMetrics.completed) }}</span>
+                    <span class="drawer-baseline-rate-metric-label">{{ card.amountLabel }}</span>
+                    <span class="drawer-baseline-rate-metric-value">{{ formatBaselineAmount(card.amount) }}</span>
                   </div>
                   <div class="drawer-baseline-rate-metric">
                     <span class="drawer-baseline-rate-metric-label">总合同额</span>

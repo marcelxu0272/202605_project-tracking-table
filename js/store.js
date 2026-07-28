@@ -548,31 +548,6 @@
     applyBootstrap(d);
   };
 
-  Store.syncPlatformData = async function () {
-    return Store.refreshEditorData();
-  };
-
-  /** 系统/板块管理员：刷新工程平台引用 + 重载库内项目与 PM 提交状态 */
-  Store.refreshEditorData = async function () {
-    const user = Store.currentUser || {};
-    const d = await apiFetch('/editor/refresh-data', {
-      method: 'POST',
-      body: {
-        user: {
-          id: user.id || user.role,
-          name: user.name,
-          role: user.role
-        }
-      }
-    });
-    if (d && d.state) applyBootstrap(d.state);
-    else if (d && d.systemDataSyncedAt) {
-      Store.systemDataSyncedAt = d.systemDataSyncedAt;
-      Store.systemDataSyncMeta = d.syncMeta || null;
-    }
-    return d;
-  };
-
   Store.getMonthIdx = function () {
     return FormulaEngine.getMonthIdx(Store.reportingMonth);
   };

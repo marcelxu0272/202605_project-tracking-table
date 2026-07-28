@@ -142,7 +142,6 @@
 
       // ── 覆盖父类：隐藏主追踪表专属按钮 ──
       canShowAlertsButton:         function () { return false; },
-      canShowRefreshButton:         function () { return false; },
       canShowClearCompletionButton: function () { return false; },
       canImport: function () {
         var role = (Store.currentUser || {}).role;

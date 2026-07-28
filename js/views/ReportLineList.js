@@ -139,7 +139,7 @@
         }
         return {
           visible: true,
-          text: '当前报告月 ' + monthLabel + '，填报截止日为每月 ' + day + ' 日。'
+          text: '填报截止日为每月 ' + day + ' 日。'
         };
       },
       forkSelectedCount() {
@@ -203,6 +203,43 @@
           closed:             { label: '已关闭',         type: 'info' }
         };
         return map[status] || { label: status, type: 'info' };
+      },
+      /** 优先用服务端 my_status；缺省时按角色兜底映射 */
+      myStatusTag(row) {
+        if (row && row.my_status && row.my_status.label) {
+          return {
+            label: row.my_status.label,
+            type: row.my_status.type != null ? row.my_status.type : 'info'
+          };
+        }
+        var role = (Store.currentUser || {}).role;
+        var status = row && row.status;
+        if (role === 'pm') {
+          return { label: '待提交', type: 'warning' };
+        }
+        if (role === 'sector_admin') {
+          if (status === 'reviewing_director' || status === 'reviewing_leader' || status === 'submitted') {
+            return { label: '已提交审批', type: 'success' };
+          }
+          if (status === 'completed') return { label: '已完成', type: 'success' };
+          if (status === 'closed') return { label: '已关闭', type: 'info' };
+          return { label: '待提交审批', type: 'warning' };
+        }
+        if (role === 'sector_director') {
+          if (status === 'reviewing_director') return { label: '待我审批', type: 'warning' };
+          if (status === 'reviewing_leader' || status === 'completed') {
+            return { label: '已审批', type: 'success' };
+          }
+          if (status === 'closed') return { label: '已关闭', type: 'info' };
+          return { label: '等待中', type: 'warning' };
+        }
+        if (role === 'group_leader') {
+          if (status === 'reviewing_leader') return { label: '待我审批', type: 'warning' };
+          if (status === 'completed') return { label: '已审批', type: 'success' };
+          if (status === 'closed') return { label: '已关闭', type: 'info' };
+          return { label: '等待中', type: 'warning' };
+        }
+        return { label: '—', type: 'info' };
       },
       opLabel(op) {
         var map = {
@@ -474,11 +511,11 @@
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
             <el-select
               v-model="pendingFilters.status"
-              placeholder="状态"
+              placeholder="报告线状态"
               size="small"
               style="width:160px;"
             >
-              <el-option label="全部状态" value="all"></el-option>
+              <el-option label="全部报告线状态" value="all"></el-option>
               <el-option label="进行中" value="in_progress"></el-option>
               <el-option label="开放填报" value="open"></el-option>
               <el-option label="已提交" value="submitted"></el-option>
@@ -551,7 +588,15 @@
             style="width:100%;"
             :header-cell-style="{background:'#f8fafc',fontWeight:'600',fontSize:'13px',color:'#374151',padding:'10px 0'}"
           >
-            <el-table-column label="状态" width="160">
+            <el-table-column label="我的状态" width="120">
+              <template slot-scope="{ row }">
+                <el-tag :type="myStatusTag(row).type" size="small" style="font-size:12px;">
+                  {{ myStatusTag(row).label }}
+                </el-tag>
+              </template>
+            </el-table-column>
+
+            <el-table-column label="报告线状态" width="160">
               <template slot-scope="{ row }">
                 <el-tag :type="statusTag(row.status).type" size="small" style="font-size:12px;">
                   {{ statusTag(row.status).label }}

@@ -19,16 +19,14 @@
   var MI_SET = new Set(['BH', 'BJ', 'BL', 'BN', 'BP', 'BR', 'BT', 'BV', 'BX', 'BZ', 'CB', 'CD']);
   var MP_SET = new Set(['BI', 'BK', 'BM', 'BO', 'BQ', 'BS', 'BU', 'BW', 'BY', 'CA', 'CC', 'CE']);
   var MONTH_MATRIX_KINDS = ['completion', 'invoice', 'payment'];
-  var BASELINE_METRIC_COLS = ['S', 'R', 'AC', 'AF', 'AL', 'AJ'];
+  var BASELINE_METRIC_COLS = ['S', 'R', 'AL', 'AJ'];
   /** 抽屉左侧指标精简展示名（不改字段字典全局 name_cn） */
   var BASELINE_METRIC_LABELS = {
-    AC: '始累开票',
-    AF: '始累回款',
     AL: 'WIP',
     AJ: '应收账款'
   };
-  /** 左侧完成率卡片已展示，延伸数据不再重复 */
-  var RATE_CARD_METRIC_COLS = ['P', 'U'];
+  /** 左侧进度卡已展示，延伸数据不再重复 */
+  var RATE_CARD_METRIC_COLS = ['P', 'U', 'AC', 'AF'];
   var DRAWER_TAB_CONFIG = {
     forecast: ['年度完成额申报', '完成额统计与预测', '开票与回款统计预测'],
     status: ['合同签署与进展'],
@@ -239,12 +237,44 @@
     var forecastInvoice = futureTotal(flat, 'mi_', monthIdx);
     var forecastPayment = futureTotal(flat, 'mp_', monthIdx);
     var completed = prevCompletion + ytdCompletion;
+    var invoiced = prevInvoice + ytdInvoice;
+    var paid = prevPayment + ytdPayment;
+    function rateOf(amount) {
+      return totalContract > 0 ? amount / totalContract * 100 : 0;
+    }
     return {
-      completionRate: totalContract > 0 ? completed / totalContract * 100 : 0,
+      completionRate: rateOf(completed),
+      invoiceRate: rateOf(invoiced),
+      paymentRate: rateOf(paid),
       completed: completed,
+      invoiced: invoiced,
+      paid: paid,
       totalContract: totalContract,
       remainingContract: toNumber(flat.contract_minus_completed),
       elapsedMonths: elapsedMonths(flat.start_date, systemYear, monthIdx),
+      progressCards: [
+        {
+          key: 'completion',
+          title: '合同完成率',
+          rate: rateOf(completed),
+          amountLabel: '始累完成合同额',
+          amount: completed
+        },
+        {
+          key: 'invoice',
+          title: '开票进度',
+          rate: rateOf(invoiced),
+          amountLabel: '始累开票',
+          amount: invoiced
+        },
+        {
+          key: 'payment',
+          title: '回款进度',
+          rate: rateOf(paid),
+          amountLabel: '始累回款',
+          amount: paid
+        }
+      ],
       kpis: [
         {
           key: 'completion',

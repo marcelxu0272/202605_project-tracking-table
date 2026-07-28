@@ -656,53 +656,6 @@ app.post('/api/admin/cost-import', (req, res) => {
   }
 });
 
-/** 填报页刷新：工程平台引用 + 库内最新项目（含 PM/板块已保存数据） */
-app.post('/api/editor/refresh-data', (req, res) => {
-  try {
-    const body = req.body || {};
-    const user = body.user || body.actor || {};
-    const role = user.role || user.id;
-    if (role !== 'system_admin' && role !== 'sector_admin') {
-      res.status(403).json({ error: '仅系统管理员或板块管理员可刷新' });
-      return;
-    }
-    const result = platformSync.runPlatformSync(db, dbm, modules, {
-      trigger: 'manual',
-      actor: user ? { id: user.id || user.role, name: user.name || user.userName } : null
-    });
-    res.json({
-      ok: true,
-      systemDataSyncedAt: result.syncedAt,
-      stats: result.stats,
-      syncMeta: result.syncMeta,
-      state: dbm.getBootstrapState(db)
-    });
-  } catch (e) {
-    res.status(e.status || 500).json({ error: String(e.message) });
-  }
-});
-
-/** 手动从中台/CRB/财务同步系统字段（兼容旧调用，等同 refresh-data） */
-app.post('/api/admin/sync-platform-data', (req, res) => {
-  try {
-    const body = req.body || {};
-    const actor = body.user || body.actor || null;
-    const result = platformSync.runPlatformSync(db, dbm, modules, {
-      trigger: 'manual',
-      actor: actor ? { id: actor.id || actor.userId, name: actor.name || actor.userName } : null
-    });
-    res.json({
-      ok: true,
-      systemDataSyncedAt: result.syncedAt,
-      stats: result.stats,
-      syncMeta: result.syncMeta,
-      state: dbm.getBootstrapState(db)
-    });
-  } catch (e) {
-    res.status(e.status || 500).json({ error: String(e.message) });
-  }
-});
-
 /** 开发测试：配置/流程/数据全部恢复初始默认 */
 app.post('/api/admin/reset-dev', (_req, res) => {
   try {
