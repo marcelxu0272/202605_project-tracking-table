@@ -724,8 +724,24 @@ function upsertAlert(db, alert) {
     alert.projectNo, alert.projectName, alert.sectorCode, alert.sectorName,
     alert.alertType, alert.alertLabel, alert.detail,
     alert.year, alert.monthIdx, alert.status,
-    alert.firstDetectedAt, alert.resolvedAt, alert.lastSeenAt
+    alert.firstDetectedAt, alert.resolvedAt || '', alert.lastSeenAt
   );
+}
+
+/** 删除指定范围的预警行（条件消失时直接删除，不保留已消除记录） */
+function deleteAlert(db, projectNo, alertType, year, monthIdx) {
+  return db.prepare(`
+    DELETE FROM project_alerts
+    WHERE project_no = ? AND alert_type = ? AND year = ? AND month_idx = ?
+  `).run(projectNo, alertType, year, monthIdx);
+}
+
+/** 清理某个月份下所有 resolved 历史行 */
+function deleteResolvedAlerts(db, year, monthIdx) {
+  return db.prepare(`
+    DELETE FROM project_alerts
+    WHERE year = ? AND month_idx = ? AND status = 'resolved'
+  `).run(year, monthIdx);
 }
 
 function getAlertsByScope(db, year, monthIdx) {
@@ -767,6 +783,13 @@ function dismissAlert(db, projectNo, alertType, dismissedBy) {
     VALUES (?, ?, ?, ?)
   `).run(projectNo, alertType, now, dismissedBy || '');
   return { projectNo, alertType, dismissedAt: now, dismissedBy: dismissedBy || '' };
+}
+
+function undismissAlert(db, projectNo, alertType) {
+  const info = db.prepare(`
+    DELETE FROM project_alert_dismissals WHERE project_no = ? AND alert_type = ?
+  `).run(projectNo, alertType);
+  return { projectNo, alertType, removed: info.changes > 0 };
 }
 
 function getAlertById(db, id) {
@@ -844,8 +867,11 @@ module.exports = {
   clearAllCostEntries,
   resolveSystemYear,
   upsertAlert,
+  deleteAlert,
+  deleteResolvedAlerts,
   getAlertsByScope,
   getDismissals,
   dismissAlert,
+  undismissAlert,
   getAlertById
 };

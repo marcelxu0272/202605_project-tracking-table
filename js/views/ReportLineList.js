@@ -1,5 +1,5 @@
 /**
- * ReportLineList.js — 填报管理列表页
+ * ReportLineList.js — 填报与审批列表页
  * 按 LIST_FORM.md 规范：筛选区 + 操作区 + 数据表格 + 分页
  */
 (function (window) {
@@ -199,6 +199,7 @@
           reviewing_director: { label: '板块领导审批中', type: '' },
           reviewing_leader:   { label: '群主审批中',     type: '' },
           returned:           { label: '已退回',         type: 'danger' },
+          finalizing:         { label: '核对归档中',     type: 'warning' },
           completed:          { label: '已完成',         type: 'success' },
           closed:             { label: '已关闭',         type: 'info' }
         };
@@ -221,13 +222,14 @@
           if (status === 'reviewing_director' || status === 'reviewing_leader' || status === 'submitted') {
             return { label: '已提交审批', type: 'success' };
           }
+          if (status === 'finalizing') return { label: '核对归档中', type: 'warning' };
           if (status === 'completed') return { label: '已完成', type: 'success' };
           if (status === 'closed') return { label: '已关闭', type: 'info' };
           return { label: '待提交审批', type: 'warning' };
         }
         if (role === 'sector_director') {
           if (status === 'reviewing_director') return { label: '待我审批', type: 'warning' };
-          if (status === 'reviewing_leader' || status === 'completed') {
+          if (status === 'reviewing_leader' || status === 'finalizing' || status === 'completed') {
             return { label: '已审批', type: 'success' };
           }
           if (status === 'closed') return { label: '已关闭', type: 'info' };
@@ -235,7 +237,7 @@
         }
         if (role === 'group_leader') {
           if (status === 'reviewing_leader') return { label: '待我审批', type: 'warning' };
-          if (status === 'completed') return { label: '已审批', type: 'success' };
+          if (status === 'finalizing' || status === 'completed') return { label: '已审批', type: 'success' };
           if (status === 'closed') return { label: '已关闭', type: 'info' };
           return { label: '等待中', type: 'warning' };
         }
@@ -458,6 +460,7 @@
           reviewing_leader: '群主审批中',
           returned: '已退回',
           rejected: '已退回',
+          finalizing: '核对归档中',
           completed: '已完成',
           closed: '已关闭'
         };
@@ -522,6 +525,7 @@
               <el-option label="板块领导审批中" value="reviewing_director"></el-option>
               <el-option label="群主审批中" value="reviewing_leader"></el-option>
               <el-option label="已退回" value="returned"></el-option>
+              <el-option label="核对归档中" value="finalizing"></el-option>
               <el-option label="已完成" value="completed"></el-option>
               <el-option label="已关闭" value="closed"></el-option>
             </el-select>
@@ -859,7 +863,7 @@
             </div>
           </div>
           <div v-else style="padding:24px 0;text-align:center;color:#64748b;font-size:13px;">
-            分发全部字段列，填报界面与项目追踪表完全一致。
+            分发全部字段列，填报界面与查看数据页完全一致。
           </div>
 
           <div slot="footer" style="display:flex;justify-content:flex-end;gap:10px;">

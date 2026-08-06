@@ -23,6 +23,8 @@ function resolveSectorAdminMyStatus(lineStatus) {
     case 'reviewing_leader':
     case 'submitted':
       return tag('admin_submitted', '已提交审批', 'success');
+    case 'finalizing':
+      return tag('admin_finalizing', '核对归档中', 'warning');
     case 'completed':
       return tag('admin_completed', '已完成', 'success');
     case 'closed':
@@ -40,6 +42,7 @@ function resolveDirectorMyStatus(lineStatus) {
     case 'reviewing_director':
       return tag('director_pending_review', '待我审批', 'warning');
     case 'reviewing_leader':
+    case 'finalizing':
     case 'completed':
       return tag('director_reviewed', '已审批', 'success');
     case 'closed':
@@ -54,6 +57,7 @@ function resolveLeaderMyStatus(lineStatus) {
   switch (lineStatus) {
     case 'reviewing_leader':
       return tag('leader_pending_review', '待我审批', 'warning');
+    case 'finalizing':
     case 'completed':
       return tag('leader_reviewed', '已审批', 'success');
     case 'closed':

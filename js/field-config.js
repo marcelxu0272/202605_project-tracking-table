@@ -29,7 +29,8 @@
     'AV','AW','AX','AY','AZ','BA','BB','BC','BD','BE','BF','BG', // 月度完成
     'BH','BI','BJ','BK','BL','BM','BN','BO','BP','BQ',
     'BR','BS','BT','BU','BV','BW','BX','BY','BZ',
-    'CA','CB','CC','CD','CE'                                       // 月度开票+回款
+    'CA','CB','CC','CD','CE',                                      // 月度开票+回款
+    'CF'                                                            // 备注
   ]);
 
   const SECTOR_ADMIN_EDITABLE_COLS = new Set([...PM_EDITABLE_COLS]);
@@ -214,7 +215,8 @@
     BH: 'mi_0', BI: 'mp_0', BJ: 'mi_1', BK: 'mp_1', BL: 'mi_2', BM: 'mp_2',
     BN: 'mi_3', BO: 'mp_3', BP: 'mi_4', BQ: 'mp_4', BR: 'mi_5', BS: 'mp_5',
     BT: 'mi_6', BU: 'mp_6', BV: 'mi_7', BW: 'mp_7', BX: 'mi_8', BY: 'mp_8',
-    BZ: 'mi_9', CA: 'mp_9', CB: 'mi_10', CC: 'mp_10', CD: 'mi_11', CE: 'mp_11'
+    BZ: 'mi_9', CA: 'mp_9', CB: 'mi_10', CC: 'mp_10', CD: 'mi_11', CE: 'mp_11',
+    CF: 'completion_remark'
   };
 
   /**

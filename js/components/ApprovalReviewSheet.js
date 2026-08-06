@@ -40,6 +40,7 @@
       },
       isPm() { return false; },
       isSectorAdmin() { return false; },
+      canShowAlertsButton() { return true; },
       lsMountId() { return 'approval-luckysheet-mount'; },
       lsGridKey() { return 'ptrack_approval_review'; },
       scopedProjects() {
@@ -50,9 +51,6 @@
       },
       filteredProjects() {
         let p = this.scopedProjects;
-        if (this.viewMode === 'new_only') {
-          return p.filter(function (x) { return x._added_this_month; });
-        }
         if (this.viewMode === 'changed_only') {
           return p.filter(function (x) {
             if (x._changed_fields && x._changed_fields.length) return true;
@@ -62,9 +60,6 @@
         return p;
       },
       reviewProjectCount() { return this.filteredProjects.length; },
-      newProjectCount() {
-        return this.scopedProjects.filter(function (p) { return p._added_this_month; }).length;
-      },
       changedProjectCount() {
         return this.scopedProjects.filter(function (p) {
           if (p._changed_fields && p._changed_fields.length) return true;
@@ -78,55 +73,22 @@
       },
       reviewHintText() {
         const base = '本板块 ' + this.scopedProjects.length + ' 条 · 当前显示 ' + this.reviewProjectCount + ' 条 · 只读';
-        if (this.reviewerEditActive) {
-          return base + ' · 需修改数据请「驳回」，由板块管理员编辑后重新提交';
+        if (!this.reviewerEditActive) {
+          return base + ' · 当前节点请通过「驳回」退回修改';
         }
-        return base;
-      }
-    },
-    watch: {
-      viewMode: function () {
-        const self = this;
-        this.buildTableData();
-        this.$nextTick(function () { self.refreshLuckysheet(); });
-      },
-      compactColumnsOnly: function () {
-        const self = this;
-        this.$nextTick(function () { self.refreshLuckysheet(); });
+        return base + ' · 当前可审阅；需改数请驳回';
       }
     },
     mounted() {
-      const self = this;
-      this.tableFields = FieldConfig.buildFieldConfig();
-      this.buildTableData();
-      this.$nextTick(function () {
-        self.initLuckysheet();
-        self.setupLuckysheetResizeObserver();
-        setTimeout(function () { self.resizeLuckysheetLayout(); }, 200);
-        setTimeout(function () { self.resizeLuckysheetLayout(); }, 600);
-      });
+      this.initLuckysheet();
+      var self = this;
       this._unwatchSidebar = this.$watch(
         function () { return Store.sidebarCollapsed; },
-        function () { self.resizeLuckysheetLayout(); }
+        function () { self.scheduleLuckysheetResize(); }
       );
-    },
-    activated() {
-      const self = this;
-      this.buildTableData();
-      this.$nextTick(function () {
-        self.refreshLuckysheet();
-        setTimeout(function () { self.resizeLuckysheetLayout(); }, 300);
-      });
+      this.fetchAlertsBadgeCount();
     },
     beforeDestroy() {
-      if (this._lsRefreshTimer) {
-        clearTimeout(this._lsRefreshTimer);
-        this._lsRefreshTimer = null;
-      }
-      if (this._lsResizeTimer) {
-        clearTimeout(this._lsResizeTimer);
-        this._lsResizeTimer = null;
-      }
       this.teardownLuckysheetResizeObserver();
       if (this._unwatchSidebar) {
         this._unwatchSidebar();
@@ -134,12 +96,34 @@
       }
       this.destroyLuckysheet();
     },
+    methods: {
+      handleAlertOpenProject(projectNo) {
+        this.alertsDrawerVisible = false;
+        var list = this.filteredProjects;
+        var idx = -1;
+        for (var i = 0; i < list.length; i++) {
+          if (list[i].project_no === projectNo) { idx = i; break; }
+        }
+        if (idx >= 0) {
+          this.openProjectDrawer(projectNo, idx);
+          return;
+        }
+        var all = this.scopedProjects;
+        for (var j = 0; j < all.length; j++) {
+          if (all[j].project_no === projectNo) {
+            this.openProjectDrawer(projectNo, -1);
+            return;
+          }
+        }
+        this.$message.info('未在本板块表格中找到项目 ' + projectNo);
+      }
+    },
     template: [
       '<motion-placeholder class="approval-review-sheet">',
       '<motion-placeholder v-if="showDiffHint" class="editor-diff-hint">',
       '<span class="editor-legend-item"><span class="editor-legend-swatch editor-legend-swatch--editable"></span>可编辑列</span>',
       '<span class="editor-legend-item"><span class="editor-legend-swatch editor-legend-swatch--new"></span>新增项目</span>',
-      '<span class="editor-legend-item"><span class="editor-legend-swatch editor-legend-swatch--changed"></span>有更新内容字段</span>',
+      '<span class="editor-legend-item"><span class="editor-legend-swatch editor-legend-swatch--changed"></span>有变化字段</span>',
       '<span style="flex:1;"></span>',
       '<span style="cursor:pointer;" @click="showDiffHint=false"><i class="el-icon-close"></i></span>',
       '</motion-placeholder>',
@@ -151,15 +135,39 @@
       '<motion-placeholder class="sheet-toolbar">',
       '<el-radio-group v-model="viewMode" size="mini" class="view-toggle view-toggle--compact">',
       '<el-radio-button label="all">全部（{{ scopedProjects.length }}）</el-radio-button>',
-      '<el-radio-button label="new_only">新增（{{ newProjectCount }}）</el-radio-button>',
-      '<el-radio-button label="changed_only">有更新内容（{{ changedProjectCount }}）</el-radio-button>',
+      '<el-radio-button label="changed_only">有变化（{{ changedProjectCount }}）</el-radio-button>',
       '</el-radio-group>',
       '<el-divider direction="vertical" class="sheet-toolbar-divider"></el-divider>',
       '<el-checkbox v-model="compactColumnsOnly" class="sheet-toolbar-checkbox">仅显示项目信息与可编辑列</el-checkbox>',
+      '<el-button v-if="canShowAlertsButton" size="mini" icon="el-icon-bell" style="margin-left:8px;" @click="handleOpenAlertsDrawer">项目预警（{{ alertsBadgeCount != null ? alertsBadgeCount : \'…\' }}）</el-button>',
       '<span class="approval-review-toolbar-hint">{{ reviewHintText }}</span>',
       '</motion-placeholder>',
       '<motion-placeholder :id="lsMountId"></motion-placeholder>',
       '</motion-placeholder>',
+      '<project-detail-drawer',
+      '  :visible="projectDrawerVisible"',
+      '  :project="projectDrawerProject"',
+      '  :can-edit="false"',
+      '  :saving="projectDrawerSaving"',
+      '  :month-idx="monthIdx"',
+      '  :nav-index="projectDrawerNavIndex"',
+      '  :nav-total="filteredProjects.length"',
+      '  :field-editable="drawerFieldEditableProp"',
+      '  :format-value="drawerFormatValueProp"',
+      '  :stock-warning-field="drawerStockWarningProp"',
+      '  :focus-target="projectDrawerFocusTarget"',
+      '  @close="closeProjectDrawer"',
+      '  @save="handleProjectDrawerSave"',
+      '  @nav-prev="navigateProjectDrawer(-1)"',
+      '  @nav-next="navigateProjectDrawer(1)"',
+      '/>',
+      '<alerts-drawer',
+      '  :visible="alertsDrawerVisible"',
+      '  :month-idx="monthIdx"',
+      '  :can-dismiss="canDismissAlerts"',
+      '  @close="alertsDrawerVisible = false"',
+      '  @open-project="handleAlertOpenProject"',
+      '/>',
       '</motion-placeholder>'
     ].join('')
   };

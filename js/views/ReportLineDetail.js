@@ -1,5 +1,5 @@
 /**
- * ReportLineDetail.js — 填报管理详情/填报页
+ * ReportLineDetail.js — 填报与审批详情/填报页
  *
  * extends ProjectEditorView，完整复用其 Luckysheet 界面（模板、工具栏、冻结列、分区、
  * 字段权限着色等），仅覆盖数据源与操作方法：
@@ -22,6 +22,7 @@
     reviewing_leader:   { label: '群主审批中',     type: '' },
     returned:           { label: '已退回',         type: 'danger' },
     rejected:           { label: '已退回',         type: 'danger' },
+    finalizing:         { label: '核对归档中',     type: 'warning' },
     completed:          { label: '已完成',         type: 'success' },
     closed:             { label: '已关闭',         type: 'info' }
   };
@@ -140,8 +141,8 @@
         return set;
       },
 
-      // ── 覆盖父类：隐藏主追踪表专属按钮 ──
-      canShowAlertsButton:         function () { return false; },
+      // ── 覆盖父类：报告线详情也显示项目预警总览；忽略权限仍由 canDismissAlerts 控制 ──
+      canShowAlertsButton:         function () { return true; },
       canShowClearCompletionButton: function () { return false; },
       canImport: function () {
         var role = (Store.currentUser || {}).role;
@@ -376,6 +377,18 @@
         var flat = FieldConfig.arraysToFlat(project);
         var oldVal = flat[key];
         if (oldVal === newVal || String(oldVal) === String(newVal)) return;
+        if (window.StockValidation && StockValidation.isCompletionField(field)) {
+          var check = StockValidation.validateCompletionEdit(
+            project, field, newVal, this.monthIdx
+          );
+          if (!check.ok) {
+            this.$message.warning(check.message);
+            if (opts && opts.fromLuckysheet) this.scheduleRefreshLuckysheet();
+            return Promise.reject(new Error(check.message));
+          }
+        }
+        var shouldGuide = window.StockValidation
+          && StockValidation.shouldGuideNegativeRemark(oldVal, newVal, field, this.monthIdx);
 
         var self = this;
         var rlId = this.reportLine.id;
@@ -447,6 +460,12 @@
           } else if ((!opts || !opts.fromLuckysheet) && self.activeTab === 'luckysheet') {
             self.scheduleRefreshLuckysheet();
           }
+          if (shouldGuide) {
+            var guideRowIdx = (opts && opts.lsRow != null)
+              ? (opts.lsRow - self.lsLayout().dataStart)
+              : -1;
+            self.triggerNegativeCompletionRemarkGuide(projectNo, guideRowIdx);
+          }
         })().catch(async function (e) {
           self.$message.error('保存失败：' + (e.message || e));
           await self.loadDetail();
@@ -495,6 +514,21 @@
               this.$message.warning(check.message);
               return;
             }
+          }
+        }
+        if (window.StockValidation) {
+          var previewFlat = Object.assign({}, originalFlat);
+          changes.forEach(function (item) {
+            previewFlat[item.key] = item.newVal;
+          });
+          var remarkCheck = StockValidation.validateNegativeCompletionRemark(
+            FieldConfig.flatToArrays(previewFlat),
+            this.monthIdx
+          );
+          if (!remarkCheck.ok) {
+            this.$message.warning(remarkCheck.message);
+            this.projectDrawerFocusTarget = { col: 'CF' };
+            return;
           }
         }
 

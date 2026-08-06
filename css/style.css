@@ -1,5 +1,5 @@
 /* ============================================================
-   项目执行追踪平台 — 全局样式
+   项目执行跟踪平台 — 全局样式
    品牌色: #007069 | 警告: #f59e0b | 危险: #ef4444
    ============================================================ */
 
@@ -2031,6 +2031,39 @@ body {
 .drawer-baseline-metrics > div:last-child {
   border-bottom: none;
 }
+.drawer-baseline-card--progress {
+  margin-top: 0;
+}
+.drawer-baseline-progress-list {
+  padding: 10px 12px 12px;
+}
+.drawer-baseline-progress-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.drawer-baseline-progress-row + .drawer-baseline-progress-row {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #edf1f1;
+}
+.drawer-baseline-progress-label {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #78908e;
+}
+.drawer-baseline-progress-control .drawer-field-input {
+  width: 100%;
+}
+.drawer-baseline-progress-row.is-editable .drawer-field-input .el-input__inner,
+.drawer-baseline-progress-row.is-editable .drawer-field-input .el-input__inner:focus {
+  background: #fffbe6;
+}
+.drawer-baseline-progress-readonly {
+  font-size: 12px;
+  font-weight: 600;
+  color: #243b39;
+}
 .drawer-baseline-meta-row dt,
 .drawer-baseline-metrics dt {
   font-size: 11px;
@@ -2056,6 +2089,10 @@ body {
 .drawer-baseline-meta-row--client dd {
   text-align: left;
   font-size: 13px;
+}
+.drawer-baseline-meta-row--title dd {
+  font-weight: 700;
+  color: #1f3533;
 }
 .drawer-baseline-tags {
   display: flex;
@@ -2235,7 +2272,7 @@ body {
   box-shadow: 0 2px 7px rgba(35, 65, 61, 0.04);
 }
 .drawer-forecast-kpi-name {
-  grid-row: 1 / 4;
+  grid-row: 1 / 5;
   align-self: center;
   font-size: 12px;
   font-weight: 700;
@@ -2243,6 +2280,7 @@ body {
   line-height: 1.35;
   padding-right: 4px;
 }
+.drawer-forecast-kpi-prev,
 .drawer-forecast-kpi-main,
 .drawer-forecast-kpi-future,
 .drawer-forecast-kpi-remain {
@@ -2251,12 +2289,14 @@ body {
   justify-content: space-between;
   gap: 6px;
 }
+.drawer-forecast-kpi-prev span,
 .drawer-forecast-kpi-main span,
 .drawer-forecast-kpi-future span,
 .drawer-forecast-kpi-remain span {
   font-size: 9px;
   color: #8a9b99;
 }
+.drawer-forecast-kpi-prev strong,
 .drawer-forecast-kpi-main strong,
 .drawer-forecast-kpi-future strong,
 .drawer-forecast-kpi-remain strong {
@@ -2501,6 +2541,29 @@ body {
   border-color: #eadb99;
   background: #fffbed;
 }
+.drawer-remark-box {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+.drawer-remark-box.is-guided {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18);
+}
+.drawer-remark-box__label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+.drawer-remark-box__tip {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #64748b;
+}
 .drawer-tab-hint {
   margin-bottom: 10px;
   padding: 8px 10px;
@@ -2692,18 +2755,13 @@ body {
   border-color: #007069;
   box-shadow: 0 1px 6px rgba(0, 112, 105, 0.12);
 }
-.alerts-card.is-resolved {
-  opacity: 0.55;
-  cursor: default;
-}
-.alerts-card.is-resolved:hover {
-  border-color: #e2e8f0;
-  box-shadow: none;
-}
 .alerts-card.is-dismissed {
-  opacity: 0.35;
+  opacity: 0.7;
   cursor: default;
   background: #f9fafb;
+}
+.alerts-card.is-dismissed .alerts-card-header,
+.alerts-card.is-dismissed .alerts-card-body {
   text-decoration: line-through;
 }
 .alerts-card.is-dismissed:hover {
@@ -2713,6 +2771,7 @@ body {
 .alerts-card-actions {
   display: inline-flex;
   align-items: center;
+  gap: 8px;
 }
 .alerts-card-action--dismissed {
   color: #9ca3af;
@@ -2767,21 +2826,14 @@ body {
 }
 .alerts-card-footer {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   margin-top: 8px;
   font-size: 12px;
 }
-.alerts-card-time {
-  color: #9ca3af;
-}
 .alerts-card-action {
   color: #007069;
   font-weight: 500;
-}
-.alerts-card-action--resolved {
-  color: #9ca3af;
-  font-weight: 400;
 }
 /* 空状态 */
 .alerts-drawer-empty {

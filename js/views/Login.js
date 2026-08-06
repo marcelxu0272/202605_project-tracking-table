@@ -134,7 +134,7 @@
             P
           </div>
         </div>
-        <div class="login-title">项目执行追踪平台</div>
+        <div class="login-title">项目执行跟踪平台</div>
         <div class="login-subtitle">Project Execution Tracking System · S520 金山中心</div>
 
         <transition name="el-fade-in" v-if="step === 1">
@@ -206,7 +206,7 @@
         </transition>
 
         <div style="position:fixed;bottom:20px;color:rgba(255,255,255,0.2);font-size:11px;">
-          项目执行追踪平台 v1.0 · 内部使用
+          项目执行跟踪平台 v1.0 · 内部使用
         </div>
       </div>
     `

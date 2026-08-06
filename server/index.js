@@ -20,6 +20,7 @@ const fieldDict = require('./fields/dictionary');
 const alertService = require('./alert-service');
 const reportLineService = require('./report-line-service');
 const reportLineSeed = require('./report-line-seed');
+const completionValidation = require('./completion-negative-validation');
 
 const ROOT = path.join(__dirname, '..');
 const PORT = Number(process.env.PTRACK_PORT) || 3000;
@@ -184,7 +185,11 @@ app.post('/api/projects', (req, res) => {
       res.status(400).json({ error: 'projects 必须为数组' });
       return;
     }
-    dbm.replaceAllProjects(db, projects);
+    const tx = db.transaction(function () {
+      dbm.replaceAllProjects(db, projects);
+      reportLineService.syncAllProjectsToFinalizingReportLines(db, projects);
+    });
+    tx();
     res.json({ ok: true, count: projects.length });
   } catch (e) {
     res.status(500).json({ error: String(e.message) });
@@ -198,7 +203,24 @@ app.put('/api/projects/:projectNo', (req, res) => {
       res.status(400).json({ error: 'project_no 不匹配' });
       return;
     }
-    dbm.upsertProject(db, p);
+    const reportingMonth = dbm.getMeta(db, 'reportingMonth') || '2026-01';
+    const monthIdx = completionValidation.monthIdxFromPeriod(reportingMonth);
+    // save 模式：仅禁未来月负值；当前月负值无备注允许暂存（引导填备注中间态）
+    const completionCheck = completionValidation.validateProjectCompletionRules(p, monthIdx, {
+      mode: 'save'
+    });
+    if (!completionCheck.ok) {
+      res.status(400).json({
+        error: completionCheck.message,
+        code: completionCheck.code
+      });
+      return;
+    }
+    const tx = db.transaction(function () {
+      dbm.upsertProject(db, p);
+      reportLineService.syncProjectToFinalizingReportLines(db, p);
+    });
+    tx();
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: String(e.message) });
@@ -312,6 +334,21 @@ app.post('/api/pm-submissions/submit', (req, res) => {
     }
 
     const pmProjects = getPmProjectsFromDb(db, pmName);
+    const monthIdx = completionValidation.monthIdxFromPeriod(reportingMonth);
+    const completionCheck = completionValidation.validateProjectsCompletionRules(
+      pmProjects,
+      monthIdx,
+      { mode: 'submit' }
+    );
+    if (!completionCheck.ok) {
+      res.status(400).json({
+        error: completionCheck.message,
+        code: completionCheck.code,
+        project_no: completionCheck.project_no,
+        project_name: completionCheck.project_name
+      });
+      return;
+    }
 
     const subs = dbm.getPmSubmissions(db);
     if (!subs[reportingMonth]) subs[reportingMonth] = {};
@@ -501,6 +538,9 @@ app.post('/api/company/archive', (req, res) => {
     const snap = result.snap;
     dbm.clearProjectChangeTracking(db);
     dbm.resetWorkflowCycleAfterArchive(db);
+    const finalizedReportLines = reportLineService.completeFinalizingReportLines(db, null, {
+      actorName: userName || '系统管理员'
+    });
     dbm.pushAudit(db, {
       id: Date.now() + '_' + Math.random().toString(36).slice(2, 6),
       timestamp: new Date().toISOString(),
@@ -513,7 +553,13 @@ app.post('/api/company/archive', (req, res) => {
       userId: role || 'system_admin',
       userName: userName || '系统管理员'
     });
-    res.json({ ok: true, version: result.version, snapshot: snap, state: dbm.getBootstrapState(db) });
+    res.json({
+      ok: true,
+      version: result.version,
+      snapshot: snap,
+      state: dbm.getBootstrapState(db),
+      finalizedReportLines: finalizedReportLines
+    });
   } catch (e) {
     res.status(500).json({ error: String(e.message) });
   }
@@ -823,11 +869,15 @@ app.get('/api/admin/alerts', (req, res) => {
   }
 });
 
-/** 永久忽略预警：系统管理员手动消除（仅系统管理员） */
+/** 永久忽略预警：仅系统管理员 */
 app.post('/api/admin/alerts/:id/dismiss', (req, res) => {
   try {
     const alertId = Number(req.params.id);
     if (!alertId || isNaN(alertId)) return res.status(400).json({ error: '无效的预警 ID' });
+    const role = (req.body && (req.body.role || req.body.dismissedBy)) || '';
+    if (role !== 'system_admin') {
+      return res.status(403).json({ error: '仅系统管理员可忽略预警' });
+    }
     const dismissedBy = (req.body && req.body.dismissedBy) || 'system_admin';
     const dismissal = alertService.dismissAlertById(db, dbm, alertId, dismissedBy);
     dbm.pushAudit(db, {
@@ -836,13 +886,43 @@ app.post('/api/admin/alerts/:id/dismiss', (req, res) => {
       projectNo: dismissal.projectNo,
       projectName: '预警管理',
       fieldName: 'alert_dismiss',
-      fieldCN: '预警消除',
+      fieldCN: '预警忽略',
       oldVal: 'active',
       newVal: 'dismissed（永久忽略）',
       userId: dismissedBy,
       userName: dismissedBy
     });
     res.json({ ok: true, dismissal });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message) });
+  }
+});
+
+/** 撤回永久忽略：仅系统管理员；恢复后按当前条件重算为活跃，或删除（条件已不满足） */
+app.post('/api/admin/alerts/:id/undismiss', (req, res) => {
+  try {
+    const alertId = Number(req.params.id);
+    if (!alertId || isNaN(alertId)) return res.status(400).json({ error: '无效的预警 ID' });
+    const role = (req.body && (req.body.role || req.body.undoneBy)) || '';
+    if (role !== 'system_admin') {
+      return res.status(403).json({ error: '仅系统管理员可撤回忽略' });
+    }
+    const undoneBy = (req.body && req.body.undoneBy) || 'system_admin';
+    const result = alertService.undismissAlertById(db, dbm, alertId);
+    alertService.collectAllAlerts(db, modules, dbm, timesheetStats, result.monthIdx, result.year);
+    dbm.pushAudit(db, {
+      id: Date.now() + '_alert_undismiss_' + Math.random().toString(36).slice(2, 6),
+      timestamp: new Date().toISOString(),
+      projectNo: result.projectNo,
+      projectName: '预警管理',
+      fieldName: 'alert_undismiss',
+      fieldCN: '预警忽略撤回',
+      oldVal: 'dismissed',
+      newVal: 'undismissed（已撤回忽略）',
+      userId: undoneBy,
+      userName: undoneBy
+    });
+    res.json({ ok: true, undismissal: result });
   } catch (e) {
     res.status(500).json({ error: String(e.message) });
   }
@@ -1126,8 +1206,8 @@ function runReportLineDeadlineCheck(force) {
   const result = reportLineService.autoCompletePeriod(period, {
     actorName: force ? '系统管理员' : '系统',
     comment: force
-      ? '系统管理员手动触发，自动提交并审批通过。'
-      : '截止填报日期已到，系统自动提交并审批通过。'
+      ? '系统管理员手动触发，进入核对归档中。'
+      : '截止填报日期已到，进入核对归档中。'
   });
   return result;
 }

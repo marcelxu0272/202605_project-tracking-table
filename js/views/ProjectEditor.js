@@ -1,5 +1,5 @@
 /**
- * ProjectEditor.js — 项目追踪表（Luckysheet 默认；经典 HTML 表格代码保留，UI 已隐藏）
+ * ProjectEditor.js — 查看数据页（Luckysheet 默认；经典 HTML 表格代码保留，UI 已隐藏）
  * 权限控制 + diff高亮 + 视图筛选 + 公式联动
  */
 (function (window) {
@@ -72,7 +72,7 @@
     data() {
       return {
         luckysheetReady: false,
-        viewMode: 'all',       // 'all' | 'new_only' | 'changed_only' | 'warning_only'
+        viewMode: 'all',       // 'all' | 'changed_only'
         compactColumnsOnly: false,
         submitLoading: false,
         saveLoading: false,
@@ -106,8 +106,10 @@
         projectDrawerVisible: false,
         projectDrawerProject: null,
         projectDrawerRowIndex: null,
+        projectDrawerFocusTarget: null,
         projectDrawerSaving: false,
         alertsDrawerVisible: false,
+        alertsBadgeCount: null,
         _lsProjectNoMouseUp: null,
       };
     },
@@ -126,6 +128,7 @@
         function () { return Store.sidebarCollapsed; },
         function () { this.resizeLuckysheetLayout(); }.bind(this)
       );
+      this.fetchAlertsBadgeCount();
     },
     activated() {
       const self = this;
@@ -151,6 +154,7 @@
       } else {
         afterData();
       }
+      this.fetchAlertsBadgeCount();
     },
     beforeDestroy() {
       if (this._lsRefreshTimer) {
@@ -194,12 +198,42 @@
       viewingVersion: function (val) {
         this.handleViewingVersionChange(val);
       },
+      monthIdx: function () {
+        this.fetchAlertsBadgeCount();
+      },
+      alertsDrawerVisible: function (v) {
+        if (!v) this.fetchAlertsBadgeCount();
+      }
     },
     methods: {
       // ── 报告线钩子方法（默认空实现，ReportLineDetailView 覆盖） ──
       handleRlSubmit()  {},
       handleRlApprove() {},
       handleRlReject()  {},
+      fetchAlertsBadgeCount: function () {
+        if (!this.canShowAlertsButton) {
+          this.alertsBadgeCount = null;
+          return;
+        }
+        var self = this;
+        var year = Store.reportingMonth
+          ? parseInt(String(Store.reportingMonth).slice(0, 4), 10)
+          : new Date().getFullYear();
+        var monthIdx = this.monthIdx;
+        if (monthIdx == null || isNaN(monthIdx)) return;
+        fetch('/api/admin/alerts?year=' + year + '&monthIdx=' + monthIdx)
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            var summary = d && d.summary;
+            // 按钮展示活跃预警数（当前需关注的总数）
+            self.alertsBadgeCount = summary && summary.activeCount != null
+              ? Number(summary.activeCount) || 0
+              : 0;
+          })
+          .catch(function () {
+            /* 角标失败时保留上次数字，不打断主流程 */
+          });
+      },
       formatPmSubmissionMeta(sub) {
         var time = sub && sub.submittedAt
           ? new Date(sub.submittedAt).toLocaleString('zh-CN', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})
@@ -335,7 +369,7 @@
 
       buildLuckysheetCellRightClickConfig() {
         return {
-          copy: false,
+          copy: true,
           copyAs: false,
           paste: false,
           insertRow: false,
@@ -350,7 +384,7 @@
           clear: false,
           matrix: false,
           sort: false,
-          filter: true,
+          filter: false,
           chart: false,
           image: false,
           link: false,
@@ -530,27 +564,53 @@
       handleSubmitArchive() {
         if (!this.canShowArchiveButton) return;
         const self = this;
-        this.$confirm(
-          '确认提交公司归档？将生成新的 J 版快照（含全部项目），并更新内容对比基准。',
-          '提交归档',
-          { confirmButtonText: '确认归档', cancelButtonText: '取消', type: 'warning' }
-        ).then(function () {
-          self.archiveLoading = true;
-          return Store.archiveCompany();
-        }).then(function (d) {
-          const ver = (d && d.version) || Store.latestJVersion;
-          self.$message.success('已生成 J 版快照' + (ver ? '：' + ver : ''));
-          if (ver) {
-            self.viewingVersion = ver;
-            self.handleViewingVersionChange(ver);
-          }
-        }).catch(function (e) {
-          if (e !== 'cancel' && e !== 'close') {
+        const period = Store.reportingMonth
+          || (Store.periodConfig && Store.periodConfig.reportingMonth)
+          || '';
+
+        self.archiveLoading = true;
+        Promise.resolve()
+          .then(function () {
+            return self.flushLuckysheetToStore();
+          })
+          .then(function () {
+            return Store.queryReportLines({ status: 'finalizing', period: period });
+          })
+          .then(function (lines) {
+            self.archiveLoading = false;
+            const count = Array.isArray(lines) ? lines.length : 0;
+            const msg = count > 0
+              ? ('确认提交公司归档？将生成新的 J 版快照，并将 ' + period
+                + ' 周期处于「核对归档中」的报告线同步完成归档（变为已完成，之后不再与主表同步）。')
+              : '确认提交公司归档？将生成新的 J 版快照（含全部项目），并更新内容对比基准。';
+            return self.$confirm(msg, '提交归档', {
+              confirmButtonText: '确认归档',
+              cancelButtonText: '取消',
+              type: 'warning'
+            });
+          })
+          .then(function () {
+            self.archiveLoading = true;
+            return Store.archiveCompany();
+          })
+          .then(function (d) {
+            const ver = (d && d.version) || Store.latestJVersion;
+            const sealed = d && d.finalizedReportLines && d.finalizedReportLines.count
+              ? ('；已封账报告线 ' + d.finalizedReportLines.count + ' 条')
+              : '';
+            self.$message.success('已生成 J 版快照' + (ver ? '：' + ver : '') + sealed);
+            if (ver) {
+              self.viewingVersion = ver;
+              self.handleViewingVersionChange(ver);
+            }
+          })
+          .catch(function (e) {
+            if (e === 'cancel' || e === 'close') return;
             self.$message.error('归档失败：' + (e && e.message ? e.message : e));
-          }
-        }).finally(function () {
-          self.archiveLoading = false;
-        });
+          })
+          .finally(function () {
+            self.archiveLoading = false;
+          });
       },
 
       onImportFileChange(e) {
@@ -972,6 +1032,8 @@
             return Promise.reject(new Error(check.message));
           }
         }
+        var shouldGuide = window.StockValidation
+          && StockValidation.shouldGuideNegativeRemark(oldVal, newVal, field, this.monthIdx);
 
         const self = this;
         return this._trackCellSave((async function () {
@@ -995,13 +1057,20 @@
           } else if ((!opts || !opts.fromLuckysheet) && self.activeTab === 'luckysheet') {
             self.scheduleRefreshLuckysheet();
           }
+          if (shouldGuide) {
+            var guideRowIdx = (opts && opts.lsRow != null)
+              ? (opts.lsRow - self.lsLayout().dataStart)
+              : -1;
+            self.triggerNegativeCompletionRemarkGuide(project.project_no, guideRowIdx);
+          }
         })().catch(function (e) {
           self.$message.error('保存失败：' + (e.message || e));
           throw e;
         }));
       },
 
-      openProjectDrawer(projectNo, dataRowIndex) {
+      openProjectDrawer(projectNo, dataRowIndex, options) {
+        options = options || {};
         var list = this.filteredProjects;
         var project = dataRowIndex >= 0 ? list[dataRowIndex] : null;
         if (!project || project.project_no !== projectNo) {
@@ -1013,6 +1082,7 @@
         var computed = FormulaEngine.compute(Object.assign({}, storeProj), this.monthIdx);
         this.projectDrawerProject = computed;
         this.projectDrawerRowIndex = dataRowIndex;
+        this.projectDrawerFocusTarget = options.focusTarget || null;
         this.projectDrawerVisible = true;
       },
 
@@ -1020,6 +1090,17 @@
         this.projectDrawerVisible = false;
         this.projectDrawerProject = null;
         this.projectDrawerRowIndex = null;
+        this.projectDrawerFocusTarget = null;
+      },
+      isCurrentMonthCompletionField(field) {
+        if (!field || !window.FieldConfig) return false;
+        return field.col === FieldConfig.MC_COLS[this.monthIdx];
+      },
+      triggerNegativeCompletionRemarkGuide(projectNo, dataRowIndex) {
+        if (!projectNo) return;
+        this.openProjectDrawer(projectNo, dataRowIndex, {
+          focusTarget: { col: 'CF' }
+        });
       },
 
       navigateProjectDrawer(delta) {
@@ -1077,6 +1158,21 @@
               this.$message.warning(check.message);
               return;
             }
+          }
+        }
+        if (window.StockValidation) {
+          var previewFlat = Object.assign({}, originalFlat);
+          changes.forEach(function (item) {
+            previewFlat[item.key] = item.newVal;
+          });
+          var remarkCheck = StockValidation.validateNegativeCompletionRemark(
+            FieldConfig.flatToArrays(previewFlat),
+            this.monthIdx
+          );
+          if (!remarkCheck.ok) {
+            this.$message.warning(remarkCheck.message);
+            this.projectDrawerFocusTarget = { col: 'CF' };
+            return;
           }
         }
 
@@ -1250,7 +1346,7 @@
       },
       buildExportFilename(suffix) {
         var month = Store.reportingMonth || '2026-05';
-        if (suffix) return '项目执行追踪_' + suffix + '.xlsx';
+        if (suffix) return '项目执行跟踪_' + suffix + '.xlsx';
         var now = new Date();
         var pad = function (n) { return String(n).padStart(2, '0'); };
         var stamp = now.getFullYear()
@@ -1259,7 +1355,7 @@
           + pad(now.getHours())
           + pad(now.getMinutes())
           + pad(now.getSeconds());
-        return '项目追踪表_' + month + '_' + stamp + '.xlsx';
+        return '查看数据_' + month + '_' + stamp + '.xlsx';
       },
 
       /** 从当前 Luckysheet 视图导出（与屏幕所见一致：结构/样式/公式/格式） */
@@ -1290,7 +1386,7 @@
           rowEnd: rowEnd,
           colStart: 0,
           colEnd: colEnd,
-          sheetName: (file.name || Store.reportingMonth || '项目执行追踪').slice(0, 31),
+          sheetName: (file.name || Store.reportingMonth || '项目执行跟踪').slice(0, 31),
           filename: filename || this.buildExportFilename()
         });
       },
@@ -1317,7 +1413,7 @@
           rowEnd: Math.max(lay.header, lay.dataEnd),
           colStart: 0,
           colEnd: cols - 1,
-          sheetName: (Store.reportingMonth || '项目执行追踪').slice(0, 31),
+          sheetName: (Store.reportingMonth || '项目执行跟踪').slice(0, 31),
           filename: filename || this.buildExportFilename()
         });
       },
@@ -1343,7 +1439,7 @@
           try {
             var snap = Store.snapshots[self.viewingVersion];
             var label = (snap && snap.label) || self.viewingVersion;
-            var filename = '项目执行追踪_' + label + '.xlsx';
+            var filename = '项目执行跟踪_' + label + '.xlsx';
             self.exportCurrentLuckysheetView(filename);
             self.$message.success('导出成功');
           } catch (e) {
@@ -2569,6 +2665,13 @@
         this.destroyLuckysheet();
         this._lsLoading = true;
 
+        if (window.SUBTOTAL_PATCH && typeof SUBTOTAL_PATCH.install === 'function') {
+          SUBTOTAL_PATCH.install();
+        }
+        if (window.NAV_SKIP_HIDDEN && typeof NAV_SKIP_HIDDEN.install === 'function') {
+          NAV_SKIP_HIDDEN.install();
+        }
+
         var lay = this.lsLayout();
         var rows = Math.max(48, lay.dataStart + Math.max(this.filteredProjects.length, 1) + 12);
         var cols = Math.max(64, this.tableFields.length + 4);
@@ -2584,6 +2687,7 @@
           lang: 'zh',
           showinfobar: false,
           showsheetbar: false,
+          forceCalculation: true,
           showstatisticBar: true,
           showstatisticBarConfig: {
             count: false,
@@ -2601,7 +2705,7 @@
           column: cols,
           gridKey: this.lsGridKey,
           data: [{
-            name: '项目执行追踪',
+            name: '项目执行跟踪',
             index: sheetIndex,
             status: 1,
             order: 0,
@@ -2631,9 +2735,21 @@
           hook: {
             workbookCreateAfter: function () {
               self._lsLoading = false;
+              if (window.SUBTOTAL_PATCH) {
+                if (typeof SUBTOTAL_PATCH.install === 'function') SUBTOTAL_PATCH.install();
+                if (typeof SUBTOTAL_PATCH.refresh === 'function') SUBTOTAL_PATCH.refresh();
+              }
+              if (window.NAV_SKIP_HIDDEN && typeof NAV_SKIP_HIDDEN.install === 'function') {
+                NAV_SKIP_HIDDEN.install();
+              }
               self.recalcLuckysheetFormulas();
               self.applyLuckysheetDefaultFilter();
               self.bindProjectNoClickHandler();
+            },
+            updated: function (op) {
+              if (window.SUBTOTAL_PATCH && typeof SUBTOTAL_PATCH.onUpdated === 'function') {
+                SUBTOTAL_PATCH.onUpdated(op);
+              }
             },
             cellEditBefore: function (range) {
               if (self._lsLoading) return false;
@@ -2722,13 +2838,13 @@
       <div style="display:flex;flex-direction:column;height:100%;">
         <!-- 只读提示条 -->
         <div v-if="showReportLineHint" class="report-line-hint" style="background:#e6f7ff;border:1px solid #91d5ff;padding:10px 16px;border-radius:4px;display:flex;align-items:center;justify-content:space-between;">
-          <span style="color:#1890ff;"><i class="el-icon-info" style="margin-right:6px;"></i>当前页面仅供查看，如需填报请至&ldquo;填报管理&rdquo;</span>
-          <a href="/#/report-lines" style="color:#007069;text-decoration:none;font-weight:500;">前往填报管理 &rarr;</a>
+          <span style="color:#1890ff;"><i class="el-icon-info" style="margin-right:6px;"></i>当前页面仅供查看，如需填报请至&ldquo;填报与审批&rdquo;</span>
+          <a href="/#/report-lines" style="color:#007069;text-decoration:none;font-weight:500;">前往填报与审批 &rarr;</a>
         </div>
         <!-- 工具栏 -->
         <div class="editor-toolbar">
           <template v-if="rlContextBar">
-            <el-button size="mini" icon="el-icon-arrow-left" plain @click="$router.push('/report-lines')">填报管理</el-button>
+            <el-button size="mini" icon="el-icon-arrow-left" plain @click="$router.push('/report-lines')">填报与审批</el-button>
             <span style="color:#94a3b8;">|</span>
             <span style="font-weight:600;color:#1e293b;">{{ rlContextBar.sectorName }}</span>
             <span style="color:#64748b;">{{ rlContextBar.periodLabel }}</span>
@@ -2774,7 +2890,7 @@
               size="small"
               icon="el-icon-bell"
               @click="handleOpenAlertsDrawer"
-            >项目预警</el-button>
+            >项目预警（{{ alertsBadgeCount != null ? alertsBadgeCount : '…' }}）</el-button>
             <el-button
               size="small"
               icon="el-icon-download"
@@ -2864,7 +2980,7 @@
             <span class="editor-legend-swatch editor-legend-swatch--new"></span>新增项目
           </span>
           <span class="editor-legend-item">
-            <span class="editor-legend-swatch editor-legend-swatch--changed"></span>有更新内容字段
+            <span class="editor-legend-swatch editor-legend-swatch--changed"></span>有变化字段
           </span>
           <span class="editor-legend-item">
             <span class="editor-legend-swatch editor-legend-swatch--system-ref"></span>系统引用已覆盖
@@ -2883,9 +2999,7 @@
           <div v-if="activeTab === 'luckysheet'" class="sheet-toolbar">
             <el-radio-group v-model="viewMode" size="mini" class="view-toggle view-toggle--compact">
               <el-radio-button label="all">全部（{{ scopedProjects.length }}）</el-radio-button>
-              <el-radio-button label="new_only">新增（{{ newProjectCount }}）</el-radio-button>
-              <el-radio-button label="changed_only">有更新内容（{{ changedProjectCount }}）</el-radio-button>
-              <el-radio-button label="warning_only">预警（{{ warningProjectCount }}）</el-radio-button>
+              <el-radio-button label="changed_only">有变化（{{ changedProjectCount }}）</el-radio-button>
             </el-radio-group>
             <el-divider direction="vertical" class="sheet-toolbar-divider"></el-divider>
             <el-checkbox v-model="compactColumnsOnly" class="sheet-toolbar-checkbox">
@@ -3088,6 +3202,7 @@
           :field-editable="drawerFieldEditableProp"
           :format-value="drawerFormatValueProp"
           :stock-warning-field="drawerStockWarningProp"
+          :focus-target="projectDrawerFocusTarget"
           @close="closeProjectDrawer"
           @save="handleProjectDrawerSave"
           @nav-prev="navigateProjectDrawer(-1)"
@@ -3097,6 +3212,7 @@
         <alerts-drawer
           :visible="alertsDrawerVisible"
           :month-idx="monthIdx"
+          :can-dismiss="canDismissAlerts"
           @close="alertsDrawerVisible = false"
           @open-project="handleAlertOpenProject"
         />
@@ -3193,7 +3309,11 @@
         return '提交后已自动进入板块汇总；';
       },
       canShowAlertsButton() {
-        return this.isSystemAdmin && !this.isViewingSnapshot;
+        return !this.isViewingSnapshot;
+      },
+      /** 忽略/撤回仅系统管理员（用 user.role，避免子视图覆盖 isSystemAdmin） */
+      canDismissAlerts() {
+        return this.user.role === 'system_admin';
       },
       canShowClearCompletionButton() {
         if (this.isViewingSnapshot) return false;
@@ -3289,7 +3409,7 @@
         return window.DataScope && DataScope.isExecutiveViewer(this.user);
       },
       canEdit() {
-        // 新增: 非系统管理员强制只读（填报已迁移至「填报管理」）
+        // 新增: 非系统管理员强制只读（填报已迁移至「填报与审批」）
         const role = (this.user || {}).role;
         if (role !== 'system_admin') return false;
         // ── 以下仅 system_admin ──
@@ -3318,11 +3438,8 @@
       },
       filteredProjects() {
         let p = this.scopedProjects;
-        if (this.viewMode === 'new_only')     return p.filter(x => x._added_this_month);
-        if (this.viewMode === 'changed_only') return p.filter(x => x._changed_fields && x._changed_fields.length > 0);
-        if (this.viewMode === 'warning_only' && window.StockValidation) {
-          const monthIdx = this.monthIdx;
-          return p.filter(function (x) { return StockValidation.hasStockWarning(x, monthIdx); });
+        if (this.viewMode === 'changed_only') {
+          return p.filter(x => x._changed_fields && x._changed_fields.length > 0);
         }
         return p;
       },
@@ -3334,10 +3451,6 @@
         return this.filteredProjects.findIndex(function (p) {
           return p.project_no === this.projectDrawerProject.project_no;
         }.bind(this));
-      },
-      warningProjectCount() {
-        if (!window.StockValidation) return 0;
-        return StockValidation.countWarnings(this.scopedProjects, this.monthIdx);
       },
       hasStockViolationsInScope() {
         if (!window.StockValidation) return false;

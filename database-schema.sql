@@ -293,7 +293,7 @@ CREATE INDEX IF NOT EXISTS idx_snapshots_month  ON snapshots (report_month);
 
 -- ============================================================================
 -- 7. 项目预警记录表 (project_alerts)
--- 持久化存储项目预警，支持 active/resolved 状态流转
+-- 持久化存储项目预警（active / dismissed；条件消失则删除，不保留 resolved）
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS project_alerts (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -306,9 +306,9 @@ CREATE TABLE IF NOT EXISTS project_alerts (
     detail            TEXT    NOT NULL DEFAULT '',    -- 预警详情（数值描述）
     year              INTEGER NOT NULL,               -- 系统年份
     month_idx         INTEGER NOT NULL,               -- 报告月索引 0-11
-    status            TEXT    NOT NULL DEFAULT 'active', -- active | resolved
+    status            TEXT    NOT NULL DEFAULT 'active', -- active | dismissed
     first_detected_at TEXT    NOT NULL DEFAULT '',    -- 首次检测时间 ISO 8601
-    resolved_at       TEXT    NOT NULL DEFAULT '',    -- 消除时间
+    resolved_at       TEXT    NOT NULL DEFAULT '',    -- 兼容旧列，不再写入有效值
     last_seen_at      TEXT    NOT NULL DEFAULT '',    -- 最近活跃时间
 
     UNIQUE(project_no, alert_type, year, month_idx)
@@ -338,7 +338,7 @@ CREATE TABLE IF NOT EXISTS report_lines (
     id                   INTEGER PRIMARY KEY AUTOINCREMENT,
     sector_code          TEXT    NOT NULL,                -- 板块代码，如 'SAS520'
     period               TEXT    NOT NULL,                -- 周期，如 '2026-06'
-    status               TEXT    NOT NULL DEFAULT 'open', -- open/reviewing_director/reviewing_leader/completed/rejected/closed
+    status               TEXT    NOT NULL DEFAULT 'open', -- open/reviewing_director/reviewing_leader/finalizing/completed/rejected/closed
     approval_node        TEXT,                            -- 当前审批节点: director/leader/null
     baseline_version     TEXT,                            -- fork时的基线版本(J版key)
     distributed_columns  TEXT,                            -- 分发列配置：列字母数组 JSON，如["F","G","E","AV"]；null表示显示全部列

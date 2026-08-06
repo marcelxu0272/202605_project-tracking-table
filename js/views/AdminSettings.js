@@ -272,7 +272,7 @@
       handleAutoCompleteReportLines() {
         if (!this.isAdmin) { this.$message.error('仅管理员可操作'); return; }
         this.$confirm(
-          '将把当前报告月所有未完成的报告线置为「已完成」，并在流转轨迹中记录系统自动完结节点。该操作用于测试/截止日处理，确认继续？',
+          '将把当前报告月所有未完成的报告线置为「核对归档中」，并在流转轨迹中记录系统自动完结节点。该操作用于测试/截止日处理，确认继续？',
           '自动结束当前报告线',
           { confirmButtonText: '确认结束', cancelButtonText: '取消', type: 'warning' }
         ).then(() => {

@@ -1,7 +1,7 @@
 # 📁 项目追踪表线上化 — 目录说明
 
-> **项目目标：** 将项目执行追踪 Excel 表的填写、汇总、统计与展示线上化  
-> **最后更新：** 2026-07-27
+> **项目目标：** 将项目执行跟踪 Excel 表的填写、汇总、统计与展示线上化  
+> **最后更新：** 2026-08-05
 
 ---
 
@@ -82,7 +82,7 @@ npm run sync:fields
 
 ### 初始化后验证
 
-1. 登录 **系统管理员** → **项目追踪表**：Luckysheet 应显示 83 列表头与项目数据。
+1. 登录 **系统管理员** → **查看数据**：Luckysheet 应显示 83 列表头与项目数据。
 2. **表头配置**（`/#/fields`）：竖向字段列表可加载，修改表头名保存后填报页表头同步。
 3. 控制台无 `field-config: 字段字典未加载`；若出现，确认 `npm start` 已重启且 `/api/fields` 可访问。
 
@@ -131,13 +131,14 @@ npm run sync:fields
 | `server/platform-sync.js` | 🔄 Demo 平台同步 | ~13KB | 从中台/CRB/财务合并 `system_sync` 字段的原型桩；仅保留 Demo 定时触发，正式环境改为业务事件驱动且待重构。 |
 | `server/sector-workflow.js` | 🔀 板块流程 | ~4KB | 十二板块注册、流程状态（服务端）。 |
 | `server/dev-reset-seed.js` | 🔧 开发重置 | ~3KB | 重置后写 I 版 baseline（排除 demo 新增项目号）；预警演示数据。 |
-| `server/alert-demo-seed.js` | 🔧 预警演示 | ~3KB | 重导/重置后为 4 条项目注入 R/S、完成额 vs 工时预警场景及演示工时。 |
+| `server/alert-demo-seed.js` | 🔧 预警演示 | ~4KB | 重导/重置后为演示项目注入 R/S、完成额 vs 工时及同项目多预警（宋建生）样例。 |
 | `server/alert-service.js` | ⚠️ 预警聚合 | ~4KB | 全公司预警计算与 DB 持久化同步；`collectAllAlerts` 一次遍历所有项目。 |
 | `server/patch-init-xlsx-alerts.js` | 🔧 初始化补丁 | ~2KB | `npm run patch:init-alerts` 将预警演示字段写回 `初始数据.xlsx`。 |
 | `server/mailer.js` | 📧 SMTP 传输层 | ~3KB | nodemailer 封装；懒初始化 transporter；`isEmailEnabled` / `sendMail`。 |
 | `server/email-reminder.js` | 📧 邮件提醒 | ~10KB | 填报提醒日 + 锁定倒计时邮件；板块数据聚合；模板生成；审计记录。 |
 | `server/report-line-my-status.js` | 🏷️ 我的状态映射 | ~2KB | 填报管理列表「我的状态」按角色纯函数映射；`getReportLines` 写入 `my_status`。 |
 | `server/fields/dictionary.js` | 📄 字段字典 | ~2KB | 读写 `config/fields/fields.json` 并同步 `fields-data.js`。 |
+| `server/completion-negative-validation.js` | ✅ 完成额负值校验 | ~2KB | 当前月完成额负值备注必填、未来月完成额不可负的服务端规则。 |
 
 ### `css/` 样式
 
@@ -168,6 +169,8 @@ npm run sync:fields
 | `js/import-merge.js` | 📥 导入合并 | ~2KB | 填报页按 `project_no` 合并可编辑字段，并套用 WIP 归零清空规则。 |
 | `js/xlsx-importer.js` | 📥 导入导出 | ~6KB | SheetJS xlsx 解析/导出；**填报页导出已迁至** `luckysheet-xlsx-export.js` |
 | `js/luckysheet-xlsx-export.js` | 📥 LS 导出 | ~5KB | Luckysheet `file.data` → xlsx（公式/样式/合并）；见 `docs/设计文档/LUCKYSHEET_XLSX_EXPORT.md` |
+| `js/luckysheet-subtotal-patch.js` | 🔧 LS 补丁 | ~3KB | 修补 `SUBTOTAL`：筛选后按可见行重算；筛选确认触发 `refreshFormula`；见 `docs/设计文档/LUCKYSHEET_SUBTOTAL_FILTER_PATCH.md` |
+| `js/luckysheet-nav-skip-hidden.js` | 🔧 LS 补丁 | ~5KB | 方向键/Enter 跳过筛选与 `rowhidden`/`colhidden` 隐藏行列；同上设计文档 |
 | `js/mock-data.js` | 📦 备用示例 | ~31KB | 20 条示例；**不默认引入**。 |
 | `js/components/AppLayout.js` | 🖼️ 主布局 | ~7KB | 侧栏 + 顶栏 + 路由出口；总监/群主精简导航。 |
 | `js/components/ProjectDetailDrawer.js` | 📝 项目详情 Drawer | ~12KB | F 列打开；左侧项目基准 + 右侧业务 Tab；经营预测矩阵；WIP 提示；保存回写 Sheet。 |
@@ -176,8 +179,8 @@ npm run sync:fields
 | `js/components/SystemAdminApprovalBoard.js` | 📋 板块审批板 | ~4KB | 系统管理员各板块审批状态卡片。 |
 | `js/components/AlertsDrawer.js` | ⚠️ 预警抽屉 | ~6KB | 系统管理员全局预警面板；四维筛选、分页、活跃/已消除状态、点击跳转项目。 |
 | `js/views/Login.js` | 🔑 登录页 | ~6KB | 6 角色卡片登录；登录后跳转填报或审批首页。 |
-| `js/views/ProjectEditor.js` | 📝 项目追踪表 | ~133KB | Luckysheet；F 列 Drawer；保存/导入/筛选；变更批注；已移除人工「刷新数据」入口。 |
-| `js/views/ReportLineList.js` | 📋 填报管理列表 | ~30KB | 报告线列表；「我的状态」+「报告线状态」列；发起填报、流转轨迹、截止提醒。 |
+| `js/views/ProjectEditor.js` | 📝 查看数据 | ~133KB | Luckysheet；F 列 Drawer；保存/导入/筛选；变更批注；已移除人工「刷新数据」入口。 |
+| `js/views/ReportLineList.js` | 📋 填报与审批列表 | ~30KB | 报告线列表；「我的状态」+「报告线状态」列；发起填报、流转轨迹、截止提醒。 |
 | `js/views/ReportLineDetail.js` | 📝 报告线详情 | ~39KB | 继承项目追踪表视图，覆盖报告线数据源、权限、保存、提交、审批和导出。 |
 | `js/views/Approval.js` | ✅ 审批流程 | ~15KB | 流程进度时间轴；总监/群主/其他角色差异化视图。 |
 | `js/views/AuditLog.js` | 📋 审计日志 | ~9KB | 多维筛选 + 导出。 |
@@ -189,6 +192,7 @@ npm run sync:fields
 | 文件 | 类型 | 说明 |
 |---|---|---|
 | `test/lock-status.test.js` | ✅ Node 测试 | 覆盖月度锁定与可选自动解锁规则（默认关闭，开启后按解禁日开放）。 |
+| `test/alert-undismiss.test.js` | ✅ Node 测试 | 覆盖预警忽略与撤回：dismissals 删除、状态恢复、非 dismissed 拒绝。 |
 | `test/archive-workflow-reset.test.js` | ✅ Node 测试 | 覆盖 J 版归档后流程态归零、当前周期变更元数据清理。 |
 | `test/snapshot-change-log.test.js` | ✅ Node 测试 | 覆盖 D/J 快照保留变更记录、I 版快照清理临时变更标记。 |
 | `test/sector-admin-skip-director.test.js` | ✅ Node 测试 | 覆盖板块管理员兼任总监时由平台用户权限自动跳过总监初审。 |
@@ -196,9 +200,11 @@ npm run sync:fields
 | `test/initial-import-merge.test.js` | ✅ Node 测试 | 覆盖初始化导入平台合并：全匹配/未匹配/值差异/平台独有不插入/NewExistingRef 保留/混合场景/空值等价。 |
 | `test/wip-validation.test.js` | ✅ Node 测试 | 覆盖 WIP 催开票非零时 AM/AO 必填，以及 AL 归零自动清空 AM/AN/AO。 |
 | `test/completion-forecast-validation.test.js` | ✅ Node 测试 | 覆盖未来月份完成额预测加已完成额不得超过总合同额，以及合同额核减后的提交阻断。 |
+| `test/negative-completion-remark-validation.test.js` | ✅ Node 测试 | 覆盖历史月允许负值、当前月负值备注必填、未来月预测禁止负值。 |
 | `test/project-drawer-layout.test.js` | ✅ Node 测试 | 覆盖项目详情 Drawer 合同完成率、未来预测汇总及业务 Tab 字段映射。 |
 | `test/luckysheet-xlsx-export.test.js` | ✅ Node 测试 | 覆盖 Luckysheet 单元格 → SheetJS 映射与 `colhidden` 列过滤。 |
 | `test/report-line-my-status.test.js` | ✅ Node 测试 | 覆盖填报管理「我的状态」：PM 三态、管理员、总监/群主四态、系统管理员 —。 |
+| `test/report-line-finalizing.test.js` | ✅ Node 测试 | 覆盖报告线 `finalizing`（核对归档中）：截止完结、审批通过、禁写、主表同步、归档封账。 |
 
 ### `docs/` 文档（已整理）
 
@@ -219,6 +225,7 @@ npm run sync:fields
 | `docs/设计文档/DASHBOARD.md` | 📊 看板规范（归档） | 原数据看板设计参考；**当前版本已移除看板页**，运营看板另立项目。 |
 | `docs/设计文档/EMAIL_REMINDER.md` | 📧 邮件提醒设计 | 邮件提醒功能设计文档：SMTP 集成、定时任务、邮件模板、审计集成、配置扩展。 |
 | `docs/设计文档/LUCKYSHEET_XLSX_EXPORT.md` | 📥 LS 导出开发说明 | Luckysheet 视图 WYSIWYG 导出 Excel：架构、文件清单、API、扩展与验收 |
+| `docs/设计文档/LUCKYSHEET_SUBTOTAL_FILTER_PATCH.md` | 🔧 LS 筛选补丁 | 筛选后小计 `SUBTOTAL` 重算 + 方向键跳过隐藏行：问题、架构、API、接入点、验收 |
 | **技术调研/** | 🔬 | 技术选型、第三方组件能力与迁移评估 |
 | `docs/技术调研/Univer官方能力与许可调研.md` | 🔬 官方能力调研 | 基于 Univer 官方资料核对免费 OSS、Pro、许可限制与关键功能边界。 |
 | `docs/技术调研/Luckysheet迁移Univer评估.md` | 🔬 迁移评估 | 对照当前项目与 Univer 测试副本，梳理替换影响面、免费版可行性、实施路径与工作量。 |
@@ -320,7 +327,7 @@ npm run sync:fields
 ```
 docs/
 ├── 需求文档/          需求文档（开发版/产品版）、技术规范、待确认项、字段字典备份、方案 pptx
-├── 设计文档/          DESIGN（设计系统）、LIST_FORM、DASHBOARD
+├── 设计文档/          DESIGN、LIST_FORM、DASHBOARD、EMAIL_REMINDER、LUCKYSHEET_XLSX_EXPORT、LUCKYSHEET_SUBTOTAL_FILTER_PATCH
 ├── 技术调研/          Univer 官方能力、许可边界与 Luckysheet 迁移评估
 ├── 培训材料/          培训讲师手册与“平台为什么上线”培训单页
 └── 会议记录/          产值报告线上化讨论精修版

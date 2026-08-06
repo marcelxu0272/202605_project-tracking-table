@@ -1,6 +1,6 @@
 /**
- * AlertsDrawer.js — 系统管理员项目预警总览抽屉
- * 展示全部项目的 4 类预警（持久化），支持搜索、筛选、分页
+ * AlertsDrawer.js — 项目预警总览抽屉
+ * 全角色可查看；忽略/撤回仅系统管理员（canDismiss）
  */
 (function (window) {
   'use strict';
@@ -9,7 +9,9 @@
     name: 'AlertsDrawer',
     props: {
       visible:  { type: Boolean, default: false },
-      monthIdx: { type: Number, required: true }
+      monthIdx: { type: Number, required: true },
+      /** 仅系统管理员可忽略/撤回 */
+      canDismiss: { type: Boolean, default: false }
     },
     data: function () {
       return {
@@ -19,7 +21,7 @@
         searchQuery: '',
         typeFilter: '',
         sectorFilter: '',
-        statusFilter: 'active',
+        statusFilter: '',
         currentPage: 1,
         pageSize: 20,
         alertTypeOptions: [
@@ -29,10 +31,9 @@
           { value: 'hours_no_completion',     label: '有工时无完成额' }
         ],
         statusOptions: [
+          { value: '',          label: '全部' },
           { value: 'active',    label: '活跃' },
-          { value: 'resolved',  label: '已消除' },
-          { value: 'dismissed', label: '已忽略' },
-          { value: '',          label: '全部' }
+          { value: 'dismissed', label: '已忽略' }
         ]
       };
     },
@@ -113,7 +114,7 @@
         this.searchQuery = '';
         this.typeFilter = '';
         this.sectorFilter = '';
-        this.statusFilter = 'active';
+        this.statusFilter = '';
         this.currentPage = 1;
       },
       handleSearch: function () { this.currentPage = 1; },
@@ -123,20 +124,52 @@
         this.$emit('open-project', alert.projectNo);
       },
       handleDismiss: function (alert, event) {
+        if (!this.canDismiss) return;
         if (event) event.stopPropagation();
         var self = this;
         this.$confirm(
-          '确定要永久忽略此预警吗？忽略后，该项目的此类预警将不再出现在任何月份的预警列表中。此操作不可撤销。',
-          '永久忽略预警',
+          '确定要忽略此预警吗？忽略后，该项目的此类预警将不再出现在活跃列表中（跨月生效）。可在「已忽略」筛选中撤回。',
+          '忽略预警',
           { confirmButtonText: '确认忽略', cancelButtonText: '取消', type: 'warning' }
         ).then(function () {
           return fetch('/api/admin/alerts/' + alert.id + '/dismiss', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ dismissedBy: (window.Store && Store.user && Store.user.role) || 'system_admin' })
+            body: JSON.stringify({
+              dismissedBy: (window.Store && Store.currentUser && Store.currentUser.role) || 'system_admin',
+              role: (window.Store && Store.currentUser && Store.currentUser.role) || ''
+            })
           }).then(function (r) { return r.json(); }).then(function (d) {
             if (!d.ok) throw new Error(d.error || '操作失败');
-            self.$message.success('已永久忽略');
+            self.$message.success('已忽略，可在「已忽略」中撤回');
+            self.fetchAlerts();
+          });
+        }).catch(function (e) {
+          if (e !== 'cancel' && e !== 'close') {
+            self.$message.error('操作失败：' + (e.message || e));
+          }
+        });
+      },
+      handleUndismiss: function (alert, event) {
+        if (!this.canDismiss) return;
+        if (event) event.stopPropagation();
+        var self = this;
+        this.$confirm(
+          '确定撤回忽略吗？若预警条件仍满足，将重新出现在活跃列表中；若条件已不满足，该记录将直接移除。',
+          '撤回忽略',
+          { confirmButtonText: '确认撤回', cancelButtonText: '取消', type: 'info' }
+        ).then(function () {
+          return fetch('/api/admin/alerts/' + alert.id + '/undismiss', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              undoneBy: (window.Store && Store.currentUser && Store.currentUser.role) || 'system_admin',
+              role: (window.Store && Store.currentUser && Store.currentUser.role) || ''
+            })
+          }).then(function (r) { return r.json(); }).then(function (d) {
+            if (!d.ok) throw new Error(d.error || '操作失败');
+            self.$message.success('已撤回忽略');
+            self.statusFilter = '';
             self.fetchAlerts();
           });
         }).catch(function (e) {
@@ -157,16 +190,6 @@
       },
       isDangerType: function (alertType) {
         return alertType === 'invoice_stock_negative' || alertType === 'contract_stock_negative';
-      },
-      formatTime: function (isoStr) {
-        if (!isoStr) return '—';
-        try {
-          var d = new Date(isoStr);
-          if (isNaN(d.getTime())) return isoStr;
-          var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
-          return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
-            ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-        } catch (e) { return isoStr; }
       },
       handleClose: function () { this.$emit('close'); }
     },
@@ -193,7 +216,7 @@
       '        <el-option v-for="opt in sectorOptions" :key="opt.value" :label="opt.label" :value="opt.value"></el-option>',
       '      </el-select>',
       '      <el-select v-model="statusFilter" placeholder="状态" size="small" style="width:100px" @change="handleFilterChange">',
-      '        <el-option v-for="opt in statusOptions" :key="opt.value" :label="opt.label" :value="opt.value"></el-option>',
+      '        <el-option v-for="opt in statusOptions" :key="opt.label" :label="opt.label" :value="opt.value"></el-option>',
       '      </el-select>',
       '      <el-button size="small" @click="handleResetFilters">重置</el-button>',
       '    </div>',
@@ -203,7 +226,7 @@
       '      </span>',
       '    </div>',
       '    <div class="alerts-drawer-list" v-loading="loading">',
-      '      <div v-for="alert in pagedAlerts" :key="alert.id" class="alerts-card" :class="{ \'is-resolved\': alert.status === \'resolved\', \'is-dismissed\': alert.status === \'dismissed\' }" @click="handleCardClick(alert)">',
+      '      <div v-for="alert in pagedAlerts" :key="alert.id" class="alerts-card" :class="{ \'is-dismissed\': alert.status === \'dismissed\' }" @click="handleCardClick(alert)">',
       '        <div class="alerts-card-header">',
       '          <span :class="alertTypeTagClass(alert.alertType)"><i :class="alertIcon(alert.alertType)" style="margin-right:4px"></i>{{ alert.alertLabel }}</span>',
       '          <span class="alerts-card-sector">{{ alert.sectorCode }} {{ alert.sectorName }}</span>',
@@ -213,13 +236,13 @@
       '          <div class="alerts-card-detail">{{ alert.detail }}</div>',
       '        </div>',
       '        <div class="alerts-card-footer">',
-      '          <span class="alerts-card-time">首次检测：{{ formatTime(alert.firstDetectedAt) }}</span>',
-      '          <span class="alerts-card-actions" v-if="alert.status === \'active\'">',
+      '          <span class="alerts-card-actions" v-if="alert.status === \'active\' && canDismiss">',
       '            <el-button size="mini" type="info" plain @click.stop="handleDismiss(alert, $event)">忽略</el-button>',
-      '            <span class="alerts-card-action" style="margin-left:8px">点击查看项目详情 →</span>',
       '          </span>',
-      '          <span class="alerts-card-action alerts-card-action--dismissed" v-else-if="alert.status === \'dismissed\'">已忽略（永久）</span>',
-      '          <span class="alerts-card-action alerts-card-action--resolved" v-else>已消除</span>',
+      '          <span class="alerts-card-actions" v-else-if="alert.status === \'dismissed\'">',
+      '            <span class="alerts-card-action alerts-card-action--dismissed">已忽略</span>',
+      '            <el-button v-if="canDismiss" size="mini" type="primary" plain @click.stop="handleUndismiss(alert, $event)">撤回</el-button>',
+      '          </span>',
       '        </div>',
       '      </div>',
       '      <div class="alerts-drawer-empty" v-if="!loading && pagedAlerts.length === 0">',

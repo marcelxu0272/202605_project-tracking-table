@@ -38,7 +38,8 @@
       formatValue: { type: Function, required: true },
       stockWarningField: { type: Function, default: null },
       navIndex: { type: Number, default: -1 },
-      navTotal: { type: Number, default: 0 }
+      navTotal: { type: Number, default: 0 },
+      focusTarget: { type: Object, default: null }
     },
     data: function () {
       return {
@@ -52,13 +53,15 @@
         completionAuxVisible: false,
         completionAuxBlurTimer: null,
         numFocusKey: null,
-        activeTab: 'forecast'
+        monthInputFocusOldVal: null,
+        activeTab: 'forecast',
+        remarkGuideActive: false
       };
     },
     computed: {
       layout: function () {
         if (!this.project || !window.ProjectDrawerLayout) {
-          return { summaryFields: [], baselineFields: [], editableSections: [], readonlySections: [], tabs: { forecast: [], status: [], wip: [], extended: [] } };
+          return { summaryFields: [], baselineFields: [], progressFields: [], editableSections: [], readonlySections: [], tabs: { forecast: [], wip: [] } };
         }
         var self = this;
         return ProjectDrawerLayout.buildTabLayout(
@@ -82,27 +85,26 @@
           return f.col !== 'F' && f.col !== 'G';
         });
       },
-      headerTagFields: function () {
-        return this.headerSummaryFields.filter(function (f) {
-          return f.col === 'A' || f.col === 'I' || f.col === 'J' || f.col === 'K';
-        });
-      },
-      headerClientField: function () {
-        var list = this.headerSummaryFields;
-        for (var i = 0; i < list.length; i++) {
-          if (list[i].col === 'H') return list[i];
-        }
-        return null;
+      /** 左侧「项目基准」字段行：项目号/名称 + 客户/PM/执行单位/业务类型 */
+      baselineIdentityFields: function () {
+        var summary = this.layout.summaryFields || [];
+        var order = ['F', 'G', 'H', 'E', 'D', 'K'];
+        return order.map(function (col) {
+          for (var i = 0; i < summary.length; i++) {
+            if (summary[i].col === col) return summary[i];
+          }
+          return null;
+        }).filter(Boolean);
       },
       headerStartField: function () {
-        var list = this.headerSummaryFields;
+        var list = this.layout.summaryFields || [];
         for (var i = 0; i < list.length; i++) {
           if (list[i].col === 'B') return list[i];
         }
         return null;
       },
       headerEndField: function () {
-        var list = this.headerSummaryFields;
+        var list = this.layout.summaryFields || [];
         for (var i = 0; i < list.length; i++) {
           if (list[i].col === 'C') return list[i];
         }
@@ -116,17 +118,6 @@
         if (!s && !e) return '';
         if (s && e) return s + ' ~ ' + e;
         return s || e;
-      },
-      headerMetaItems: function () {
-        var self = this;
-        var order = ['E', 'D'];
-        return order.map(function (col) {
-          var list = self.headerSummaryFields;
-          for (var i = 0; i < list.length; i++) {
-            if (list[i].col === col) return list[i];
-          }
-          return null;
-        }).filter(Boolean);
       },
       showSave: function () {
         // 右下角始终展示「保存」；不可编辑时按钮 disabled
@@ -194,20 +185,16 @@
       forecastSections: function () {
         return this.layout.tabs.forecast || [];
       },
-      statusSections: function () {
-        return this.layout.tabs.status || [];
-      },
       wipSections: function () {
         return this.layout.tabs.wip || [];
       },
       formTabs: function () {
         return [
-          { name: 'status', label: '项目状态', sections: this.statusSections },
           { name: 'wip', label: 'WIP 分析', sections: this.wipSections }
         ];
       },
-      extendedSections: function () {
-        return this.layout.tabs.extended || [];
+      progressFields: function () {
+        return this.layout.progressFields || [];
       },
       forecastMonthly: function () {
         var merged = { completion: [], invoice: [], payment: [] };
@@ -230,6 +217,19 @@
             payment: self.fieldAtMonth(self.forecastMonthly, 'payment', monthIndex)
           };
         });
+      },
+      remarkField: function () {
+        var tabs = this.layout && this.layout.tabs ? this.layout.tabs : {};
+        var sections = []
+          .concat(tabs.forecast || [])
+          .concat(tabs.wip || []);
+        for (var i = 0; i < sections.length; i++) {
+          var fields = sections[i].fields || [];
+          for (var j = 0; j < fields.length; j++) {
+            if (fields[j] && fields[j].col === 'CF') return fields[j];
+          }
+        }
+        return null;
       }
     },
     watch: {
@@ -237,6 +237,9 @@
         if (v) {
           this.resetDraft();
           this.fetchTimesheetStats();
+          this.$nextTick(function () {
+            this.applyFocusTarget();
+          }.bind(this));
         } else {
           this.timesheetStats = null;
           this.timesheetLoading = false;
@@ -247,6 +250,7 @@
             this.completionAuxBlurTimer = null;
           }
           this.numFocusKey = null;
+          this.remarkGuideActive = false;
         }
       },
       project: function () {
@@ -254,6 +258,12 @@
           this.resetDraft();
           this.fetchTimesheetStats();
         }
+      },
+      focusTarget: function () {
+        if (!this.visible) return;
+        this.$nextTick(function () {
+          this.applyFocusTarget();
+        }.bind(this));
       },
       systemYear: function () {
         if (this.visible && this.projectTitle) this.fetchTimesheetStats();
@@ -269,6 +279,7 @@
         this.activeTab = 'forecast';
         this.expandAllCollapseSections();
         this.numFocusKey = null;
+        this.remarkGuideActive = false;
       },
       /** 各折叠分区一律默认展开（含 WIP，不再因 WIP=0 自动收起） */
       expandAllCollapseSections: function () {
@@ -331,11 +342,44 @@
       },
       onMonthNumInputFocus: function (field, showAux) {
         this.onNumInputFocus(field);
+        var key = this.draftKey(field);
+        this.monthInputFocusOldVal = key != null ? this.draft[key] : null;
         if (showAux) this.showCompletionAux();
       },
       onMonthNumInputBlur: function (field, hideAux) {
         this.onNumInputBlur(field);
         if (hideAux) this.hideCompletionAuxSoon();
+        this.tryGuideRemarkForNegativeCurrentCompletion(field);
+        this.monthInputFocusOldVal = null;
+      },
+      applyFocusTarget: function () {
+        if (!this.focusTarget || !this.focusTarget.col) return;
+        if (this.focusTarget.col !== 'CF') return;
+        this.focusRemarkInput(true);
+      },
+      focusRemarkInput: function (guided) {
+        var self = this;
+        this.activeTab = 'forecast';
+        this.$nextTick(function () {
+          var el = self.$refs.remarkInput;
+          if (Array.isArray(el)) el = el[0];
+          if (el && typeof el.focus === 'function') el.focus();
+          if (guided) {
+            self.remarkGuideActive = true;
+            self.$message.warning('当前月份完成合同额为负，请填写备注说明。');
+          }
+        });
+      },
+      tryGuideRemarkForNegativeCurrentCompletion: function (field) {
+        if (!field || !window.StockValidation || !this.remarkField) return;
+        var key = this.draftKey(field);
+        if (key == null) return;
+        var oldVal = this.monthInputFocusOldVal;
+        var newVal = this.draft[key];
+        if (!StockValidation.shouldGuideNegativeRemark(oldVal, newVal, field, this.monthIdx)) {
+          return;
+        }
+        this.focusRemarkInput(true);
       },
       draftKey: function (field) {
         return FieldConfig.COL_TO_KEY[field.col];
@@ -1004,11 +1048,14 @@
               <section class="drawer-baseline-card drawer-baseline-card--identity">
                 <div class="drawer-baseline-card-title">项目基准</div>
                 <dl class="drawer-baseline-meta">
-                  <div v-if="headerClientField" class="drawer-baseline-meta-row drawer-baseline-meta-row--client">
-                    <dt>{{ headerClientField.name_cn }}</dt>
-                    <dd>{{ formatReadonly(headerClientField) }}</dd>
-                  </div>
-                  <div v-for="field in headerMetaItems" :key="'base-meta-' + field.col" class="drawer-baseline-meta-row">
+                  <div
+                    v-for="field in baselineIdentityFields"
+                    :key="'base-meta-' + field.col"
+                    class="drawer-baseline-meta-row"
+                    :class="{
+                      'drawer-baseline-meta-row--title': field.col === 'F' || field.col === 'G'
+                    }"
+                  >
                     <dt>{{ field.name_cn }}</dt>
                     <dd>{{ formatHeaderMetaValue(field) }}</dd>
                   </div>
@@ -1017,14 +1064,6 @@
                     <dd>{{ headerDateRange }}</dd>
                   </div>
                 </dl>
-                <div v-if="headerTagFields.length" class="drawer-baseline-tags">
-                  <span
-                    v-for="field in headerTagFields"
-                    :key="'base-tag-' + field.col"
-                    class="drawer-baseline-tag"
-                    :class="headerTagClass(field)"
-                  >{{ formatReadonly(field) }}</span>
-                </div>
               </section>
 
               <section
@@ -1049,13 +1088,51 @@
               </section>
 
               <section class="drawer-baseline-card">
-                <div class="drawer-baseline-card-title">合同与存量指标</div>
+                <div class="drawer-baseline-card-title">WIP与应收账款</div>
                 <dl class="drawer-baseline-metrics">
                   <div v-for="field in layout.baselineFields" :key="'base-field-' + field.col">
                     <dt>{{ field.name_cn }}</dt>
                     <dd :class="{ 'drawer-stock-warn': isStockWarning(field) }">{{ formatReadonly(field) }}</dd>
                   </div>
                 </dl>
+              </section>
+
+              <section v-if="progressFields.length" class="drawer-baseline-card drawer-baseline-card--progress">
+                <div class="drawer-baseline-card-title">项目实施进展</div>
+                <div class="drawer-baseline-progress-list">
+                  <div
+                    v-for="field in progressFields"
+                    :key="'progress-' + field.col"
+                    class="drawer-baseline-progress-row"
+                    :class="{ 'is-editable': isEditableField(field) }"
+                  >
+                    <div class="drawer-baseline-progress-control">
+                      <el-select
+                        v-if="isEditableField(field) && widgetType(field) === 'enum'"
+                        :value="draftVal(field)"
+                        size="small"
+                        filterable
+                        class="drawer-field-input"
+                        @input="setDraftVal(field, $event)"
+                      >
+                        <el-option
+                          v-for="opt in field.enum_values"
+                          :key="opt"
+                          :label="opt"
+                          :value="opt"
+                        ></el-option>
+                      </el-select>
+                      <el-input
+                        v-else-if="isEditableField(field)"
+                        :value="draftVal(field)"
+                        size="small"
+                        class="drawer-field-input"
+                        @input="setDraftVal(field, $event)"
+                      ></el-input>
+                      <span v-else class="drawer-baseline-progress-readonly">{{ formatReadonly(field) }}</span>
+                    </div>
+                  </div>
+                </div>
               </section>
             </aside>
 
@@ -1066,6 +1143,10 @@
                     <div class="drawer-forecast-kpi-row">
                       <article v-for="kpi in drawerMetrics.kpis" :key="kpi.key" class="drawer-forecast-kpi">
                         <span class="drawer-forecast-kpi-name">{{ kpi.label }}</span>
+                        <div class="drawer-forecast-kpi-prev">
+                          <span>截止上年</span>
+                          <strong>{{ formatBaselineAmount(kpi.prevYear) }}</strong>
+                        </div>
                         <div class="drawer-forecast-kpi-main">
                           <span>当年累计</span>
                           <strong>{{ formatBaselineAmount(kpi.actual) }}</strong>
@@ -1098,7 +1179,7 @@
                       <div class="drawer-month-matrix-scroll">
                       <table class="drawer-month-matrix">
                         <thead>
-                          <tr><th>月</th><th>完成合同额</th><th>开票</th><th>回款</th></tr>
+                          <tr><th>月</th><th>完成合同额</th><th>完成开票额</th><th>完成回款额</th></tr>
                         </thead>
                         <tbody>
                           <tr v-for="row in monthMatrixRows" :key="'matrix-' + row.monthIndex" :class="{ 'is-report-row': row.monthIndex === monthIdx }">
@@ -1131,6 +1212,7 @@
                                       :value="formatNumInputDisplay(row[kind])"
                                       size="mini"
                                       class="drawer-month-input"
+                                    :data-drawer-field-col="row[kind].col"
                                       @focus="onMonthNumInputFocus(row[kind], true)"
                                       @blur="onMonthNumInputBlur(row[kind], true)"
                                       @input="onNumInputInput(row[kind], $event)"
@@ -1149,6 +1231,7 @@
                                     :value="formatNumInputDisplay(row[kind])"
                                     size="mini"
                                     class="drawer-month-input"
+                                    :data-drawer-field-col="row[kind].col"
                                     @focus="onNumInputFocus(row[kind])"
                                     @blur="onNumInputBlur(row[kind])"
                                     @input="onNumInputInput(row[kind], $event)"
@@ -1169,6 +1252,20 @@
                         <span><i class="is-current"></i>当前月·完成合同额</span>
                         <span><i class="is-forecast"></i>未来预测</span>
                       </div>
+
+                    </div>
+                    <div v-if="remarkField" class="drawer-remark-box" :class="{ 'is-guided': remarkGuideActive }">
+                      <label class="drawer-remark-box__label">{{ remarkField.name_cn }}</label>
+                      <el-input
+                        ref="remarkInput"
+                        type="textarea"
+                        :rows="2"
+                        :value="draftVal(remarkField)"
+                        class="drawer-remark-box__input"
+                        placeholder="当前月份完成合同额为负时，请填写备注说明。"
+                        @focus="remarkGuideActive = false"
+                        @input="setDraftVal(remarkField, $event)"
+                      ></el-input>
                     </div>
                   </div>
                 </el-tab-pane>
@@ -1231,19 +1328,6 @@
                         :project-no="projectTitle"
                         :year="systemYear"
                       ></project-cost-aux>
-                    </section>
-                  </div>
-                </el-tab-pane>
-
-                <el-tab-pane label="延伸数据" name="extended">
-                  <div class="drawer-tab-panel">
-                    <section v-for="section in extendedSections" :key="'extended-' + section.name" class="drawer-tab-section">
-                      <div class="drawer-tab-section-title"><i :class="sectionIcon(section.name)"></i><span>{{ section.name }}</span></div>
-                      <el-descriptions v-if="section.fields.length" :column="3" size="small" border class="project-drawer-desc">
-                        <el-descriptions-item v-for="field in section.fields" :key="'extended-field-' + field.col" :label="field.name_cn">
-                          <span :class="{ 'drawer-stock-warn': isStockWarning(field) }">{{ formatReadonly(field) }}</span>
-                        </el-descriptions-item>
-                      </el-descriptions>
                     </section>
                   </div>
                 </el-tab-pane>

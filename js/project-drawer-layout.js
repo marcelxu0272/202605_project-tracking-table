@@ -19,19 +19,19 @@
   var MI_SET = new Set(['BH', 'BJ', 'BL', 'BN', 'BP', 'BR', 'BT', 'BV', 'BX', 'BZ', 'CB', 'CD']);
   var MP_SET = new Set(['BI', 'BK', 'BM', 'BO', 'BQ', 'BS', 'BU', 'BW', 'BY', 'CA', 'CC', 'CE']);
   var MONTH_MATRIX_KINDS = ['completion', 'invoice', 'payment'];
-  var BASELINE_METRIC_COLS = ['S', 'R', 'AL', 'AJ'];
+  var BASELINE_METRIC_COLS = ['AL', 'AJ'];
   /** 抽屉左侧指标精简展示名（不改字段字典全局 name_cn） */
   var BASELINE_METRIC_LABELS = {
     AL: 'WIP',
     AJ: '应收账款'
   };
-  /** 左侧进度卡已展示，延伸数据不再重复 */
+  /** 左侧「WIP与应收账款」下方展示的项目实施进展字段 */
+  var LEFT_PROGRESS_COLS = ['M'];
+  /** 左侧进度卡已展示，延伸数据不再重复（延伸 Tab 已移除，仍保留去重集合供布局复用） */
   var RATE_CARD_METRIC_COLS = ['P', 'U', 'AC', 'AF'];
   var DRAWER_TAB_CONFIG = {
     forecast: ['年度完成额申报', '完成额统计与预测', '开票与回款统计预测'],
-    status: ['合同签署与进展'],
-    wip: ['WIP分析与措施'],
-    extended: ['合同额', '存量指标', '始累完成合同额', '开票回款情况', '财务数据（WIP/应收）', '应收账款及WIP']
+    wip: ['WIP分析与措施']
   };
 
   function isMonthlyCol(col) {
@@ -162,7 +162,9 @@
   function buildTabLayout(tableFields, canEditFn) {
     var base = buildDrawerLayout(tableFields, canEditFn);
     var sections = fieldsBySection(tableFields);
-    var usedBaselineCols = new Set(BASELINE_METRIC_COLS.concat(RATE_CARD_METRIC_COLS));
+    var usedLeftCols = new Set(
+      BASELINE_METRIC_COLS.concat(RATE_CARD_METRIC_COLS).concat(LEFT_PROGRESS_COLS)
+    );
     var baselineFields = BASELINE_METRIC_COLS.map(function (col) {
       for (var i = 0; i < tableFields.length; i++) {
         if (tableFields[i].col !== col) continue;
@@ -172,12 +174,18 @@
       }
       return null;
     }).filter(Boolean);
+    var progressFields = LEFT_PROGRESS_COLS.map(function (col) {
+      for (var i = 0; i < tableFields.length; i++) {
+        if (tableFields[i].col === col) return tableFields[i];
+      }
+      return null;
+    }).filter(Boolean);
     var tabs = {};
 
     Object.keys(DRAWER_TAB_CONFIG).forEach(function (tabName) {
       tabs[tabName] = DRAWER_TAB_CONFIG[tabName].map(function (sectionName) {
         var fields = (sections[sectionName] || []).filter(function (field) {
-          return tabName !== 'extended' || !usedBaselineCols.has(field.col);
+          return !usedLeftCols.has(field.col);
         });
         return buildTabSection(sectionName, fields, canEditFn);
       }).filter(function (section) {
@@ -188,6 +196,7 @@
     return {
       summaryFields: base.summaryFields,
       baselineFields: baselineFields,
+      progressFields: progressFields,
       editableSections: base.editableSections,
       readonlySections: base.readonlySections,
       tabs: tabs
@@ -279,20 +288,23 @@
         {
           key: 'completion',
           label: '完成合同额',
+          prevYear: prevCompletion,
           actual: ytdCompletion,
           forecast: forecastCompletion,
           remaining: totalContract - prevCompletion - ytdCompletion - forecastCompletion
         },
         {
           key: 'invoice',
-          label: '开票',
+          label: '完成开票额',
+          prevYear: prevInvoice,
           actual: ytdInvoice,
           forecast: forecastInvoice,
           remaining: totalContract - prevInvoice - ytdInvoice - forecastInvoice
         },
         {
           key: 'payment',
-          label: '回款',
+          label: '完成回款额',
+          prevYear: prevPayment,
           actual: ytdPayment,
           forecast: forecastPayment,
           remaining: totalContract - prevPayment - ytdPayment - forecastPayment
@@ -328,6 +340,7 @@
     DRAWER_TAB_CONFIG: DRAWER_TAB_CONFIG,
     BASELINE_METRIC_COLS: BASELINE_METRIC_COLS,
     BASELINE_METRIC_LABELS: BASELINE_METRIC_LABELS,
+    LEFT_PROGRESS_COLS: LEFT_PROGRESS_COLS,
     RATE_CARD_METRIC_COLS: RATE_CARD_METRIC_COLS,
     MONTH_MATRIX_KINDS: MONTH_MATRIX_KINDS,
     collectDrawerChanges: collectDrawerChanges,

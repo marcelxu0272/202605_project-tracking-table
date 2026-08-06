@@ -1,4 +1,4 @@
-# Luckysheet 视图导出 Excel — 开发说明
+﻿# Luckysheet 视图导出 Excel — 开发说明
 
 > **最后更新：** 2026-07-13  
 > **适用页面：** 项目追踪表（`ProjectEditor`）、继承其模板的填报管理详情（`ReportLineDetail` 的前端导出若改走客户端时）
@@ -122,8 +122,8 @@ Luckysheet 单元格字段映射：
 
 ### 5.5 文件名规则
 
-`buildExportFilename()`：`项目追踪表_{报告月}_{YYYYMMDD_HHMMSS}.xlsx`  
-快照下载：`项目执行追踪_{快照label}.xlsx`
+`buildExportFilename()`：`查看数据_{报告月}_{YYYYMMDD_HHMMSS}.xlsx`  
+快照下载：`项目执行跟踪_{快照label}.xlsx`
 
 ---
 
@@ -441,7 +441,7 @@ npm start
             const snap = Store.snapshots[this.viewingVersion];
             const reportingMonth = (snap && snap.reportingMonth) || Store.reportingMonth;
             const label = (snap && snap.label) || this.viewingVersion;
-            const filename = '项目执行追踪_' + label + '.xlsx';
+            const filename = '项目执行跟踪_' + label + '.xlsx';
             XlsxImporter.exportToXlsx(this.snapshotProjects, reportingMonth, filename);
             this.$message.success('导出成功');
           } catch (e) {
@@ -457,7 +457,7 @@ npm start
 ```javascript
       buildExportFilename(suffix) {
         var month = Store.reportingMonth || '2026-05';
-        if (suffix) return '项目执行追踪_' + suffix + '.xlsx';
+        if (suffix) return '项目执行跟踪_' + suffix + '.xlsx';
         var now = new Date();
         var pad = function (n) { return String(n).padStart(2, '0'); };
         var stamp = now.getFullYear()
@@ -466,7 +466,7 @@ npm start
           + pad(now.getHours())
           + pad(now.getMinutes())
           + pad(now.getSeconds());
-        return '项目追踪表_' + month + '_' + stamp + '.xlsx';
+        return '查看数据_' + month + '_' + stamp + '.xlsx';
       },
 
       /** 从当前 Luckysheet 视图导出（与屏幕所见一致：结构/样式/公式/格式） */
@@ -497,7 +497,7 @@ npm start
           rowEnd: rowEnd,
           colStart: 0,
           colEnd: colEnd,
-          sheetName: (file.name || Store.reportingMonth || '项目执行追踪').slice(0, 31),
+          sheetName: (file.name || Store.reportingMonth || '项目执行跟踪').slice(0, 31),
           filename: filename || this.buildExportFilename()
         });
       },
@@ -524,7 +524,7 @@ npm start
           rowEnd: Math.max(lay.header, lay.dataEnd),
           colStart: 0,
           colEnd: cols - 1,
-          sheetName: (Store.reportingMonth || '项目执行追踪').slice(0, 31),
+          sheetName: (Store.reportingMonth || '项目执行跟踪').slice(0, 31),
           filename: filename || this.buildExportFilename()
         });
       },
@@ -550,7 +550,7 @@ npm start
           try {
             var snap = Store.snapshots[self.viewingVersion];
             var label = (snap && snap.label) || self.viewingVersion;
-            var filename = '项目执行追踪_' + label + '.xlsx';
+            var filename = '项目执行跟踪_' + label + '.xlsx';
             self.exportCurrentLuckysheetView(filename);
             self.$message.success('导出成功');
           } catch (e) {
@@ -618,7 +618,7 @@ npm start
     const ws = XLSX.utils.aoa_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, reportingMonth || '2026-05');
-    XLSX.writeFile(wb, filename || ('项目执行追踪_' + (reportingMonth || '2026-05') + '.xlsx'));
+    XLSX.writeFile(wb, filename || ('项目执行跟踪_' + (reportingMonth || '2026-05') + '.xlsx'));
   }
 
   window.XlsxImporter = { importFromFile, exportToXlsx };
@@ -705,7 +705,7 @@ describe('luckysheet-xlsx-export', function () {
 ```markdown
 - **导出范围：** 当前 Luckysheet 视图（受角色权限、视图筛选、紧凑列隐藏影响）
 - **导出格式：** 含小计/合计/分区/表头/数据行，保留千分位、日期格式、Excel 公式、单元格背景色
-- **文件名：** `项目追踪表_{报告月}_{YYYYMMDD_HHMMSS}.xlsx`
+- **文件名：** `查看数据_{报告月}_{YYYYMMDD_HHMMSS}.xlsx`
 ```
 
 ---

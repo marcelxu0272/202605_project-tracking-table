@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>项目执行追踪平台</title>
+  <title>项目执行跟踪平台</title>
 
   <!-- Tailwind CSS (Play CDN) -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -63,6 +63,9 @@
   <!-- Luckysheet JS -->
   <script src="https://cdn.jsdelivr.net/npm/luckysheet@2.1.13/dist/plugins/js/plugin.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/luckysheet@2.1.13/dist/luckysheet.umd.js"></script>
+  <!-- Luckysheet 补丁：SUBTOTAL 识别筛选隐藏行；方向键跳过隐藏行 -->
+  <script src="./js/luckysheet-subtotal-patch.js"></script>
+  <script src="./js/luckysheet-nav-skip-hidden.js"></script>
 
   <!-- SheetJS + 样式写入（xlsx-js-style，兼容 XLSX.read/write；导出保留背景色/公式/数字格式） -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>

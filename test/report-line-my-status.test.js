@@ -20,13 +20,15 @@ test('PM：open/rejected/无记录 → 待提交；submitted → 已提交；clo
   assert.equal(resolvePmMyStatus({ status: 'submitted' }).type, 'success');
 });
 
-test('板块管理员：待提交审批 / 已提交审批 / 已完成 / 已关闭', () => {
+test('板块管理员：待提交审批 / 已提交审批 / 核对归档中 / 已完成 / 已关闭', () => {
   assert.equal(resolveSectorAdminMyStatus('open').label, '待提交审批');
   assert.equal(resolveSectorAdminMyStatus('returned').label, '待提交审批');
   assert.equal(resolveSectorAdminMyStatus('rejected').label, '待提交审批');
   assert.equal(resolveSectorAdminMyStatus('reviewing_director').label, '已提交审批');
   assert.equal(resolveSectorAdminMyStatus('reviewing_leader').label, '已提交审批');
   assert.equal(resolveSectorAdminMyStatus('submitted').label, '已提交审批');
+  assert.equal(resolveSectorAdminMyStatus('finalizing').label, '核对归档中');
+  assert.equal(resolveSectorAdminMyStatus('finalizing').type, 'warning');
   assert.equal(resolveSectorAdminMyStatus('completed').label, '已完成');
   assert.equal(resolveSectorAdminMyStatus('closed').label, '已关闭');
 });
@@ -37,6 +39,7 @@ test('板块总监四态：等待中 / 待我审批 / 已审批 / 已关闭', ()
   assert.equal(resolveDirectorMyStatus('returned').label, '等待中');
   assert.equal(resolveDirectorMyStatus('reviewing_director').label, '待我审批');
   assert.equal(resolveDirectorMyStatus('reviewing_leader').label, '已审批');
+  assert.equal(resolveDirectorMyStatus('finalizing').label, '已审批');
   assert.equal(resolveDirectorMyStatus('completed').label, '已审批');
   assert.equal(resolveDirectorMyStatus('closed').label, '已关闭');
 });
@@ -45,6 +48,7 @@ test('项目群群主四态：等待中 / 待我审批 / 已审批 / 已关闭',
   assert.equal(resolveLeaderMyStatus('open').label, '等待中');
   assert.equal(resolveLeaderMyStatus('reviewing_director').label, '等待中');
   assert.equal(resolveLeaderMyStatus('reviewing_leader').label, '待我审批');
+  assert.equal(resolveLeaderMyStatus('finalizing').label, '已审批');
   assert.equal(resolveLeaderMyStatus('completed').label, '已审批');
   assert.equal(resolveLeaderMyStatus('closed').label, '已关闭');
 });

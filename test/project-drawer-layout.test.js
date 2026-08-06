@@ -74,10 +74,15 @@ test('computes drawer completion and future forecast metrics', () => {
   assert.equal(metrics.progressCards[2].amountLabel, '始累回款');
   assert.equal(metrics.progressCards[2].amount, 350);
   assert.equal(metrics.kpis[0].label, '完成合同额');
+  assert.equal(metrics.kpis[0].prevYear, 425);
   assert.equal(metrics.kpis[0].forecast, 70);
   assert.equal(metrics.kpis[0].remaining, 305);
+  assert.equal(metrics.kpis[1].label, '完成开票额');
+  assert.equal(metrics.kpis[1].prevYear, 300);
   assert.equal(metrics.kpis[1].forecast, 20);
   assert.equal(metrics.kpis[1].remaining, 530);
+  assert.equal(metrics.kpis[2].label, '完成回款额');
+  assert.equal(metrics.kpis[2].prevYear, 250);
   assert.equal(metrics.kpis[2].forecast, 10);
   assert.equal(metrics.kpis[2].remaining, 640);
 });
@@ -87,6 +92,7 @@ test('builds baseline metrics with drawer display labels and order', () => {
   const fields = [
     { col: 'S', section: '存量指标', name_cn: '存量合同额', data_type: '金额' },
     { col: 'R', section: '存量指标', name_cn: '存量开票额', data_type: '金额' },
+    { col: 'M', section: '合同签署与进展', name_cn: '项目实施进展', data_type: '分类', enum_values: ['进行中', '已完成'] },
     { col: 'AC', section: '开票回款情况', name_cn: '项目始累开票', data_type: '金额' },
     { col: 'AF', section: '开票回款情况', name_cn: '项目始累回款', data_type: '金额' },
     { col: 'AL', section: '应收账款及WIP', name_cn: 'WIP（催开票）', data_type: '金额' },
@@ -94,16 +100,18 @@ test('builds baseline metrics with drawer display labels and order', () => {
   ];
   const result = layout.buildTabLayout(fields, () => false);
 
-  assert.equal(result.baselineFields.length, 4);
-  assert.equal(result.baselineFields[0].col, 'S');
-  assert.equal(result.baselineFields[1].col, 'R');
-  assert.equal(result.baselineFields[2].col, 'AL');
-  assert.equal(result.baselineFields[2].name_cn, layout.BASELINE_METRIC_LABELS.AL);
-  assert.equal(result.baselineFields[3].col, 'AJ');
-  assert.equal(result.baselineFields[3].name_cn, layout.BASELINE_METRIC_LABELS.AJ);
+  assert.equal(result.baselineFields.length, 2);
+  assert.equal(result.baselineFields[0].col, 'AL');
+  assert.equal(result.baselineFields[0].name_cn, layout.BASELINE_METRIC_LABELS.AL);
+  assert.equal(result.baselineFields[1].col, 'AJ');
+  assert.equal(result.baselineFields[1].name_cn, layout.BASELINE_METRIC_LABELS.AJ);
+  assert.equal(result.progressFields.length, 1);
+  assert.equal(result.progressFields[0].col, 'M');
+  assert.equal(result.tabs.status, undefined);
+  assert.equal(result.tabs.extended, undefined);
 });
 
-test('maps monthly fields to forecast and removes baseline duplicates from extended data', () => {
+test('maps monthly fields to forecast without extended tab', () => {
   const layout = loadLayout();
   const fields = [
     { col: 'P', section: '合同额', data_type: '金额' },
@@ -114,13 +122,10 @@ test('maps monthly fields to forecast and removes baseline duplicates from exten
   ];
   const result = layout.buildTabLayout(fields, () => false);
 
-  assert.deepEqual(
-    Array.from(result.baselineFields, (field) => field.col),
-    ['S']
-  );
+  assert.equal(result.baselineFields.length, 0);
   assert.ok(layout.RATE_CARD_METRIC_COLS.indexOf('P') >= 0);
   assert.ok(layout.RATE_CARD_METRIC_COLS.indexOf('U') >= 0);
-  assert.equal(result.tabs.extended.length, 0);
+  assert.equal(result.tabs.extended, undefined);
   assert.equal(result.tabs.forecast[0].monthly.completion[0].col, 'AV');
   assert.equal(result.tabs.forecast[1].monthly.invoice[0].col, 'BH');
   assert.equal(result.tabs.forecast[1].monthly.payment[0].col, 'BI');

@@ -1096,5 +1096,18 @@
     "calc_logic": "",
     "enum_values": [],
     "description": "月度回款金额，手工填报。过去月份为历史数据，未来月份为预测数据。"
+  },
+  {
+    "id": 84,
+    "col": "CF",
+    "section": "完成额统计与预测",
+    "section_range": "CF–CF",
+    "name_cn": "备注",
+    "name_en": "Completion Remark",
+    "data_type": "文本",
+    "source_type": "manual_input",
+    "calc_logic": "",
+    "enum_values": [],
+    "description": "当当前月份完成合同额为负时，需填写备注说明原因。"
   }
 ]

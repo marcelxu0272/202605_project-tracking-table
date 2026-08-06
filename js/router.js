@@ -32,12 +32,12 @@
         {
           path: 'editor',
           component: window.ProjectEditorView,
-          meta: { requiresAuth: true, title: '项目追踪表' }
+          meta: { requiresAuth: true, title: '查看数据' }
         },
         {
           path: 'report-lines',
           component: window.ReportLineListView,
-          meta: { requiresAuth: true, title: '填报管理' }
+          meta: { requiresAuth: true, title: '填报与审批' }
         },
         {
           path: 'report-lines/:id',

@@ -6,6 +6,7 @@ const snapSvc = require('./snapshot-service');
 const XLSX = require('xlsx');
 const fieldDict = require('./fields/dictionary');
 const myStatus = require('./report-line-my-status');
+const completionValidation = require('./completion-negative-validation');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -73,7 +74,8 @@ const COL_TO_KEY = {
   BH: 'mi_0', BI: 'mp_0', BJ: 'mi_1', BK: 'mp_1', BL: 'mi_2', BM: 'mp_2',
   BN: 'mi_3', BO: 'mp_3', BP: 'mi_4', BQ: 'mp_4', BR: 'mi_5', BS: 'mp_5',
   BT: 'mi_6', BU: 'mp_6', BV: 'mi_7', BW: 'mp_7', BX: 'mi_8', BY: 'mp_8',
-  BZ: 'mi_9', CA: 'mp_9', CB: 'mi_10', CC: 'mp_10', CD: 'mi_11', CE: 'mp_11'
+  BZ: 'mi_9', CA: 'mp_9', CB: 'mi_10', CC: 'mp_10', CD: 'mi_11', CE: 'mp_11',
+  CF: 'completion_remark'
 };
 
 function getAuditFieldMap() {
@@ -206,6 +208,151 @@ function fail(status, message) {
   var err = new Error(message);
   err.status = status;
   throw err;
+}
+
+function resolveDb(opts) {
+  return (opts && opts.db) || dbm.getDb();
+}
+
+function isReadonlyReportLineStatus(status) {
+  return status === 'finalizing' || status === 'completed';
+}
+
+function getReportingMonth(db) {
+  return dbm.getMeta(db, 'reportingMonth', null)
+    || (dbm.getMeta(db, 'periodConfig', {}) || {}).reportingMonth
+    || null;
+}
+
+function loadAllProjects(db) {
+  return db.prepare('SELECT payload FROM projects').all().map(function (r) {
+    try { return JSON.parse(r.payload); } catch (e) { return null; }
+  }).filter(Boolean);
+}
+
+/**
+ * 覆盖报告线中已有项目的 field_data（不插入新项目号）。
+ * @returns {boolean} 是否写入
+ */
+function upsertExistingReportLineProject(db, line, project, updatedBy) {
+  if (!project || !project.project_no) return false;
+  var existing = db.prepare(
+    'SELECT id FROM report_line_data WHERE report_line_id = ? AND project_no = ?'
+  ).get(line.id, project.project_no);
+  if (!existing) return false;
+
+  var fieldData = Object.assign({}, project);
+  syncMonthlyFlatFields(fieldData);
+  var changeDiff = computeChangeDiff(db, line, project.project_no, fieldData);
+  var changeDiffJson = changeDiff ? JSON.stringify(changeDiff) : null;
+  db.prepare(
+    'UPDATE report_line_data SET field_data = ?, change_diff = ?, updated_by = ?, '
+    + 'updated_at = datetime(\'now\',\'localtime\') WHERE report_line_id = ? AND project_no = ?'
+  ).run(
+    JSON.stringify(fieldData),
+    changeDiffJson,
+    updatedBy || 'system_sync',
+    line.id,
+    project.project_no
+  );
+  return true;
+}
+
+/**
+ * 用主表项目覆盖报告线中已有同号项目（按板块过滤）。
+ * @returns {number} 更新行数
+ */
+function syncReportLineFromMain(db, line, allProjects, updatedBy) {
+  var projects = allProjects || loadAllProjects(db);
+  var sectorProjects = sectorProjectsAndPms(projects, line.sector_code).projects;
+  var byNo = {};
+  sectorProjects.forEach(function (p) {
+    if (p && p.project_no) byNo[p.project_no] = p;
+  });
+  var rows = db.prepare(
+    'SELECT project_no FROM report_line_data WHERE report_line_id = ?'
+  ).all(line.id);
+  var count = 0;
+  rows.forEach(function (row) {
+    var p = byNo[row.project_no];
+    if (!p) return;
+    if (upsertExistingReportLineProject(db, line, p, updatedBy)) count += 1;
+  });
+  db.prepare(
+    'UPDATE report_lines SET updated_at = datetime(\'now\',\'localtime\') WHERE id = ?'
+  ).run(line.id);
+  return count;
+}
+
+/** 主表单项目保存后：同步到当前报告月 finalizing 报告线 */
+function syncProjectToFinalizingReportLines(db, project) {
+  if (!project || !project.project_no) return { synced: 0 };
+  var period = getReportingMonth(db);
+  if (!period) return { synced: 0, period: null };
+  var projectSector = sw.projectSector(project);
+  var lines = db.prepare(
+    'SELECT * FROM report_lines WHERE period = ? AND status = ?'
+  ).all(period, 'finalizing');
+  var synced = 0;
+  lines.forEach(function (line) {
+    if (sw.normalizeSectorCode(line.sector_code) !== projectSector) return;
+    if (upsertExistingReportLineProject(db, line, project, 'main_save_sync')) {
+      synced += 1;
+      db.prepare(
+        'UPDATE report_lines SET updated_at = datetime(\'now\',\'localtime\') WHERE id = ?'
+      ).run(line.id);
+    }
+  });
+  return { synced: synced, period: period };
+}
+
+/** 主表全量替换后：批量同步到 finalizing 报告线 */
+function syncAllProjectsToFinalizingReportLines(db, projects) {
+  var period = getReportingMonth(db);
+  if (!period) return { syncedLines: 0, syncedProjects: 0, period: null };
+  var allProjects = projects || loadAllProjects(db);
+  var lines = db.prepare(
+    'SELECT * FROM report_lines WHERE period = ? AND status = ?'
+  ).all(period, 'finalizing');
+  var syncedProjects = 0;
+  lines.forEach(function (line) {
+    syncedProjects += syncReportLineFromMain(db, line, allProjects, 'main_save_sync');
+  });
+  return { syncedLines: lines.length, syncedProjects: syncedProjects, period: period };
+}
+
+/** 公司归档：finalizing → completed */
+function completeFinalizingReportLines(db, period, options) {
+  options = options || {};
+  var targetPeriod = period || getReportingMonth(db);
+  if (!targetPeriod) return { period: null, count: 0, completed: [] };
+  var lines = db.prepare(
+    'SELECT * FROM report_lines WHERE period = ? AND status = ? ORDER BY id ASC'
+  ).all(targetPeriod, 'finalizing');
+  var actorName = options.actorName || '系统管理员';
+  var completed = [];
+  var tx = db.transaction(function () {
+    lines.forEach(function (line) {
+      db.prepare(
+        'UPDATE report_lines SET status = ?, approval_node = NULL, updated_at = datetime(\'now\',\'localtime\') WHERE id = ?'
+      ).run('completed', line.id);
+      db.prepare(
+        'INSERT INTO report_line_approvals (report_line_id, action, actor_role, actor_name, comment, from_status, to_status) '
+        + 'VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).run(
+        line.id,
+        'archive_complete',
+        'system_admin',
+        actorName,
+        '公司归档，报告线同步完成归档',
+        'finalizing',
+        'completed'
+      );
+      completed.push({ id: line.id, sector_code: line.sector_code, from_status: 'finalizing', to_status: 'completed' });
+    });
+  });
+  tx();
+  return { period: targetPeriod, count: completed.length, completed: completed };
 }
 
 // ---------------------------------------------------------------------------
@@ -452,7 +599,7 @@ function forkPeriod(period, options) {
     timestamp: new Date().toISOString(),
     operation_type: 'report_line_fork',
     projectNo: '—',
-    projectName: '填报管理',
+    projectName: '填报与审批',
     fieldName: 'report_line_fork',
     fieldCN: '发起填报',
     oldVal: '—',
@@ -660,11 +807,14 @@ function getReportLineDetail(id) {
 // 4. saveData — 保存填报数据
 // ---------------------------------------------------------------------------
 
-function saveData(id, projectNo, fieldData, userName) {
-  var db = dbm.getDb();
+function saveData(id, projectNo, fieldData, userName, opts) {
+  var db = resolveDb(opts);
 
   var line = db.prepare('SELECT * FROM report_lines WHERE id = ?').get(id);
   if (!line) fail(404, '报告线不存在 (id=' + id + ')');
+  if (isReadonlyReportLineStatus(line.status)) {
+    fail(403, '报告线状态为「' + line.status + '」，不可再编辑');
+  }
 
   var existingData = {};
   var existingRow = db.prepare(
@@ -695,6 +845,16 @@ function saveData(id, projectNo, fieldData, userName) {
 
   var mergedFieldData = Object.assign({}, currentFieldData, incomingFieldData, { project_no: projectNo });
   syncMonthlyFlatFields(mergedFieldData);
+  var saveMonthIdx = completionValidation.monthIdxFromPeriod(line.period);
+  // save 模式：仅禁未来月负值；当前月负值无备注允许暂存
+  var saveCheck = completionValidation.validateProjectCompletionRules(
+    mergedFieldData,
+    saveMonthIdx,
+    { mode: 'save' }
+  );
+  if (!saveCheck.ok) {
+    fail(400, saveCheck.message);
+  }
 
   var auditChanges = [];
   Object.keys(incomingFieldData).forEach(function (key) {
@@ -783,8 +943,8 @@ function valuesEqual(a, b) {
  * @param {string|null} sectorCode - 若非 null 则同时检查板块归属
  * @returns {boolean}
  */
-function _userHasRoleAndSector(userName, role, sectorCode) {
-  var db = dbm.getDb();
+function _userHasRoleAndSector(userName, role, sectorCode, dbOverride) {
+  var db = dbOverride || dbm.getDb();
   var users = dbm.getMeta(db, 'users', dbm.DEFAULT_USERS) || [];
   var user = users.find(function (u) { return u.name === userName; });
   if (!user) return false;
@@ -821,6 +981,22 @@ function pmSubmit(id, pmName) {
   if (pmRow.status !== 'open' && pmRow.status !== 'rejected') {
     fail(400, 'PM 当前状态为 ' + pmRow.status + '，无法提交');
   }
+  var monthIdx = completionValidation.monthIdxFromPeriod(line.period);
+  var pmProjects = db.prepare(
+    'SELECT field_data FROM report_line_data WHERE report_line_id = ?'
+  ).all(id).map(function (row) {
+    try { return syncMonthlyFlatFields(JSON.parse(row.field_data)); } catch (e) { return {}; }
+  }).filter(function (p) {
+    return p.pm_name === pmName;
+  });
+  var pmCheck = completionValidation.validateProjectsCompletionRules(
+    pmProjects,
+    monthIdx,
+    { mode: 'submit' }
+  );
+  if (!pmCheck.ok) {
+    fail(400, pmCheck.message);
+  }
 
   var now = nowLocal();
   var fromPmStatus = pmRow.status;
@@ -855,6 +1031,20 @@ function submitApproval(id, sectorAdminName) {
 
   if (line.status !== 'open') {
     fail(400, '当前报告线状态为 ' + line.status + '，仅 open 状态可提交审批');
+  }
+  var monthIdx = completionValidation.monthIdxFromPeriod(line.period);
+  var lineProjects = db.prepare(
+    'SELECT field_data FROM report_line_data WHERE report_line_id = ?'
+  ).all(id).map(function (row) {
+    try { return syncMonthlyFlatFields(JSON.parse(row.field_data)); } catch (e) { return {}; }
+  });
+  var lineCheck = completionValidation.validateProjectsCompletionRules(
+    lineProjects,
+    monthIdx,
+    { mode: 'submit' }
+  );
+  if (!lineCheck.ok) {
+    fail(400, lineCheck.message);
   }
 
   var fromStatus = line.status;
@@ -915,8 +1105,8 @@ function submitApproval(id, sectorAdminName) {
 // 7. reviewApproval — 审批
 // ---------------------------------------------------------------------------
 
-function reviewApproval(id, action, reviewerRole, reviewerName, comment) {
-  var db = dbm.getDb();
+function reviewApproval(id, action, reviewerRole, reviewerName, comment, opts) {
+  var db = resolveDb(opts);
 
   var line = db.prepare('SELECT * FROM report_lines WHERE id = ?').get(id);
   if (!line) fail(404, '报告线不存在 (id=' + id + ')');
@@ -930,13 +1120,13 @@ function reviewApproval(id, action, reviewerRole, reviewerName, comment) {
       toStatus = 'reviewing_leader';
       approvalNode = 'leader';
       // 检查当前审批人(总监)是否同时兼任群主 → 跳过 leader 节点
-      var reviewerIsLeader = _userHasRoleAndSector(reviewerName, 'group_leader', null);
+      var reviewerIsLeader = _userHasRoleAndSector(reviewerName, 'group_leader', null, db);
       if (reviewerIsLeader) {
-        toStatus = 'completed';
+        toStatus = 'finalizing';
         approvalNode = null;
       }
     } else if (fromStatus === 'reviewing_leader') {
-      toStatus = 'completed';
+      toStatus = 'finalizing';
       approvalNode = null;
     } else {
       fail(400, '当前状态 ' + fromStatus + ' 不可执行审批通过操作');
@@ -974,12 +1164,17 @@ function reviewApproval(id, action, reviewerRole, reviewerName, comment) {
 
     // approve 时如果总监兼任群主，跳过了 leader，追加 auto_skip 记录
     if (action === 'approve' && fromStatus === 'reviewing_director'
-        && toStatus === 'completed') {
+        && toStatus === 'finalizing') {
       db.prepare(
         'INSERT INTO report_line_approvals (report_line_id, action, actor_role, actor_name, comment, from_status, to_status) '
         + 'VALUES (?, ?, ?, ?, ?, ?, ?)'
       ).run(id, 'auto_skip', 'group_leader', reviewerName,
-        '审批人兼任群主，自动跳过群主审批', 'reviewing_leader', 'completed');
+        '审批人兼任群主，自动跳过群主审批', 'reviewing_leader', 'finalizing');
+    }
+
+    if (toStatus === 'finalizing') {
+      var updatedLine = Object.assign({}, line, { status: 'finalizing', approval_node: null });
+      syncReportLineFromMain(db, updatedLine, null, reviewerName || 'system');
     }
   });
   tx();
@@ -988,29 +1183,30 @@ function reviewApproval(id, action, reviewerRole, reviewerName, comment) {
 }
 
 // ---------------------------------------------------------------------------
-// 8. autoCompletePeriod — 截止日后自动完结当前报告月报告线
+// 8. autoCompletePeriod — 截止日/强制结束后进入「核对归档中」
 // ---------------------------------------------------------------------------
 
 function autoCompletePeriod(period, options) {
   options = options || {};
-  var db = dbm.getDb();
-  var targetPeriod = period || dbm.getMeta(db, 'reportingMonth', null)
-    || (dbm.getMeta(db, 'periodConfig', {}) || {}).reportingMonth;
+  var db = resolveDb(options);
+  var targetPeriod = period || getReportingMonth(db);
   if (!targetPeriod) fail(400, '当前报告月不存在');
 
+  // 跳过已核对归档中、已完成的线；其余非终态一律进入 finalizing
   var rows = db.prepare(
-    'SELECT * FROM report_lines WHERE period = ? AND status <> ? ORDER BY id ASC'
-  ).all(targetPeriod, 'completed');
+    'SELECT * FROM report_lines WHERE period = ? AND status NOT IN (?, ?) ORDER BY id ASC'
+  ).all(targetPeriod, 'finalizing', 'completed');
 
   var actorName = options.actorName || '系统';
-  var comment = options.comment || '截止填报日期已到，系统自动提交并审批通过。';
+  var comment = options.comment || '截止填报日期已到，进入核对归档中。';
+  var allProjects = loadAllProjects(db);
   var completed = [];
 
   var tx = db.transaction(function () {
     rows.forEach(function (line) {
       db.prepare(
         'UPDATE report_lines SET status = ?, approval_node = NULL, updated_at = datetime(\'now\',\'localtime\') WHERE id = ?'
-      ).run('completed', line.id);
+      ).run('finalizing', line.id);
 
       db.prepare(
         'UPDATE report_line_pm_status SET status = ?, submitted_at = COALESCE(submitted_at, ?) '
@@ -1020,13 +1216,16 @@ function autoCompletePeriod(period, options) {
       db.prepare(
         'INSERT INTO report_line_approvals (report_line_id, action, actor_role, actor_name, comment, from_status, to_status) '
         + 'VALUES (?, ?, ?, ?, ?, ?, ?)'
-      ).run(line.id, 'auto_complete', 'system', actorName, comment, line.status, 'completed');
+      ).run(line.id, 'auto_complete', 'system', actorName, comment, line.status, 'finalizing');
+
+      var updatedLine = Object.assign({}, line, { status: 'finalizing', approval_node: null });
+      syncReportLineFromMain(db, updatedLine, allProjects, actorName);
 
       completed.push({
         id: line.id,
         sector_code: line.sector_code,
         from_status: line.status,
-        to_status: 'completed'
+        to_status: 'finalizing'
       });
     });
   });
@@ -1208,7 +1407,8 @@ function exportReportLine(id, options) {
     BH:'mi_0', BI:'mp_0', BJ:'mi_1', BK:'mp_1', BL:'mi_2', BM:'mp_2',
     BN:'mi_3', BO:'mp_3', BP:'mi_4', BQ:'mp_4', BR:'mi_5', BS:'mp_5',
     BT:'mi_6', BU:'mp_6', BV:'mi_7', BW:'mp_7', BX:'mi_8', BY:'mp_8',
-    BZ:'mi_9', CA:'mp_9', CB:'mi_10', CC:'mp_10', CD:'mi_11', CE:'mp_11'
+    BZ:'mi_9', CA:'mp_9', CB:'mi_10', CC:'mp_10', CD:'mi_11', CE:'mp_11',
+    CF:'completion_remark'
   };
   // 构建允许导出的 field key 集合（有 distributed_columns 时按列过滤）
   var allowedKeys = null;
@@ -1353,5 +1553,10 @@ module.exports = {
   getDiff: getDiff,
   exportReportLine: exportReportLine,
   exportApprovalSnapshot: exportApprovalSnapshot,
-  resolveMyStatus: myStatus.resolveMyStatus
+  resolveMyStatus: myStatus.resolveMyStatus,
+  isReadonlyReportLineStatus: isReadonlyReportLineStatus,
+  syncReportLineFromMain: syncReportLineFromMain,
+  syncProjectToFinalizingReportLines: syncProjectToFinalizingReportLines,
+  syncAllProjectsToFinalizingReportLines: syncAllProjectsToFinalizingReportLines,
+  completeFinalizingReportLines: completeFinalizingReportLines
 };
