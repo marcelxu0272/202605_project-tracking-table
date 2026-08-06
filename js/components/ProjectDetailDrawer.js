@@ -1171,7 +1171,7 @@
                         <el-tooltip placement="top" effect="light" popper-class="project-drawer-fill-tip">
                           <div slot="content" class="project-drawer-fill-tip-content">
                             <p>报告月「完成合同额」可填，标记为「当月」；未来月份为「预测」。</p>
-                            <p>报告月「开票」「回款」取系统实际值，样式与历史月一致，不可填写。</p>
+                            <p>报告月「开票」「回款」取系统实际值。</p>
                           </div>
                           <i class="el-icon-question project-drawer-section-tip" aria-label="填报说明"></i>
                         </el-tooltip>

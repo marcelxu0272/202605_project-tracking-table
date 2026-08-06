@@ -72,6 +72,32 @@
     return invoiceStock(p) < -EPS;
   }
 
+  function cumInvoice(project) {
+    return Number(project && project.cum_invoice) || 0;
+  }
+
+  function cumPayment(project) {
+    return Number(project && project.cum_payment) || 0;
+  }
+
+  /** 累计开票 > 总合同额（等价于 R < 0） */
+  function hasInvoiceExceedsContract(project, monthIdx) {
+    const p = computeProject(project, monthIdx);
+    return cumInvoice(p) - totalContract(p) > EPS;
+  }
+
+  /** 累计回款 > 总合同额 */
+  function hasPaymentExceedsContract(project, monthIdx) {
+    const p = computeProject(project, monthIdx);
+    return cumPayment(p) - totalContract(p) > EPS;
+  }
+
+  /** 累计回款 > 累计开票 */
+  function hasPaymentExceedsInvoice(project, monthIdx) {
+    const p = computeProject(project, monthIdx);
+    return cumPayment(p) - cumInvoice(p) > EPS;
+  }
+
   function hasContractStockViolation(project, monthIdx) {
     const p = computeProject(project, monthIdx);
     return contractStock(p) < -EPS;
@@ -283,6 +309,9 @@
     isStockColumn: isStockColumn,
     hasStockWarning: hasStockWarning,
     hasInvoiceStockWarning: hasInvoiceStockWarning,
+    hasInvoiceExceedsContract: hasInvoiceExceedsContract,
+    hasPaymentExceedsContract: hasPaymentExceedsContract,
+    hasPaymentExceedsInvoice: hasPaymentExceedsInvoice,
     hasContractStockViolation: hasContractStockViolation,
     hasProjectedCompletionViolation: hasProjectedCompletionViolation,
     isStockWarningCell: isStockWarningCell,

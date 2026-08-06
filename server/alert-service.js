@@ -46,9 +46,20 @@ function formatAlertDetail(alertType, project, monthIdx, tsStats) {
     ? FieldConfig.arraysToFlat(project)
     : project;
 
-  if (alertType === 'invoice_stock_negative') {
-    const val = Number(flat.contract_minus_invoice) || 0;
-    return 'R列(存量开票额) = ' + val.toFixed(2) + '万';
+  if (alertType === 'invoice_stock_negative' || alertType === 'invoice_exceeds_contract') {
+    const ac = Number(flat.cum_invoice) || 0;
+    const p = Number(flat.total_contract) || 0;
+    return '累计开票 ' + ac.toFixed(2) + ' 万，总合同额 ' + p.toFixed(2) + ' 万';
+  }
+  if (alertType === 'payment_exceeds_contract') {
+    const af = Number(flat.cum_payment) || 0;
+    const p = Number(flat.total_contract) || 0;
+    return '累计回款 ' + af.toFixed(2) + ' 万，总合同额 ' + p.toFixed(2) + ' 万';
+  }
+  if (alertType === 'payment_exceeds_invoice') {
+    const af = Number(flat.cum_payment) || 0;
+    const ac = Number(flat.cum_invoice) || 0;
+    return '累计回款 ' + af.toFixed(2) + ' 万，累计开票 ' + ac.toFixed(2) + ' 万';
   }
   if (alertType === 'contract_stock_negative') {
     const val = Number(flat.contract_minus_completed) || 0;
@@ -132,18 +143,42 @@ function collectAllAlerts(db, modules, dbm, timesheetStatsMod, monthIdx, year) {
     const projectName = project.project_name || project.projectName || '';
     const tsStats = tsStatsMap[pno] || null;
 
-    // R/S alerts via StockValidation
+    // 开票/回款/存量 alerts via StockValidation
     if (modules.StockValidation) {
-      if (modules.StockValidation.hasInvoiceStockWarning(project, monthIdx)) {
-        const key = pno + '__invoice_stock_negative';
+      if (modules.StockValidation.hasInvoiceExceedsContract(project, monthIdx)) {
+        const key = pno + '__invoice_exceeds_contract';
         activeMap.set(key, {
           projectNo: pno,
           projectName,
           sectorCode,
           sectorName,
-          alertType: 'invoice_stock_negative',
-          alertLabel: '存量开票额为负',
-          detail: formatAlertDetail('invoice_stock_negative', project, monthIdx, tsStats)
+          alertType: 'invoice_exceeds_contract',
+          alertLabel: '累计开票超总合同额',
+          detail: formatAlertDetail('invoice_exceeds_contract', project, monthIdx, tsStats)
+        });
+      }
+      if (modules.StockValidation.hasPaymentExceedsContract(project, monthIdx)) {
+        const key = pno + '__payment_exceeds_contract';
+        activeMap.set(key, {
+          projectNo: pno,
+          projectName,
+          sectorCode,
+          sectorName,
+          alertType: 'payment_exceeds_contract',
+          alertLabel: '累计回款超总合同额',
+          detail: formatAlertDetail('payment_exceeds_contract', project, monthIdx, tsStats)
+        });
+      }
+      if (modules.StockValidation.hasPaymentExceedsInvoice(project, monthIdx)) {
+        const key = pno + '__payment_exceeds_invoice';
+        activeMap.set(key, {
+          projectNo: pno,
+          projectName,
+          sectorCode,
+          sectorName,
+          alertType: 'payment_exceeds_invoice',
+          alertLabel: '累计回款超累计开票',
+          detail: formatAlertDetail('payment_exceeds_invoice', project, monthIdx, tsStats)
         });
       }
       if (modules.StockValidation.hasContractStockViolation(project, monthIdx)) {

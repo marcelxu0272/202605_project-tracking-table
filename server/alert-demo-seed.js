@@ -7,7 +7,9 @@ const dbm = require('./db');
 
 /** 各预警类型对应的演示项目号（初始数据约 20 条库内项目，避开 demoNew 固定 5 条） */
 const ALERT_DEMO_PROJECTS = {
-  invoice_stock_negative: 'B25001-0042',
+  invoice_exceeds_contract: 'B25001-0042',
+  payment_exceeds_contract: 'B25126-0003',
+  payment_exceeds_invoice: 'B25340',
   contract_stock_negative: 'B24264-0038',
   completion_no_hours: 'B25126-0003',
   hours_no_completion: 'B25340',
@@ -44,10 +46,28 @@ function applyAlertDemoPatches(projects, modules, reportingMonth) {
   var monthIdx = FormulaEngine.getMonthIdx(reportingMonth || '2026-05');
   var list = (projects || []).slice();
 
-  var invoiceP = findProject(list, ALERT_DEMO_PROJECTS.invoice_stock_negative);
+  var invoiceP = findProject(list, ALERT_DEMO_PROJECTS.invoice_exceeds_contract);
   if (invoiceP) {
     var pInv = Number(invoiceP.total_contract) || 10000;
     invoiceP.prev_year_invoice = pInv + 8000;
+  }
+
+  var paymentContractP = findProject(list, ALERT_DEMO_PROJECTS.payment_exceeds_contract);
+  if (paymentContractP) {
+    var pPayCon = Number(paymentContractP.total_contract) || 16712;
+    paymentContractP.prev_year_payment = pPayCon + 5000;
+    paymentContractP.prev_year_invoice = Math.max(0, pPayCon - 2000);
+  }
+
+  var paymentInvoiceP = findProject(list, ALERT_DEMO_PROJECTS.payment_exceeds_invoice);
+  if (paymentInvoiceP) {
+    var pPayInv = Number(paymentInvoiceP.total_contract) || 10000;
+    paymentInvoiceP.prev_year_invoice = 6000;
+    paymentInvoiceP.prev_year_payment = 9000;
+    if (pPayInv < 10000) {
+      paymentInvoiceP.prev_year_contract = 8000;
+      paymentInvoiceP.adj_value = 2000;
+    }
   }
 
   var contractP = findProject(list, ALERT_DEMO_PROJECTS.contract_stock_negative);
@@ -74,7 +94,7 @@ function applyAlertDemoPatches(projects, modules, reportingMonth) {
     mcHours[monthIdx] = 0;
   }
 
-  // 同一项目多预警：存量开票额为负 + 存量合同额为负 + 有完成额无工时
+  // 同一项目多预警：累计开票超总合同额 + 存量合同额为负 + 有完成额无工时
   var multiP = findProject(list, ALERT_DEMO_PROJECTS.multi_alert);
   if (multiP) {
     var pMulti = Number(multiP.total_contract) || 9720;

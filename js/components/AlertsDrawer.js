@@ -25,10 +25,12 @@
         currentPage: 1,
         pageSize: 20,
         alertTypeOptions: [
-          { value: 'invoice_stock_negative',  label: '存量开票额为负' },
-          { value: 'contract_stock_negative', label: '存量合同额为负' },
-          { value: 'completion_no_hours',     label: '有完成额无工时' },
-          { value: 'hours_no_completion',     label: '有工时无完成额' }
+          { value: 'invoice_exceeds_contract',  label: '累计开票超总合同额' },
+          { value: 'payment_exceeds_contract',  label: '累计回款超总合同额' },
+          { value: 'payment_exceeds_invoice',   label: '累计回款超累计开票' },
+          { value: 'contract_stock_negative',   label: '存量合同额为负' },
+          { value: 'completion_no_hours',       label: '有完成额无工时' },
+          { value: 'hours_no_completion',       label: '有工时无完成额' }
         ],
         statusOptions: [
           { value: '',          label: '全部' },
@@ -128,7 +130,7 @@
         if (event) event.stopPropagation();
         var self = this;
         this.$confirm(
-          '确定要忽略此预警吗？忽略后，该项目的此类预警将不再出现在活跃列表中（跨月生效）。可在「已忽略」筛选中撤回。',
+          '确定要忽略此预警吗？忽略后，该项目的此类预警将不再出现在活跃列表中。可在「已忽略」筛选中撤回。',
           '忽略预警',
           { confirmButtonText: '确认忽略', cancelButtonText: '取消', type: 'warning' }
         ).then(function () {
@@ -178,18 +180,25 @@
           }
         });
       },
+      isFinancialDangerType: function (alertType) {
+        return alertType === 'invoice_stock_negative'
+          || alertType === 'invoice_exceeds_contract'
+          || alertType === 'payment_exceeds_contract'
+          || alertType === 'payment_exceeds_invoice'
+          || alertType === 'contract_stock_negative';
+      },
       alertTypeTagClass: function (alertType) {
-        if (alertType === 'invoice_stock_negative' || alertType === 'contract_stock_negative') {
+        if (this.isFinancialDangerType(alertType)) {
           return 'alerts-card-type-tag alerts-card-type-tag--danger';
         }
         return 'alerts-card-type-tag alerts-card-type-tag--warning';
       },
       alertIcon: function (alertType) {
-        return (alertType === 'invoice_stock_negative' || alertType === 'contract_stock_negative')
+        return this.isFinancialDangerType(alertType)
           ? 'el-icon-warning' : 'el-icon-time';
       },
       isDangerType: function (alertType) {
-        return alertType === 'invoice_stock_negative' || alertType === 'contract_stock_negative';
+        return this.isFinancialDangerType(alertType);
       },
       handleClose: function () { this.$emit('close'); }
     },

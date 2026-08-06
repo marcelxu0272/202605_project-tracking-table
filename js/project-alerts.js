@@ -68,8 +68,14 @@
     if (!project) return alerts;
 
     if (window.StockValidation) {
-      if (StockValidation.hasInvoiceStockWarning(project, monthIdx)) {
-        alerts.push({ id: 'invoice_stock_negative', label: '存量开票额为负' });
+      if (StockValidation.hasInvoiceExceedsContract(project, monthIdx)) {
+        alerts.push({ id: 'invoice_exceeds_contract', label: '累计开票超总合同额' });
+      }
+      if (StockValidation.hasPaymentExceedsContract(project, monthIdx)) {
+        alerts.push({ id: 'payment_exceeds_contract', label: '累计回款超总合同额' });
+      }
+      if (StockValidation.hasPaymentExceedsInvoice(project, monthIdx)) {
+        alerts.push({ id: 'payment_exceeds_invoice', label: '累计回款超累计开票' });
       }
       if (StockValidation.hasContractStockViolation(project, monthIdx)) {
         alerts.push({ id: 'contract_stock_negative', label: '存量合同额为负' });
