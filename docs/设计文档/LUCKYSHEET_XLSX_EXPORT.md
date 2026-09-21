@@ -689,17 +689,6 @@ describe('luckysheet-xlsx-export', function () {
 
 ### 9.6 需求文档同步（摘录）
 
-**`docs/需求文档/需求文档_开发版.md` §3.5.2** 核心条目：
-
-```markdown
-#### 3.5.2 导出 Excel
-
-- **实现：** `ProjectEditor.exportCurrentLuckysheetView()` → `LuckysheetXlsxExport.exportSheetToXlsx()`
-- **导出范围：** 当前 Luckysheet 视图（`filteredProjects` + 视图筛选）；**列始终为全部 83 列**（忽略紧凑列）
-- **导出内容：** Excel 公式、数字/日期格式、单元格背景/字体/对齐、合并单元格
-- **依赖：** `xlsx-js-style@1.2.0`；开发说明见 `docs/设计文档/LUCKYSHEET_XLSX_EXPORT.md`
-```
-
 **`docs/需求文档/需求文档_产品版.md` §3.5.2** 核心条目：
 
 ```markdown
@@ -720,6 +709,5 @@ describe('luckysheet-xlsx-export', function () {
 | `index.html` | 修改 CDN + 脚本顺序 |
 | `js/views/ProjectEditor.js` | 修改导出入口，新增 3 个 method |
 | `js/xlsx-importer.js` | 注释标记 `exportToXlsx` deprecated |
-| `docs/需求文档/需求文档_开发版.md` | 同步 §3.5.2 |
 | `docs/需求文档/需求文档_产品版.md` | 同步 §3.5.2 |
 | `AGENTS.md` | 文件清单补充 |

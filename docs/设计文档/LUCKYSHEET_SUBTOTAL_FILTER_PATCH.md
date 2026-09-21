@@ -65,7 +65,6 @@ ProjectEditor.initLuckysheet()
 | `index.html` | Luckysheet UMD 之后引入上述两脚本 |
 | `js/views/ProjectEditor.js` | `initLuckysheet` 接入 install / refresh / `updated`；`forceCalculation: true` |
 | `docs/需求文档/需求文档_产品版.md` | 用户可见行为：筛选后小计重算、键盘跳过隐藏行 |
-| `docs/需求文档/需求文档_开发版.md` | 实现路径、hook、文件清单 |
 
 **未改（有意为之）：**
 
@@ -173,8 +172,7 @@ luckysheet.create({
 
 | 文档 | 章节 |
 |---|---|
-| 产品版 | §3.3.2 行布局、§3.3.6 筛选与小计、§3.4.4 键盘导航 |
-| 开发版 | §3.3.2、§3.3.6 公式链 / SUBTOTAL 补丁、§3.4 默认筛选后导航 |
+| 需求文档（产品版） | §3.3.2 行布局、§3.3.6 筛选与小计、§3.4.4 键盘导航 |
 
 ---
 
@@ -184,4 +182,4 @@ luckysheet.create({
 |---|---|
 | 新增 | `js/luckysheet-subtotal-patch.js`、`js/luckysheet-nav-skip-hidden.js` |
 | 修改 | `index.html` 引入补丁；`ProjectEditor.initLuckysheet` 接入 hook + `forceCalculation` |
-| 文档 | 产品版 / 开发版需求同步；本文档；`AGENTS.md` 文件清单 |
+| 文档 | 需求文档（产品版）同步；本文档；`AGENTS.md` 文件清单 |

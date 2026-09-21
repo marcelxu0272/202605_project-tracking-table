@@ -266,7 +266,16 @@
           this.openTraceDialog(row);
           return;
         }
-        this.$router.push({ path: '/report-lines/' + row.id, query: { mode: action } });
+        this.$router.push({ path: this.reportLineLandingPath(row.id), query: { mode: action } });
+      },
+      /**
+       * 落地页按角色区分：PM 与板块管理员是填报角色，直接进明细表；
+       * 审阅角色（总监 / 群主 / 系统管理员 / 经营管理）先进概览页。
+       */
+      reportLineLandingPath(id) {
+        var role = (Store.currentUser || {}).role;
+        var fillingRole = role === 'pm' || role === 'sector_admin';
+        return '/report-lines/' + id + (fillingRole ? '/sheet' : '');
       },
       formatPeriod(period) {
         if (!period) return '—';

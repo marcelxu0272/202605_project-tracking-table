@@ -73,13 +73,16 @@
       },
       pageTitle() {
         const item = NAV_ITEMS.find(n => this.activePath === n.path);
-        return item ? item.label : '查看数据';
+        if (item) return item.label;
+        const metaTitle = this.$route && this.$route.meta && this.$route.meta.title;
+        return metaTitle || '查看数据';
       },
       reportingMonth() { return Store.reportingMonth; },
       sidebarCollapsed() { return Store.sidebarCollapsed; },
+      /** Luckysheet 表格页需要占满视口且自行处理滚动；概览等常规页保留边距与页面滚动 */
       contentNoPadding() {
         const path = this.activePath || '';
-        return path === '/editor' || path.indexOf('/report-lines/') === 0;
+        return path === '/editor' || /^\/report-lines\/[^/]+\/sheet$/.test(path);
       }
     },
     methods: {

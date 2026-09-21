@@ -34,9 +34,10 @@
     data: function () {
       return {
         rlLoading: false,
-        _rlSubmitting: false
-      };
-    },
+        _rlSubmitting: false,
+      activeTab: 'luckysheet'
+    };
+  },
 
     computed: {
       // ── 报告线基础数据 ──
@@ -83,6 +84,41 @@
           statusLabel: statusInfo.label,
           statusType: statusInfo.type
         };
+      },
+      /** 工具栏右侧的概览页入口，与概览页右上角的「明细表」互为对称跳转 */
+      rlOverviewTarget: function () {
+        var id = this.$route && this.$route.params && this.$route.params.id;
+        if (!id) return null;
+        return {
+          path: '/report-lines/' + id,
+          query: Object.assign({}, (this.$route && this.$route.query) || {})
+        };
+      },
+      overviewProjects: function () { return this.scopedProjects || []; },
+      overviewBaselineProjects: function () {
+        var scoped = this.scopedProjects || [];
+        var baseMap = {};
+        (this.rlBaselineProjects || []).forEach(function (item) {
+          if (item && item.project_no) baseMap[item.project_no] = item;
+        });
+        return scoped.map(function (item) {
+          return baseMap[item.project_no] || {};
+        }).filter(function (item) { return !!item.project_no; });
+      },
+      overviewReportLine: function () { return this.reportLine; },
+      rlBaselineProjects: function () {
+        var rows = this.reportLine.projects || [];
+        return rows.map(function (row) {
+          var fd = (row && row.field_data && typeof row.field_data === 'object')
+            ? Object.assign({}, row.field_data)
+            : {};
+          fd.project_no = fd.project_no || row.project_no;
+          (row.change_diff || []).forEach(function (diff) {
+            if (!diff || !diff.field_key) return;
+            fd[diff.field_key] = diff.old_value;
+          });
+          return fd;
+        }).filter(function (item) { return !!item.project_no; });
       },
 
       // ── 覆盖父类：控制保存/操作按钮组 ──
@@ -281,7 +317,6 @@
       buildTableData: function () {
         this.tableProjects = FormulaEngine.computeAll(this.rlProjects, this.monthIdx);
       },
-
       // ── 覆盖 getStoreProject：从报告线项目列表查找 ──
       getStoreProject: function (projectNo) {
         var projs = this.rlProjects;

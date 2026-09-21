@@ -67,6 +67,7 @@
       var c = {};
       if (window.ProjectDetailDrawer) c.ProjectDetailDrawer = window.ProjectDetailDrawer;
       if (window.AlertsDrawer) c.AlertsDrawer = window.AlertsDrawer;
+      if (window.ReportLineOverviewPanel) c.ReportLineOverview = window.ReportLineOverviewPanel;
       return c;
     })(),
     data() {
@@ -89,7 +90,7 @@
         _lsResizeTimer: null,
         tableFields: [],
         tableProjects: [],
-        activeTab: 'luckysheet', // 'luckysheet' | 'table'（仅 showLegacyHtmlTable 为 true 时可切 table）
+        activeTab: 'luckysheet', // 'luckysheet' | 'table' | 'overview'（overview 仅报告线详情启用）
         /** 经典 HTML 表格：代码保留，默认不展示；改 true 可恢复双模式调试 */
         showLegacyHtmlTable: false,
         _lsLoading: false,
@@ -190,8 +191,11 @@
       },
       activeTab: function (val) {
         if (val === 'luckysheet') {
-          this.$nextTick(function () { this.refreshLuckysheet(); }.bind(this));
-        } else {
+          this.$nextTick(function () {
+            if (this.luckysheetReady) this.refreshLuckysheet();
+            else this.syncEditorFromFieldDictionary(true);
+          }.bind(this));
+        } else if (val === 'table') {
           this.destroyLuckysheet();
         }
       },
@@ -210,6 +214,7 @@
       handleRlSubmit()  {},
       handleRlApprove() {},
       handleRlReject()  {},
+      handleOverviewOpenProject() {},
       fetchAlertsBadgeCount: function () {
         if (!this.canShowAlertsButton) {
           this.alertsBadgeCount = null;
@@ -2599,6 +2604,8 @@
       },
 
       destroyLuckysheet() {
+        // luckysheet 是全局单例：非表格视图（如概览页）销毁时不得连带销毁别人刚创建的实例
+        if (this.activeTab !== 'luckysheet') return;
         this.unbindLuckysheetFilterFreezeSync();
         this.unbindProjectNoClickHandler();
         try {
@@ -2844,7 +2851,7 @@
         <!-- 工具栏 -->
         <div class="editor-toolbar">
           <template v-if="rlContextBar">
-            <el-button size="mini" icon="el-icon-arrow-left" plain @click="$router.push('/report-lines')">填报与审批</el-button>
+            <el-button size="mini" icon="el-icon-arrow-left" plain @click="$router.push(rlBackTarget.route)">{{ rlBackTarget.label }}</el-button>
             <span style="color:#94a3b8;">|</span>
             <span style="font-weight:600;color:#1e293b;">{{ rlContextBar.sectorName }}</span>
             <span style="color:#64748b;">{{ rlContextBar.periodLabel }}</span>
@@ -2885,6 +2892,12 @@
           <div class="editor-toolbar-spacer"></div>
 
           <div class="editor-toolbar-group">
+            <el-button
+              v-if="rlOverviewTarget"
+              size="small"
+              icon="el-icon-data-analysis"
+              @click="$router.push(rlOverviewTarget)"
+            >概览</el-button>
             <el-button
               v-if="canShowAlertsButton"
               size="small"
@@ -2994,8 +3007,8 @@
           <span style="cursor:pointer;" @click="showDiffHint=false"><i class="el-icon-close"></i></span>
         </div>
 
-        <!-- 填报主体：默认 Luckysheet；经典 HTML 表格见 showLegacyHtmlTable -->
-        <div class="luckysheet-editor-wrap" style="flex:1;min-height:0;display:flex;flex-direction:column;">
+        <!-- 填报主体：Luckysheet 表格（概览是独立页面，见 ReportLineOverviewPage.js） -->
+        <div v-show="activeTab === 'luckysheet'" class="luckysheet-editor-wrap" style="flex:1;min-height:0;display:flex;flex-direction:column;">
           <div v-if="activeTab === 'luckysheet'" class="sheet-toolbar">
             <el-radio-group v-model="viewMode" size="mini" class="view-toggle view-toggle--compact">
               <el-radio-button label="all">全部（{{ scopedProjects.length }}）</el-radio-button>
@@ -3254,6 +3267,10 @@
       rlCanReject()  { return false; },
       /** 报告线提交中状态 */
       rlSubmitting() { return false; },
+      /** 上下文条返回目标 */
+      rlBackTarget() { return { route: { path: '/report-lines' }, label: '填报与审批' }; },
+      /** 概览页入口（仅报告线明细页覆盖后显示） */
+      rlOverviewTarget() { return null; },
       // ────────────────────────────────────────────────────
       newProjectCount() {
         return this.scopedProjects.filter(function (p) { return p._added_this_month; }).length;

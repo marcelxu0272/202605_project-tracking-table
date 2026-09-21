@@ -2926,3 +2926,445 @@ body {
   line-height: 26px;
 }
 
+/* ── 报告线概览页 ─────────────────────────────────────── */
+/* ── 报告线概览页外壳（常规文档流，走 .app-content 的边距与滚动） ── */
+.rl-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.rl-page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+.rl-page-crumb {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.rl-page-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition-property: color, border-color;
+  transition-duration: 160ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+@media (hover: hover) {
+  .rl-page-back:hover { color: var(--color-brand); border-color: var(--color-brand-border); }
+}
+.rl-page-back:active { transform: scale(0.97); }
+.rl-page-back:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 2px; }
+.rl-page-crumb-sep { color: var(--color-text-muted); }
+.rl-page-crumb h1 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-heading);
+  white-space: nowrap;
+}
+.rl-page-period {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+.rl-page-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ── 报告线概览（紧凑报表型：无卡片外壳，靠分区标题 + 细线 + 数字对齐建立层级） ── */
+.rl-ov {
+  --ov-hair: #eceff3;
+  --ov-num: "SF Mono", "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-bottom: 12px;
+}
+.rl-ov .rl-ov-num,
+.rl-ov dd,
+.rl-ov .el-table td {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+.rl-ov .is-neg { color: var(--color-danger); }
+
+/* 指标面：主指标、次指标各一张卡片 */
+.rl-ov-surface {
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+  overflow: hidden;
+}
+/* 用 1px gap + 容器底色做分隔线，列数变化时无需重排边框规则 */
+.rl-ov-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--ov-hair);
+}
+.rl-ov-kpi {
+  padding: 16px 20px 18px;
+  background: #fff;
+  transition: background-color 160ms cubic-bezier(0.2, 0, 0, 1);
+}
+@media (hover: hover) {
+  .rl-ov-kpi:hover { background: #fbfcfd; }
+}
+.rl-ov-kpi-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.rl-ov-kpi-head h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-heading);
+}
+.rl-ov-src {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+}
+.rl-ov-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+.rl-ov-src.is-manual,
+.rl-ov-src.is-sync {
+  color: var(--color-brand);
+  background: var(--color-brand-light);
+}
+.rl-ov-kpi-main {
+  margin: 10px 0 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.rl-ov-kpi-value {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--color-heading);
+}
+.rl-ov-kpi-value .num {
+  font-family: var(--ov-num);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.012em;
+}
+.rl-ov-kpi-value .unit {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+.rl-ov-kpi.is-primary .rl-ov-kpi-value { color: var(--color-brand); }
+.rl-ov-kpi-value.is-neg,
+.rl-ov-kpi.is-primary .rl-ov-kpi-value.is-neg { color: var(--color-danger); }
+.rl-ov-kpi-caption {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.rl-ov-delta {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+.rl-ov-delta.is-up { color: var(--color-brand); }
+.rl-ov-delta.is-down { color: var(--color-danger); }
+.rl-ov-kpi-meta {
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--ov-hair);
+  display: grid;
+  gap: 6px;
+}
+.rl-ov-kpi-meta > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+.rl-ov-kpi-meta dt { color: var(--color-text-muted); }
+.rl-ov-kpi-meta dd {
+  margin: 0;
+  font-family: var(--ov-num);
+  color: var(--color-text);
+}
+.rl-ov-kpi-meta dd i {
+  margin-left: 3px;
+  font-style: normal;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+/* 次要指标：独立卡片，三项对齐上方主 KPI */
+.rl-ov-strip {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--ov-hair);
+}
+.rl-ov-strip > div {
+  padding: 14px 20px 16px;
+  background: #fff;
+}
+.rl-ov-strip dt {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.rl-ov-strip dd {
+  margin: 4px 0 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.rl-ov-strip-amt {
+  font-family: var(--ov-num);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--color-heading);
+  font-variant-numeric: tabular-nums;
+}
+.rl-ov-strip-amt i,
+.rl-ov-stats dd i {
+  margin-left: 3px;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+/* 分区：标题 + 细线，不用卡片 */
+.rl-ov-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.rl-ov-sec {
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+  padding: 14px 16px 16px;
+  min-width: 0;
+}
+.rl-ov-sec-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--ov-hair);
+}
+.rl-ov-sec-head h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-heading);
+}
+.rl-ov-sec-note {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+.rl-ov-sec-note.is-alert { color: var(--color-warning); font-weight: 600; }
+.rl-ov-sec-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+.rl-ov-more {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-brand);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rl-ov-more:hover { text-decoration: underline; }
+
+.rl-ov-drill .el-dialog__header { padding: 16px 20px 12px; }
+.rl-ov-drill .el-dialog__title { font-size: 15px; font-weight: 600; color: var(--color-heading); }
+.rl-ov-drill .el-dialog__body { padding: 4px 20px 20px; }
+.rl-ov-drill .el-table {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+.rl-ov-drill .is-neg { color: var(--color-danger); }
+.rl-ov-drill .rl-ov-num { font-variant-numeric: tabular-nums; }
+.rl-ov-drill-pager {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+/* 键值统计格：label 在上、数字在下，右对齐等宽 */
+.rl-ov-stats {
+  margin: 0 0 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: 6px;
+}
+.rl-ov-stats > div {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  border: 1px solid var(--ov-hair);
+  border-radius: 6px;
+  background: #f7f9fa;
+}
+/* 标签撑满剩余高度，数值贴底 → 无论标签几行，同排数值基线都对齐 */
+.rl-ov-stats dt {
+  flex: 1;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+.rl-ov-stats dd {
+  margin: 3px 0 0;
+  font-family: var(--ov-num);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-heading);
+}
+.rl-ov-stats dd.is-count { font-size: 16px; }
+
+/* 异常类型 chip */
+.rl-ov-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.rl-ov-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid #fde3c0;
+  border-radius: 999px;
+  background: #fff8ef;
+  font: inherit;
+  font-size: 12px;
+  color: #92400e;
+  cursor: pointer;
+}
+.rl-ov-chip.is-all {
+  border-color: var(--color-border);
+  background: #fff;
+  color: var(--color-text-secondary);
+}
+.rl-ov-chip:hover { filter: brightness(0.98); }
+.rl-ov-chip.is-active {
+  border-color: var(--color-brand);
+  background: var(--color-brand-tint-3, #e8f4f3);
+  color: var(--color-brand);
+  font-weight: 600;
+}
+.rl-ov-chip.is-active:not(.is-all) {
+  border-color: #d97706;
+  background: #fff7ed;
+  color: #92400e;
+}
+.rl-ov-chip b {
+  font-family: var(--ov-num);
+  font-weight: 600;
+}
+.rl-ov-flag { color: #92400e; }
+
+/* 占比条 */
+.rl-ov-share {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.rl-ov-share-track {
+  width: 56px;
+  flex: none;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-brand-light);
+  overflow: hidden;
+}
+.rl-ov-share-track i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-brand);
+}
+
+.rl-ov-chart {
+  width: 100%;
+  height: 300px;
+}
+
+/* 表格：贴合紧凑报表密度 */
+.rl-ov .el-table th.el-table__cell {
+  background: #fafbfc;
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+.rl-ov .el-table td.el-table__cell,
+.rl-ov .el-table th.el-table__cell { border-bottom-color: var(--ov-hair); }
+.rl-ov .el-table::before { display: none; }
+.rl-ov .el-table--mini td.el-table__cell,
+.rl-ov .el-table--mini th.el-table__cell { padding: 6px 0; }
+
+@media (max-width: 1180px) {
+  .rl-ov-split { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rl-ov-kpi { transition: none; }
+}
+
