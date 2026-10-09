@@ -3277,7 +3277,7 @@
       },
       changedProjectCount() {
         return this.scopedProjects.filter(function (p) {
-          return p._changed_fields && p._changed_fields.length;
+          return FieldConfig.projectHasMonthlyAmountChange(p);
         }).length;
       },
 
@@ -3456,7 +3456,7 @@
       filteredProjects() {
         let p = this.scopedProjects;
         if (this.viewMode === 'changed_only') {
-          return p.filter(x => x._changed_fields && x._changed_fields.length > 0);
+          return p.filter(function (x) { return FieldConfig.projectHasMonthlyAmountChange(x); });
         }
         return p;
       },

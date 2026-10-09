@@ -425,31 +425,33 @@
         </section>
 
         <div class="rl-ov-split">
-          <section class="rl-ov-sec">
+          <section class="rl-ov-sec rl-ov-sec-fixed">
             <header class="rl-ov-sec-head">
               <h2>本月完成合同额情况</h2>
               <div class="rl-ov-sec-meta">
                 <button type="button" class="rl-ov-more" @click="openDiffDrill">更多</button>
               </div>
             </header>
-            <el-table :data="previewDiffProjects" size="mini" empty-text="本次填报没有项目">
-              <el-table-column prop="projectNo" label="项目号" min-width="108"></el-table-column>
-              <el-table-column prop="projectName" label="项目名称" min-width="140" show-overflow-tooltip></el-table-column>
-              <el-table-column prop="pmName" label="项目经理" min-width="84"></el-table-column>
-              <el-table-column label="本月完成合同额（万元）" min-width="168" align="right" header-align="right">
-                <template slot-scope="scope">
-                  <span class="rl-ov-num" :class="signClass(scope.row.monthCompletion)">{{ formatWan(scope.row.monthCompletion) }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column label="" width="64" fixed="right" align="right">
-                <template slot-scope="scope">
-                  <el-button type="text" @click="onOpenProject(scope.row)">查看</el-button>
-                </template>
-              </el-table-column>
-            </el-table>
+            <div class="rl-ov-sec-body">
+              <el-table :data="previewDiffProjects" size="mini" height="100%" empty-text="本次填报没有项目">
+                <el-table-column prop="projectNo" label="项目号" min-width="108"></el-table-column>
+                <el-table-column prop="projectName" label="项目名称" min-width="140" show-overflow-tooltip></el-table-column>
+                <el-table-column prop="pmName" label="项目经理" min-width="84"></el-table-column>
+                <el-table-column label="本月完成合同额（万元）" min-width="168" align="right" header-align="right">
+                  <template slot-scope="scope">
+                    <span class="rl-ov-num" :class="signClass(scope.row.monthCompletion)">{{ formatWan(scope.row.monthCompletion) }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="" width="64" fixed="right" align="right">
+                  <template slot-scope="scope">
+                    <el-button type="text" @click="onOpenProject(scope.row)">查看</el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
           </section>
 
-          <section class="rl-ov-sec">
+          <section class="rl-ov-sec rl-ov-sec-fixed">
             <header class="rl-ov-sec-head">
               <h2>项目预警一览</h2>
               <div class="rl-ov-sec-meta">
@@ -468,21 +470,23 @@
                 {{ chip.label }}<b>{{ chip.count }}</b>
               </button>
             </div>
-            <el-table :data="previewAttentionItems" size="mini" empty-text="未发现异常">
-              <el-table-column prop="projectNo" label="项目号" min-width="108"></el-table-column>
-              <el-table-column prop="projectName" label="项目名称" min-width="140" show-overflow-tooltip></el-table-column>
-              <el-table-column prop="pmName" label="项目经理" min-width="84"></el-table-column>
-              <el-table-column label="异常类型" min-width="160">
-                <template slot-scope="scope">
-                  <span class="rl-ov-flag">{{ scope.row.label }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column label="" width="64" fixed="right" align="right">
-                <template slot-scope="scope">
-                  <el-button type="text" @click="onOpenProject(scope.row)">查看</el-button>
-                </template>
-              </el-table-column>
-            </el-table>
+            <div class="rl-ov-sec-body">
+              <el-table :data="previewAttentionItems" size="mini" height="100%" empty-text="未发现异常">
+                <el-table-column prop="projectNo" label="项目号" min-width="108"></el-table-column>
+                <el-table-column prop="projectName" label="项目名称" min-width="140" show-overflow-tooltip></el-table-column>
+                <el-table-column prop="pmName" label="项目经理" min-width="84"></el-table-column>
+                <el-table-column label="异常类型" min-width="160">
+                  <template slot-scope="scope">
+                    <span class="rl-ov-flag">{{ scope.row.label }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="" width="64" fixed="right" align="right">
+                  <template slot-scope="scope">
+                    <el-button type="text" @click="onOpenProject(scope.row)">查看</el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
           </section>
         </div>
 

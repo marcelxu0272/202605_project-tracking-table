@@ -53,8 +53,7 @@
         let p = this.scopedProjects;
         if (this.viewMode === 'changed_only') {
           return p.filter(function (x) {
-            if (x._changed_fields && x._changed_fields.length) return true;
-            return Object.keys(x._field_change_log || {}).length > 0;
+            return FieldConfig.projectHasMonthlyAmountChange(x);
           });
         }
         return p;
@@ -62,8 +61,7 @@
       reviewProjectCount() { return this.filteredProjects.length; },
       changedProjectCount() {
         return this.scopedProjects.filter(function (p) {
-          if (p._changed_fields && p._changed_fields.length) return true;
-          return Object.keys(p._field_change_log || {}).length > 0;
+          return FieldConfig.projectHasMonthlyAmountChange(p);
         }).length;
       },
       reviewEmptyText() {

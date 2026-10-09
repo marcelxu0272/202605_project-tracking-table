@@ -3183,6 +3183,20 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px;
+  align-items: stretch;
+}
+.rl-ov-sec-fixed {
+  display: flex;
+  flex-direction: column;
+  height: 328px;
+}
+.rl-ov-sec-fixed .rl-ov-sec-head { flex: none; }
+.rl-ov-sec-body {
+  flex: 1;
+  min-height: 0;
+}
+.rl-ov-sec-body .el-table {
+  height: 100%;
 }
 .rl-ov-sec {
   background: #fff;
@@ -3281,10 +3295,15 @@ body {
 /* 异常类型 chip */
 .rl-ov-chips {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex: none;
+  scrollbar-width: thin;
 }
+.rl-ov-chips::-webkit-scrollbar { height: 4px; }
 .rl-ov-chip {
   display: inline-flex;
   align-items: center;
@@ -3297,6 +3316,8 @@ body {
   font-size: 12px;
   color: #92400e;
   cursor: pointer;
+  white-space: nowrap;
+  flex: none;
 }
 .rl-ov-chip.is-all {
   border-color: var(--color-border);
@@ -3362,6 +3383,7 @@ body {
 
 @media (max-width: 1180px) {
   .rl-ov-split { grid-template-columns: 1fr; }
+  .rl-ov-sec-fixed { height: 328px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

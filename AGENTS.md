@@ -1,7 +1,7 @@
 # 📁 项目追踪表线上化 — 目录说明
 
 > **项目目标：** 将项目执行跟踪 Excel 表的填写、汇总、统计与展示线上化 
-> **最后更新：** 2026-09-21
+> **最后更新：** 2026-10-08
 
 ---
 
@@ -151,7 +151,7 @@ npm run sync:fields
 | `js/store.js` | 🗄️ 状态管理 | ~27KB | Vue.observable + `/api`；板块流程、快照、锁定等；不再提供人工平台刷新方法。 |
 | `js/formatters.js` | 🔧 格式化工具 | ~4KB | 金额、日期、百分比等。 |
 | `js/formula-engine.js` | ⚙️ 公式引擎 | ~8KB | 83 字段 `auto_calc` 逻辑与汇总。 |
-| `js/field-config.js` | 🔐 字段权限 | ~7KB | 角色 × 锁定期字段可写矩阵。 |
+| `js/field-config.js` | 🔐 字段权限 | ~8KB | 角色 × 锁定期字段可写矩阵；「有变化」筛选仅认三十六列月度金额。 |
 | `js/change-meta.js` | 📝 变更批注 | ~7KB | `_field_change_log`；`CHANGED_FIELD_STYLE` / `EDITABLE_FIELD_STYLE`。 |
 | `js/stock-validation.js` | ⚠️ 存量校验 | ~3KB | R/S 列预警、完成额调增与未来预测超合同额阻断提交。 |
 | `js/wip-validation.js` | ⚠️ WIP 校验 | ~3KB | AL 非零时 AM/AO 必填提交校验；AL 归零时清空 AM/AN/AO。 |
@@ -173,7 +173,7 @@ npm run sync:fields
 | `js/components/SystemAdminSectorDock.js` | 📊 板块底栏 | ~4KB | 系统管理员十二板块进度底栏。 |
 | `js/components/SystemAdminApprovalBoard.js` | 📋 板块审批板 | ~4KB | 系统管理员各板块审批状态卡片。 |
 | `js/components/AlertsDrawer.js` | ⚠️ 预警抽屉 | ~6KB | 全角色预警面板（忽略/撤回仅系统管理员）；四维筛选、分页、活跃/已忽略状态、点击跳转项目。 |
-| `js/components/ReportLineOverview.js` | 📊 报告线概览组件 | ~16KB | 概览页主体：三项主 KPI + 三项次指标（含较上一期趋势）、本月完成合同额情况、项目预警一览（类型 chip 筛选，各自独立下探弹窗）、品牌色趋势图、按 PM 汇总；审批操作由页面头部承担。 |
+| `js/components/ReportLineOverview.js` | 📊 报告线概览组件 | ~16KB | 概览页主体：三项主 KPI + 三项次指标（含较上一期趋势）、本月完成合同额情况与项目预警一览并排等高（chip 单行横滚、各自独立下探弹窗）、品牌色趋势图、按 PM 汇总；审批操作由页面头部承担。 |
 | `js/views/Login.js` | 🔑 登录页 | ~6KB | 6 角色卡片登录；登录后跳转填报或审批首页。 |
 | `js/views/ProjectEditor.js` | 📝 查看数据 | ~133KB | Luckysheet；F 列 Drawer；保存/导入/筛选；变更批注；已移除人工「刷新数据」入口。 |
 | `js/views/ReportLineList.js` | 📋 填报与审批列表 | ~30KB | 报告线列表；「我的状态」+「报告线状态」列；发起填报、流转轨迹、截止提醒；`reportLineLandingPath` 按角色决定进明细页还是概览页。 |
@@ -202,6 +202,7 @@ npm run sync:fields
 | `test/luckysheet-xlsx-export.test.js` | ✅ Node 测试 | 覆盖 Luckysheet 单元格 → SheetJS 映射与 `colhidden` 列过滤。 |
 | `test/report-line-my-status.test.js` | ✅ Node 测试 | 覆盖填报管理「我的状态」：PM 三态、管理员、总监/群主四态、系统管理员 —。 |
 | `test/report-line-finalizing.test.js` | ✅ Node 测试 | 覆盖报告线 `finalizing`（核对归档中）：截止完结、审批通过、禁写、主表同步、归档封账。 |
+| `test/monthly-amount-view-change.test.js` | ✅ Node 测试 | 覆盖「有变化」筛选只认各月完成合同额、完成开票额、完成回款额三十六列。 |
 
 ### `docs/` 文档（已整理）
 
