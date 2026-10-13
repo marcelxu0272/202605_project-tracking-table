@@ -438,7 +438,7 @@
               <el-select v-model="diffRightVersion" size="small" style="width:150px;" @change="computeDiff">
                 <el-option v-for="v in versionOptions" :key="v.value" :label="v.label" :value="v.value"></el-option>
               </el-select>
-              <span style="font-size:12px;color:#94a3b8;margin-left:8px;">共 {{ diffResults.length }} 个项目有更新内容</span>
+              <span style="font-size:12px;color:#94a3b8;margin-left:8px;">共 {{ diffResults.length }} 个项目有变化</span>
             </div>
 
             <div v-if="diffResults.length === 0" class="empty-state">

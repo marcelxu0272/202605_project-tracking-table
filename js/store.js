@@ -20,6 +20,7 @@
 
   const DEFAULT_CONFIG = {
     reminderDay:  5,
+    deadlineDay:  25,
     lockDay:      25,
     unlockDay:    9,
     autoUnlockEnabled: false,
@@ -547,31 +548,6 @@
     applyBootstrap(d);
   };
 
-  Store.syncPlatformData = async function () {
-    return Store.refreshEditorData();
-  };
-
-  /** 系统/板块管理员：刷新工程平台引用 + 重载库内项目与 PM 提交状态 */
-  Store.refreshEditorData = async function () {
-    const user = Store.currentUser || {};
-    const d = await apiFetch('/editor/refresh-data', {
-      method: 'POST',
-      body: {
-        user: {
-          id: user.id || user.role,
-          name: user.name,
-          role: user.role
-        }
-      }
-    });
-    if (d && d.state) applyBootstrap(d.state);
-    else if (d && d.systemDataSyncedAt) {
-      Store.systemDataSyncedAt = d.systemDataSyncedAt;
-      Store.systemDataSyncMeta = d.syncMeta || null;
-    }
-    return d;
-  };
-
   Store.getMonthIdx = function () {
     return FormulaEngine.getMonthIdx(Store.reportingMonth);
   };
@@ -616,6 +592,21 @@
     } catch (e) {
       console.error('fetchReportLines 失败:', e);
     }
+  };
+
+  /** 查询报告线列表（不写入 Store.reportLines，供归档预检等场景） */
+  Store.queryReportLines = async function (filters) {
+    var params = filters || {};
+    var qs = [];
+    var u = Store.currentUser || {};
+    if (u.role) qs.push('role=' + encodeURIComponent(u.role));
+    if (u.sector) qs.push('sectorCode=' + encodeURIComponent(u.sector));
+    if (u.groupCode) qs.push('groupCode=' + encodeURIComponent(u.groupCode));
+    if (params.status && params.status !== 'all') qs.push('status=' + encodeURIComponent(params.status));
+    if (params.sector) qs.push('sector=' + encodeURIComponent(params.sector));
+    if (params.period) qs.push('period=' + encodeURIComponent(params.period));
+    var query = qs.length ? '?' + qs.join('&') : '';
+    return await apiFetch('/report-lines' + query);
   };
 
   /** 请求报告线详情 */
@@ -712,18 +703,18 @@
 
   /**
    * 根据角色 + 状态返回可见操作列表（同步方法）
-   * 状态: open | submitted | reviewing_director | reviewing_leader | returned | completed | closed
+   * 状态: open | submitted | reviewing_director | reviewing_leader | returned | finalizing | completed | closed
    * 操作: fill | view | export | approve | submit_approval | pm_submit
    *
    * 角色×状态矩阵:
    *   PM:              open→fill / submitted→view / closed→view / 其他→—
    *   sector_admin:    open→fill,export / reviewing_director→view,export / reviewing_leader→view,export
-   *                    returned→fill,export / completed→view,export / closed→view,export
+   *                    returned→fill,export / finalizing→view,export / completed→view,export / closed→view,export
    *                    submitted→—
    *   sector_director: open→view / reviewing_director→approve,view,export / reviewing_leader→view,export
-   *                    returned→view,export / completed→view,export / closed→view,export
+   *                    returned→view,export / finalizing→view,export / completed→view,export / closed→view,export
    *                    submitted→—
-   *   group_leader:    reviewing_leader→approve,view,export / completed→view,export / closed→view,export
+   *   group_leader:    reviewing_leader→approve,view,export / finalizing→view,export / completed→view,export / closed→view,export
    *                    其他→view,export 或 —（仅 reviewing_leader 可审批）
    *   system_admin:    所有状态→view,export
    */
@@ -746,6 +737,7 @@
       switch (status) {
         case 'open': return ['fill', 'trace'];
         case 'submitted': return ['view', 'trace'];
+        case 'finalizing': return ['view', 'export', 'trace'];
         case 'completed': return ['view', 'export', 'trace'];
         case 'closed': return ['view', 'export', 'trace'];
         default: return ['trace'];
@@ -759,6 +751,7 @@
         case 'reviewing_director': return ['view', 'export', 'trace'];
         case 'reviewing_leader': return ['view', 'export', 'trace'];
         case 'returned': return ['fill', 'export', 'trace'];
+        case 'finalizing': return ['view', 'export', 'trace'];
         case 'completed': return ['view', 'export', 'trace'];
         case 'closed': return ['view', 'export', 'trace'];
         default: return ['trace'];
@@ -772,6 +765,7 @@
         case 'reviewing_director': return ['approve', 'view', 'export', 'trace'];
         case 'reviewing_leader': return ['view', 'export', 'trace'];
         case 'returned': return ['view', 'export', 'trace'];
+        case 'finalizing': return ['view', 'export', 'trace'];
         case 'completed': return ['view', 'export', 'trace'];
         case 'closed': return ['view', 'export', 'trace'];
         default: return ['trace'];
@@ -781,6 +775,7 @@
     if (role === 'group_leader') {
       switch (status) {
         case 'reviewing_leader': return ['approve', 'view', 'export', 'trace'];
+        case 'finalizing': return ['view', 'export', 'trace'];
         case 'completed': return ['view', 'export', 'trace'];
         case 'closed': return ['view', 'export', 'trace'];
         default: return ['view', 'export', 'trace'];

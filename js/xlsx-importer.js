@@ -28,7 +28,8 @@
   }
 
   /**
-   * 将 Luckysheet 导出的数据写入 xlsx 并下载
+   * @deprecated 填报页导出已改走 Luckysheet 视图导出（js/luckysheet-xlsx-export.js）。
+   * 仅保留供脚本/测试使用的纯数据导出；不保留样式与公式。
    */
   function exportToXlsx(projects, reportingMonth, filename) {
     if (!window.XLSX) { alert('SheetJS 未加载'); return; }
@@ -63,7 +64,7 @@
     const ws = XLSX.utils.aoa_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, reportingMonth || '2026-05');
-    XLSX.writeFile(wb, filename || ('项目执行追踪_' + (reportingMonth || '2026-05') + '.xlsx'));
+    XLSX.writeFile(wb, filename || ('项目执行跟踪_' + (reportingMonth || '2026-05') + '.xlsx'));
   }
 
   // ── 内部：解析 Sheet ────────────────────────────────────

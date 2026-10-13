@@ -1,5 +1,5 @@
 /**
- * ReportLineList.js — 填报管理列表页
+ * ReportLineList.js — 填报与审批列表页
  * 按 LIST_FORM.md 规范：筛选区 + 操作区 + 数据表格 + 分页
  */
 (function (window) {
@@ -116,6 +116,32 @@
         });
         return sectionOrder.map(function (n) { return sectionMap[n]; });
       },
+      reportingMonthLabel() {
+        var month = Store.reportingMonth || (Store.periodConfig && Store.periodConfig.reportingMonth) || '';
+        var parts = String(month).split('-');
+        if (parts.length >= 2) {
+          return parts[0] + '年' + parseInt(parts[1], 10) + '月';
+        }
+        return month || '—';
+      },
+      deadlineDay() {
+        var cfg = Store.periodConfig || {};
+        var day = Number(cfg.deadlineDay != null ? cfg.deadlineDay : cfg.lockDay);
+        if (!day || isNaN(day)) day = 25;
+        return Math.min(28, Math.max(1, day));
+      },
+      /** 当月填报截止提醒：仅展示报告月与截止日（几号） */
+      deadlineReminder() {
+        var monthLabel = this.reportingMonthLabel;
+        var day = this.deadlineDay;
+        if (!monthLabel || monthLabel === '—') {
+          return { visible: false, text: '' };
+        }
+        return {
+          visible: true,
+          text: '填报截止日为每月 ' + day + ' 日。'
+        };
+      },
       forkSelectedCount() {
         if (this.forkDistMode === 'all') {
           return this.totalFieldCount;
@@ -173,10 +199,49 @@
           reviewing_director: { label: '板块领导审批中', type: '' },
           reviewing_leader:   { label: '群主审批中',     type: '' },
           returned:           { label: '已退回',         type: 'danger' },
+          finalizing:         { label: '核对归档中',     type: 'warning' },
           completed:          { label: '已完成',         type: 'success' },
           closed:             { label: '已关闭',         type: 'info' }
         };
         return map[status] || { label: status, type: 'info' };
+      },
+      /** 优先用服务端 my_status；缺省时按角色兜底映射 */
+      myStatusTag(row) {
+        if (row && row.my_status && row.my_status.label) {
+          return {
+            label: row.my_status.label,
+            type: row.my_status.type != null ? row.my_status.type : 'info'
+          };
+        }
+        var role = (Store.currentUser || {}).role;
+        var status = row && row.status;
+        if (role === 'pm') {
+          return { label: '待提交', type: 'warning' };
+        }
+        if (role === 'sector_admin') {
+          if (status === 'reviewing_director' || status === 'reviewing_leader' || status === 'submitted') {
+            return { label: '已提交审批', type: 'success' };
+          }
+          if (status === 'finalizing') return { label: '核对归档中', type: 'warning' };
+          if (status === 'completed') return { label: '已完成', type: 'success' };
+          if (status === 'closed') return { label: '已关闭', type: 'info' };
+          return { label: '待提交审批', type: 'warning' };
+        }
+        if (role === 'sector_director') {
+          if (status === 'reviewing_director') return { label: '待我审批', type: 'warning' };
+          if (status === 'reviewing_leader' || status === 'finalizing' || status === 'completed') {
+            return { label: '已审批', type: 'success' };
+          }
+          if (status === 'closed') return { label: '已关闭', type: 'info' };
+          return { label: '等待中', type: 'warning' };
+        }
+        if (role === 'group_leader') {
+          if (status === 'reviewing_leader') return { label: '待我审批', type: 'warning' };
+          if (status === 'finalizing' || status === 'completed') return { label: '已审批', type: 'success' };
+          if (status === 'closed') return { label: '已关闭', type: 'info' };
+          return { label: '等待中', type: 'warning' };
+        }
+        return { label: '—', type: 'info' };
       },
       opLabel(op) {
         var map = {
@@ -201,7 +266,16 @@
           this.openTraceDialog(row);
           return;
         }
-        this.$router.push({ path: '/report-lines/' + row.id, query: { mode: action } });
+        this.$router.push({ path: this.reportLineLandingPath(row.id), query: { mode: action } });
+      },
+      /**
+       * 落地页按角色区分：PM 与板块管理员是填报角色，直接进明细表；
+       * 审阅角色（总监 / 群主 / 系统管理员 / 经营管理）先进概览页。
+       */
+      reportLineLandingPath(id) {
+        var role = (Store.currentUser || {}).role;
+        var fillingRole = role === 'pm' || role === 'sector_admin';
+        return '/report-lines/' + id + (fillingRole ? '/sheet' : '');
       },
       formatPeriod(period) {
         if (!period) return '—';
@@ -395,6 +469,7 @@
           reviewing_leader: '群主审批中',
           returned: '已退回',
           rejected: '已退回',
+          finalizing: '核对归档中',
           completed: '已完成',
           closed: '已关闭'
         };
@@ -431,22 +506,35 @@
     template: `
       <div class="report-line-list">
 
-        <!-- ① 筛选区 -->
+        <!-- ① 当月填报截止提醒 -->
+        <div
+          v-if="deadlineReminder.visible"
+          class="rl-deadline-banner"
+          role="status"
+        >
+          <i class="el-icon-time rl-deadline-banner__icon"></i>
+          <div class="rl-deadline-banner__body">
+            <span class="rl-deadline-banner__text">{{ deadlineReminder.text }}</span>
+          </div>
+        </div>
+
+        <!-- ② 筛选区 -->
         <div class="list-filter-bar card" style="padding:12px 16px;margin-bottom:12px;">
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
             <el-select
               v-model="pendingFilters.status"
-              placeholder="状态"
+              placeholder="报告线状态"
               size="small"
               style="width:160px;"
             >
-              <el-option label="全部状态" value="all"></el-option>
+              <el-option label="全部报告线状态" value="all"></el-option>
               <el-option label="进行中" value="in_progress"></el-option>
               <el-option label="开放填报" value="open"></el-option>
               <el-option label="已提交" value="submitted"></el-option>
               <el-option label="板块领导审批中" value="reviewing_director"></el-option>
               <el-option label="群主审批中" value="reviewing_leader"></el-option>
               <el-option label="已退回" value="returned"></el-option>
+              <el-option label="核对归档中" value="finalizing"></el-option>
               <el-option label="已完成" value="completed"></el-option>
               <el-option label="已关闭" value="closed"></el-option>
             </el-select>
@@ -513,7 +601,15 @@
             style="width:100%;"
             :header-cell-style="{background:'#f8fafc',fontWeight:'600',fontSize:'13px',color:'#374151',padding:'10px 0'}"
           >
-            <el-table-column label="状态" width="160">
+            <el-table-column label="我的状态" width="120">
+              <template slot-scope="{ row }">
+                <el-tag :type="myStatusTag(row).type" size="small" style="font-size:12px;">
+                  {{ myStatusTag(row).label }}
+                </el-tag>
+              </template>
+            </el-table-column>
+
+            <el-table-column label="报告线状态" width="160">
               <template slot-scope="{ row }">
                 <el-tag :type="statusTag(row.status).type" size="small" style="font-size:12px;">
                   {{ statusTag(row.status).label }}
@@ -776,7 +872,7 @@
             </div>
           </div>
           <div v-else style="padding:24px 0;text-align:center;color:#64748b;font-size:13px;">
-            分发全部字段列，填报界面与项目追踪表完全一致。
+            分发全部字段列，填报界面与查看数据页完全一致。
           </div>
 
           <div slot="footer" style="display:flex;justify-content:flex-end;gap:10px;">

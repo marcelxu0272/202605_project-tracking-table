@@ -13,7 +13,8 @@
 
   const MSG_COMPLETION_EXCEEDS = '累计完成额将超过总合同额（存量合同额将为负）。请调减完成额，或先在 CRB 办理合同额变更后再填报。';
   const MSG_FORECAST_COMPLETION_EXCEEDS = '已完成额加未来月份预测完成额将超过总合同额。请调整完成额预测，或先完成 CRB 合同额变更后再填报。';
-  const MSG_COMPLETION_NEGATIVE = '月度完成额不能小于 0。';
+  const MSG_COMPLETION_NEGATIVE = '未来月份完成合同额（预测）不能小于 0。';
+  const MSG_CURRENT_COMPLETION_NEGATIVE_REMARK = '当前月份完成合同额为负时，备注不能为空。';
 
   const EPS = 0.005;
 
@@ -69,6 +70,32 @@
   function hasInvoiceStockWarning(project, monthIdx) {
     const p = computeProject(project, monthIdx);
     return invoiceStock(p) < -EPS;
+  }
+
+  function cumInvoice(project) {
+    return Number(project && project.cum_invoice) || 0;
+  }
+
+  function cumPayment(project) {
+    return Number(project && project.cum_payment) || 0;
+  }
+
+  /** 累计开票 > 总合同额（等价于 R < 0） */
+  function hasInvoiceExceedsContract(project, monthIdx) {
+    const p = computeProject(project, monthIdx);
+    return cumInvoice(p) - totalContract(p) > EPS;
+  }
+
+  /** 累计回款 > 总合同额 */
+  function hasPaymentExceedsContract(project, monthIdx) {
+    const p = computeProject(project, monthIdx);
+    return cumPayment(p) - totalContract(p) > EPS;
+  }
+
+  /** 累计回款 > 累计开票 */
+  function hasPaymentExceedsInvoice(project, monthIdx) {
+    const p = computeProject(project, monthIdx);
+    return cumPayment(p) - cumInvoice(p) > EPS;
   }
 
   function hasContractStockViolation(project, monthIdx) {
@@ -137,6 +164,10 @@
     if (!window.FieldConfig) return { ok: true };
     var flat = FieldConfig.arraysToFlat(project);
     var key = FieldConfig.COL_TO_KEY[field.col] || ('mc_' + monthIdx);
+    var editMonthIdx = FieldConfig.getMonthlyMonthIndex(field.col);
+    if (editMonthIdx > monthIdx && amount < -EPS) {
+      return { ok: false, message: MSG_COMPLETION_NEGATIVE };
+    }
     flat[key] = amount;
     var next = computeProject(FieldConfig.flatToArrays(flat), monthIdx);
     if (contractStock(next) < -EPS) {
@@ -146,6 +177,35 @@
       return { ok: false, message: MSG_FORECAST_COMPLETION_EXCEEDS };
     }
     return { ok: true };
+  }
+
+  function validateNegativeCompletionRemark(project, monthIdx) {
+    if (!project || !window.FieldConfig) return { ok: true };
+    var flat = FieldConfig.arraysToFlat(project);
+    var currentCompletion = Number(flat['mc_' + monthIdx]) || 0;
+    if (currentCompletion >= -EPS) return { ok: true };
+    var remark = String(flat.completion_remark || '').trim();
+    if (remark) return { ok: true };
+    return {
+      ok: false,
+      message: MSG_CURRENT_COMPLETION_NEGATIVE_REMARK,
+      project_no: flat.project_no,
+      project_name: flat.project_name
+    };
+  }
+
+  /**
+   * 仅当「当前月完成额本次由非负改为负」时返回 true，用于自动开抽屉/聚焦备注引导。
+   * 已是负值时再次编辑不重复强弹。
+   */
+  function shouldGuideNegativeRemark(oldVal, newVal, field, monthIdx) {
+    if (!isCompletionField(field) || !window.FieldConfig) return false;
+    if (FieldConfig.getMonthlyMonthIndex(field.col) !== monthIdx) return false;
+    var oldAmount = parseCompletionAmount(oldVal);
+    if (isNaN(oldAmount)) oldAmount = 0;
+    var newAmount = parseCompletionAmount(newVal);
+    if (isNaN(newAmount)) return false;
+    return oldAmount >= -EPS && newAmount < -EPS;
   }
 
   function listContractViolations(projects, monthIdx) {
@@ -186,6 +246,21 @@
 
   function validateProjectsForSubmit(projects, monthIdx, lockStatus) {
     var list = (projects || []).slice();
+    var remarkViolations = list.map(function (p) {
+      return validateNegativeCompletionRemark(p, monthIdx);
+    }).filter(function (r) { return !r.ok; });
+    if (remarkViolations.length) {
+      var nRemark = remarkViolations.length;
+      return {
+        ok: false,
+        violations: remarkViolations,
+        message: buildViolationMessage(
+          nRemark,
+          remarkViolations,
+          '有 ' + nRemark + ' 个项目当前月份完成合同额为负且未填写备注，请补充备注后再提交。'
+        )
+      };
+    }
     const violations = listContractViolations(list, monthIdx);
     if (!violations.length) {
       const forecastViolations = listProjectedCompletionViolations(list, monthIdx);
@@ -228,17 +303,23 @@
     MSG_COMPLETION_EXCEEDS: MSG_COMPLETION_EXCEEDS,
     MSG_FORECAST_COMPLETION_EXCEEDS: MSG_FORECAST_COMPLETION_EXCEEDS,
     MSG_COMPLETION_NEGATIVE: MSG_COMPLETION_NEGATIVE,
+    MSG_CURRENT_COMPLETION_NEGATIVE_REMARK: MSG_CURRENT_COMPLETION_NEGATIVE_REMARK,
     parseCompletionAmount: parseCompletionAmount,
     isCompletionField: isCompletionField,
     isStockColumn: isStockColumn,
     hasStockWarning: hasStockWarning,
     hasInvoiceStockWarning: hasInvoiceStockWarning,
+    hasInvoiceExceedsContract: hasInvoiceExceedsContract,
+    hasPaymentExceedsContract: hasPaymentExceedsContract,
+    hasPaymentExceedsInvoice: hasPaymentExceedsInvoice,
     hasContractStockViolation: hasContractStockViolation,
     hasProjectedCompletionViolation: hasProjectedCompletionViolation,
     isStockWarningCell: isStockWarningCell,
     applyOpenPeriodStockHedge: applyOpenPeriodStockHedge,
     syncOpenPeriodStockHedge: syncOpenPeriodStockHedge,
     validateCompletionEdit: validateCompletionEdit,
+    validateNegativeCompletionRemark: validateNegativeCompletionRemark,
+    shouldGuideNegativeRemark: shouldGuideNegativeRemark,
     validateProjectsForSubmit: validateProjectsForSubmit,
     countWarnings: countWarnings,
     countContractViolations: countContractViolations,

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>项目执行追踪平台</title>
+  <title>项目执行跟踪平台</title>
 
   <!-- Tailwind CSS (Play CDN) -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -63,9 +63,14 @@
   <!-- Luckysheet JS -->
   <script src="https://cdn.jsdelivr.net/npm/luckysheet@2.1.13/dist/plugins/js/plugin.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/luckysheet@2.1.13/dist/luckysheet.umd.js"></script>
+  <!-- Luckysheet 补丁：SUBTOTAL 识别筛选隐藏行；方向键跳过隐藏行 -->
+  <script src="./js/luckysheet-subtotal-patch.js"></script>
+  <script src="./js/luckysheet-nav-skip-hidden.js"></script>
 
-  <!-- SheetJS (xlsx 导入/导出) -->
-  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+  <!-- SheetJS + 样式写入（xlsx-js-style，兼容 XLSX.read/write；导出保留背景色/公式/数字格式） -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
+  <!-- ECharts 5.4.3（报告线概览趋势图） -->
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
 
   <!-- 数据层 (按加载顺序) -->
   <script src="./js/formatters.js"></script>
@@ -77,11 +82,13 @@
   <script src="./js/sector-workflow.js"></script>
   <script src="./js/diff-utils.js"></script>
   <script src="./js/store.js"></script>
+  <script src="./js/luckysheet-xlsx-export.js"></script>
   <script src="./js/xlsx-importer.js"></script>
   <script src="./js/import-merge.js"></script>
   <script src="./js/change-meta.js"></script>
   <script src="./js/stock-validation.js"></script>
   <script src="./js/wip-validation.js"></script>
+  <script src="./js/report-line-overview.js"></script>
   <script src="./js/project-alerts.js"></script>
   <script src="./js/baseline-diff.js"></script>
   <script src="./js/project-drawer-layout.js"></script>
@@ -89,6 +96,7 @@
   <script src="./js/components/ProjectCostAux.js"></script>
   <script src="./js/components/ProjectDetailDrawer.js"></script>
   <script src="./js/components/AlertsDrawer.js"></script>
+  <script src="./js/components/ReportLineOverview.js"></script>
 
   <!-- 组件层 -->
   <script src="./js/components/AppLayout.js"></script>
@@ -105,6 +113,7 @@
   <script src="./js/views/AdminSettings.js"></script>
   <script src="./js/views/ReportLineList.js"></script>
   <script src="./js/views/ReportLineDetail.js"></script>
+  <script src="./js/views/ReportLineOverviewPage.js"></script>
 
   <!-- 路由 + 应用初始化 -->
   <script src="./js/router.js"></script>

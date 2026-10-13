@@ -1,6 +1,6 @@
 /**
  * alert-service.js — 项目预警聚合服务
- * 批量计算全部项目预警，与 DB 持久化记录同步（active / resolved 状态流转）
+ * 批量计算全部项目预警，与 DB 持久化记录同步（active / dismissed；条件消失则删除，不保留已消除）
  */
 'use strict';
 
@@ -46,9 +46,20 @@ function formatAlertDetail(alertType, project, monthIdx, tsStats) {
     ? FieldConfig.arraysToFlat(project)
     : project;
 
-  if (alertType === 'invoice_stock_negative') {
-    const val = Number(flat.contract_minus_invoice) || 0;
-    return 'R列(存量开票额) = ' + val.toFixed(2) + '万';
+  if (alertType === 'invoice_stock_negative' || alertType === 'invoice_exceeds_contract') {
+    const ac = Number(flat.cum_invoice) || 0;
+    const p = Number(flat.total_contract) || 0;
+    return '累计开票 ' + ac.toFixed(2) + ' 万，总合同额 ' + p.toFixed(2) + ' 万';
+  }
+  if (alertType === 'payment_exceeds_contract') {
+    const af = Number(flat.cum_payment) || 0;
+    const p = Number(flat.total_contract) || 0;
+    return '累计回款 ' + af.toFixed(2) + ' 万，总合同额 ' + p.toFixed(2) + ' 万';
+  }
+  if (alertType === 'payment_exceeds_invoice') {
+    const af = Number(flat.cum_payment) || 0;
+    const ac = Number(flat.cum_invoice) || 0;
+    return '累计回款 ' + af.toFixed(2) + ' 万，累计开票 ' + ac.toFixed(2) + ' 万';
   }
   if (alertType === 'contract_stock_negative') {
     const val = Number(flat.contract_minus_completed) || 0;
@@ -132,18 +143,42 @@ function collectAllAlerts(db, modules, dbm, timesheetStatsMod, monthIdx, year) {
     const projectName = project.project_name || project.projectName || '';
     const tsStats = tsStatsMap[pno] || null;
 
-    // R/S alerts via StockValidation
+    // 开票/回款/存量 alerts via StockValidation
     if (modules.StockValidation) {
-      if (modules.StockValidation.hasInvoiceStockWarning(project, monthIdx)) {
-        const key = pno + '__invoice_stock_negative';
+      if (modules.StockValidation.hasInvoiceExceedsContract(project, monthIdx)) {
+        const key = pno + '__invoice_exceeds_contract';
         activeMap.set(key, {
           projectNo: pno,
           projectName,
           sectorCode,
           sectorName,
-          alertType: 'invoice_stock_negative',
-          alertLabel: '存量开票额为负',
-          detail: formatAlertDetail('invoice_stock_negative', project, monthIdx, tsStats)
+          alertType: 'invoice_exceeds_contract',
+          alertLabel: '累计开票超总合同额',
+          detail: formatAlertDetail('invoice_exceeds_contract', project, monthIdx, tsStats)
+        });
+      }
+      if (modules.StockValidation.hasPaymentExceedsContract(project, monthIdx)) {
+        const key = pno + '__payment_exceeds_contract';
+        activeMap.set(key, {
+          projectNo: pno,
+          projectName,
+          sectorCode,
+          sectorName,
+          alertType: 'payment_exceeds_contract',
+          alertLabel: '累计回款超总合同额',
+          detail: formatAlertDetail('payment_exceeds_contract', project, monthIdx, tsStats)
+        });
+      }
+      if (modules.StockValidation.hasPaymentExceedsInvoice(project, monthIdx)) {
+        const key = pno + '__payment_exceeds_invoice';
+        activeMap.set(key, {
+          projectNo: pno,
+          projectName,
+          sectorCode,
+          sectorName,
+          alertType: 'payment_exceeds_invoice',
+          alertLabel: '累计回款超累计开票',
+          detail: formatAlertDetail('payment_exceeds_invoice', project, monthIdx, tsStats)
         });
       }
       if (modules.StockValidation.hasContractStockViolation(project, monthIdx)) {
@@ -196,78 +231,48 @@ function collectAllAlerts(db, modules, dbm, timesheetStatsMod, monthIdx, year) {
   const now = nowISO();
 
   const syncTx = db.transaction(() => {
+    // 清理历史 resolved 行（不再保留已消除记录）
+    dbm.deleteResolvedAlerts(db, year, monthIdx);
+
     // Upsert active alerts
     for (const [key, alert] of activeMap) {
       const prev = existingMap.get(key);
-      if (prev) {
-        // Update existing record
-        const isResolved = prev.status === 'resolved';
-        dbm.upsertAlert(db, {
-          projectNo: alert.projectNo,
-          projectName: alert.projectName,
-          sectorCode: alert.sectorCode,
-          sectorName: alert.sectorName,
-          alertType: alert.alertType,
-          alertLabel: alert.alertLabel,
-          detail: alert.detail,
-          year,
-          monthIdx,
-          status: 'active',
-          firstDetectedAt: isResolved ? now : prev.firstDetectedAt,
-          resolvedAt: isResolved ? '' : prev.resolvedAt,
-          lastSeenAt: now
-        });
-      } else {
-        // New alert
-        dbm.upsertAlert(db, {
-          projectNo: alert.projectNo,
-          projectName: alert.projectName,
-          sectorCode: alert.sectorCode,
-          sectorName: alert.sectorName,
-          alertType: alert.alertType,
-          alertLabel: alert.alertLabel,
-          detail: alert.detail,
-          year,
-          monthIdx,
-          status: 'active',
-          firstDetectedAt: now,
-          resolvedAt: '',
-          lastSeenAt: now
-        });
-      }
+      dbm.upsertAlert(db, {
+        projectNo: alert.projectNo,
+        projectName: alert.projectName,
+        sectorCode: alert.sectorCode,
+        sectorName: alert.sectorName,
+        alertType: alert.alertType,
+        alertLabel: alert.alertLabel,
+        detail: alert.detail,
+        year,
+        monthIdx,
+        status: 'active',
+        firstDetectedAt: (prev && prev.status === 'active') ? prev.firstDetectedAt : now,
+        resolvedAt: '',
+        lastSeenAt: now
+      });
     }
 
-    // Mark resolved: active in DB but not in current active set
+    // 条件消失：删除活跃行（不写 resolved）；已忽略行保留
     for (const [key, rec] of existingMap) {
       if (rec.status === 'active' && !activeMap.has(key)) {
-        dbm.upsertAlert(db, {
-          projectNo: rec.projectNo,
-          projectName: rec.projectName,
-          sectorCode: rec.sectorCode,
-          sectorName: rec.sectorName,
-          alertType: rec.alertType,
-          alertLabel: rec.alertLabel,
-          detail: rec.detail,
-          year,
-          monthIdx,
-          status: 'resolved',
-          firstDetectedAt: rec.firstDetectedAt,
-          resolvedAt: now,
-          lastSeenAt: rec.lastSeenAt
-        });
+        dbm.deleteAlert(db, rec.projectNo, rec.alertType, year, monthIdx);
+      } else if (rec.status === 'resolved') {
+        dbm.deleteAlert(db, rec.projectNo, rec.alertType, year, monthIdx);
       }
     }
   });
 
   syncTx();
 
-  // 5. Return full list
-  const finalAlerts = dbm.getAlertsByScope(db, year, monthIdx);
+  // 5. Return full list（仅 active + dismissed）
+  const finalAlerts = dbm.getAlertsByScope(db, year, monthIdx)
+    .filter(function (a) { return a.status === 'active' || a.status === 'dismissed'; });
 
   const byType = {};
   const projectSet = new Set();
   let activeCount = 0;
-  let resolvedCount = 0;
   let dismissedCount = 0;
 
   for (const a of finalAlerts) {
@@ -276,8 +281,6 @@ function collectAllAlerts(db, modules, dbm, timesheetStatsMod, monthIdx, year) {
       byType[a.alertType] = (byType[a.alertType] || 0) + 1;
     } else if (a.status === 'dismissed') {
       dismissedCount++;
-    } else {
-      resolvedCount++;
     }
     projectSet.add(a.projectNo);
   }
@@ -289,7 +292,6 @@ function collectAllAlerts(db, modules, dbm, timesheetStatsMod, monthIdx, year) {
     summary: {
       total: finalAlerts.length,
       activeCount,
-      resolvedCount,
       dismissedCount,
       byType,
       projectCount: projectSet.size
@@ -332,4 +334,44 @@ function dismissAlertById(db, dbm, alertId, dismissedBy) {
   return dismissal;
 }
 
-module.exports = { collectAllAlerts, dismissAlertById };
+/**
+ * 撤回永久忽略：删除 dismissals 记录，并将当前行暂标为 active，
+ * 由调用方再跑 collectAllAlerts：条件仍在则保持 active，已不满足则删除行。
+ * @returns {{ projectNo, alertType, year, monthIdx, removed }}
+ */
+function undismissAlertById(db, dbm, alertId) {
+  const alert = dbm.getAlertById(db, alertId);
+  if (!alert) throw new Error('预警记录不存在：id=' + alertId);
+  if (alert.status !== 'dismissed') {
+    throw new Error('仅已忽略的预警可撤回');
+  }
+
+  const result = dbm.undismissAlert(db, alert.projectNo, alert.alertType);
+
+  // 先标回 active，便于后续 sync：条件仍在则保持 active，已不满足则删除
+  dbm.upsertAlert(db, {
+    projectNo: alert.projectNo,
+    projectName: alert.projectName,
+    sectorCode: alert.sectorCode,
+    sectorName: alert.sectorName,
+    alertType: alert.alertType,
+    alertLabel: alert.alertLabel,
+    detail: alert.detail,
+    year: alert.year,
+    monthIdx: alert.monthIdx,
+    status: 'active',
+    firstDetectedAt: alert.firstDetectedAt,
+    resolvedAt: '',
+    lastSeenAt: alert.lastSeenAt || nowISO()
+  });
+
+  return {
+    projectNo: alert.projectNo,
+    alertType: alert.alertType,
+    year: alert.year,
+    monthIdx: alert.monthIdx,
+    removed: result.removed
+  };
+}
+
+module.exports = { collectAllAlerts, dismissAlertById, undismissAlertById };

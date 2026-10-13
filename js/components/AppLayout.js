@@ -14,8 +14,8 @@
   };
 
   const NAV_ITEMS = [
-    { path: '/report-lines', icon: '📋', label: '填报管理' },
-    { path: '/editor',       icon: '📊', label: '项目追踪表' },
+    { path: '/report-lines', icon: '📋', label: '填报与审批' },
+    { path: '/editor',       icon: '📊', label: '查看数据' },
     { path: '/audit',        icon: '📝', label: '审计日志', adminOnly: true },
     { path: '/fields',       icon: '📄', label: '表头配置', adminOnly: true },
     { path: '/admin',        icon: '⚙️', label: '管理设置', adminOnly: true }
@@ -73,13 +73,16 @@
       },
       pageTitle() {
         const item = NAV_ITEMS.find(n => this.activePath === n.path);
-        return item ? item.label : '项目追踪表';
+        if (item) return item.label;
+        const metaTitle = this.$route && this.$route.meta && this.$route.meta.title;
+        return metaTitle || '查看数据';
       },
       reportingMonth() { return Store.reportingMonth; },
       sidebarCollapsed() { return Store.sidebarCollapsed; },
+      /** Luckysheet 表格页需要占满视口且自行处理滚动；概览等常规页保留边距与页面滚动 */
       contentNoPadding() {
         const path = this.activePath || '';
-        return path === '/editor' || path.indexOf('/report-lines/') === 0;
+        return path === '/editor' || /^\/report-lines\/[^/]+\/sheet$/.test(path);
       }
     },
     methods: {
@@ -133,9 +136,9 @@
         <aside class="app-sidebar" :class="{ 'is-collapsed': sidebarCollapsed }">
           <div class="sidebar-logo">
             <div v-if="!sidebarCollapsed" class="sidebar-logo-text">
-              项目执行追踪
+              项目执行跟踪
             </div>
-            <div v-else class="sidebar-logo-mark" title="项目执行追踪">项</div>
+            <div v-else class="sidebar-logo-mark" title="项目执行跟踪">项</div>
           </div>
           <div class="sidebar-nav">
             <el-menu

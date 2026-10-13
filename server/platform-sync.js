@@ -209,10 +209,10 @@ function fetchPlatformSnapshot(db, modules, reportingMonth) {
  * @param {import('better-sqlite3').Database} db
  * @param {object} dbm
  * @param {{ FieldConfig: object, FormulaEngine: object }} modules
- * @param {{ trigger?: 'manual'|'scheduled', actor?: { id?: string, name?: string } }} [options]
+ * @param {{ trigger?: 'scheduled', actor?: { id?: string, name?: string } }} [options]
  */
 function runPlatformSync(db, dbm, modules, options = {}) {
-  const trigger = options.trigger || 'manual';
+  const trigger = options.trigger || 'scheduled';
   const actor = options.actor || null;
   const reportingMonth = dbm.getMeta(db, 'reportingMonth') || '2026-05';
 
@@ -254,8 +254,8 @@ function runPlatformSync(db, dbm, modules, options = {}) {
     fieldCN: '工程平台引用同步',
     oldVal: trigger,
     newVal: JSON.stringify(stats),
-    userId: actor && actor.id ? actor.id : (trigger === 'scheduled' ? 'system' : 'system_admin'),
-    userName: actor && actor.name ? actor.name : (trigger === 'scheduled' ? '定时任务' : '系统管理员')
+    userId: actor && actor.id ? actor.id : 'system',
+    userName: actor && actor.name ? actor.name : '定时任务'
   });
 
   return { syncedAt, stats, syncMeta };

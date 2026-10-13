@@ -29,7 +29,8 @@
     'AV','AW','AX','AY','AZ','BA','BB','BC','BD','BE','BF','BG', // 月度完成
     'BH','BI','BJ','BK','BL','BM','BN','BO','BP','BQ',
     'BR','BS','BT','BU','BV','BW','BX','BY','BZ',
-    'CA','CB','CC','CD','CE'                                       // 月度开票+回款
+    'CA','CB','CC','CD','CE',                                      // 月度开票+回款
+    'CF'                                                            // 备注
   ]);
 
   const SECTOR_ADMIN_EDITABLE_COLS = new Set([...PM_EDITABLE_COLS]);
@@ -38,6 +39,47 @@
   const MC_COLS = ['AV', 'AW', 'AX', 'AY', 'AZ', 'BA', 'BB', 'BC', 'BD', 'BE', 'BF', 'BG'];
   const MI_COLS = ['BH', 'BJ', 'BL', 'BN', 'BP', 'BR', 'BT', 'BV', 'BX', 'BZ', 'CB', 'CD'];
   const MP_COLS = ['BI', 'BK', 'BM', 'BO', 'BQ', 'BS', 'BU', 'BW', 'BY', 'CA', 'CC', 'CE'];
+  /** 表格「有变化」筛选只认这 36 列：各月完成合同额 / 完成开票额 / 完成回款额 */
+  const MONTHLY_AMOUNT_CHANGE_COLS = MC_COLS.concat(MI_COLS, MP_COLS);
+  const MONTHLY_AMOUNT_CHANGE_SET = new Set(MONTHLY_AMOUNT_CHANGE_COLS);
+
+  /**
+   * 列字母（AV–CE）或扁平键（mc_0…mp_11）是否属于三十六列月度金额。
+   */
+  function isMonthlyAmountChangeToken(token) {
+    if (token == null) return false;
+    var raw = String(token).trim();
+    if (!raw) return false;
+    if (MONTHLY_AMOUNT_CHANGE_SET.has(raw.toUpperCase())) return true;
+    var match = /^(mc|mi|mp)_(\d+)$/i.exec(raw);
+    if (!match) return false;
+    var idx = Number(match[2]);
+    return idx >= 0 && idx <= 11;
+  }
+
+  function changeLogHasEntries(value) {
+    if (Array.isArray(value)) return value.length > 0;
+    return !!value;
+  }
+
+  /**
+   * 项目是否因三十六列月度金额变化而进入「有变化」视图。
+   * 备注、实施进展、WIP 及其他列的变化不计入。
+   */
+  function projectHasMonthlyAmountChange(project) {
+    if (!project) return false;
+    var cols = project._changed_fields || [];
+    for (var i = 0; i < cols.length; i++) {
+      if (isMonthlyAmountChangeToken(cols[i])) return true;
+    }
+    var log = project._field_change_log;
+    if (!log || typeof log !== 'object') return false;
+    var keys = Object.keys(log);
+    for (var j = 0; j < keys.length; j++) {
+      if (changeLogHasEntries(log[keys[j]]) && isMonthlyAmountChangeToken(keys[j])) return true;
+    }
+    return false;
+  }
 
   /**
    * 月度完成/开票/回款列 → 0-based 月份索引（0=1月 … 11=12月），非月度列返回 -1
@@ -214,7 +256,8 @@
     BH: 'mi_0', BI: 'mp_0', BJ: 'mi_1', BK: 'mp_1', BL: 'mi_2', BM: 'mp_2',
     BN: 'mi_3', BO: 'mp_3', BP: 'mi_4', BQ: 'mp_4', BR: 'mi_5', BS: 'mp_5',
     BT: 'mi_6', BU: 'mp_6', BV: 'mi_7', BW: 'mp_7', BX: 'mi_8', BY: 'mp_8',
-    BZ: 'mi_9', CA: 'mp_9', CB: 'mi_10', CC: 'mp_10', CD: 'mi_11', CE: 'mp_11'
+    BZ: 'mi_9', CA: 'mp_9', CB: 'mi_10', CC: 'mp_10', CD: 'mi_11', CE: 'mp_11',
+    CF: 'completion_remark'
   };
 
   /**
@@ -254,6 +297,9 @@
     MC_COLS,
     MI_COLS,
     MP_COLS,
+    MONTHLY_AMOUNT_CHANGE_COLS,
+    isMonthlyAmountChangeToken,
+    projectHasMonthlyAmountChange,
     getMonthlyMonthIndex,
     isMonthlyFieldEditable,
     isPastReportingMonthField

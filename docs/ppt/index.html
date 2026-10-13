@@ -1,0 +1,2453 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>项目追踪表线上化系统 · 业务概览</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,700&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@300;400;500;600&family=Noto+Serif+SC:wght@300;400;500;600;700;900&family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        /* ============ 主题色(🌊 靛蓝瓷) ============ */
+        --ink: #0a1f3d;
+        --ink-rgb: 10, 31, 61;
+        --paper: #f1f3f5;
+        --paper-rgb: 241, 243, 245;
+        --paper-tint: #e4e8ec;
+        --ink-tint: #152a4a;
+
+        --mono: "IBM Plex Mono", ui-monospace, monospace;
+        --serif-en: "Playfair Display", "Source Serif 4", Georgia, serif;
+        --serif-body-en: "Source Serif 4", Georgia, serif;
+        --serif-zh: "Noto Serif SC", source-han-serif-sc, serif;
+        --sans-zh: "Noto Sans SC", source-han-sans-sc, sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--ink);
+        color: var(--paper);
+        font-family: var(--sans-zh);
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+      canvas.bg {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 0;
+        display: block;
+        transition: opacity 1.2s ease;
+      }
+      canvas#bg-light {
+        opacity: 0;
+      }
+      canvas#bg-dark {
+        opacity: 1;
+      }
+      body.light-bg canvas#bg-light {
+        opacity: 1;
+      }
+      body.light-bg canvas#bg-dark {
+        opacity: 0;
+      }
+      body.low-power canvas.bg {
+        display: none !important;
+      }
+      #deck {
+        position: fixed;
+        inset: 0;
+        width: 10000vw;
+        height: 100vh;
+        display: flex;
+        flex-wrap: nowrap;
+        transition: transform 0.9s cubic-bezier(0.77, 0, 0.175, 1);
+        z-index: 10;
+        will-change: transform;
+      }
+      .slide {
+        width: 100vw;
+        height: 100vh;
+        flex: 0 0 100vw;
+        position: relative;
+        padding: 6vh 6vw 10vh 6vw;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .slide.light {
+        color: var(--ink);
+        background: var(--paper);
+      }
+      .slide.dark {
+        color: var(--paper);
+        background: var(--ink);
+      }
+      .slide::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+        transition: background 0.7s ease;
+      }
+      .slide.light::before {
+        background: rgba(var(--paper-rgb), 0.78);
+        backdrop-filter: blur(3px);
+      }
+      .slide.dark::before {
+        background: rgba(var(--ink-rgb), 0.78);
+        backdrop-filter: blur(3px);
+      }
+      .slide.hero.light::before {
+        background: rgba(var(--paper-rgb), 0.16);
+        backdrop-filter: none;
+      }
+      .slide.hero.dark::before {
+        background: rgba(var(--ink-rgb), 0.12);
+        backdrop-filter: none;
+      }
+      .slide.hero::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+      }
+      .slide.hero.light::after {
+        background: linear-gradient(
+          180deg,
+          rgba(var(--paper-rgb), 0.28) 0%,
+          rgba(var(--paper-rgb), 0) 14%,
+          rgba(var(--paper-rgb), 0) 86%,
+          rgba(var(--paper-rgb), 0.28) 100%
+        );
+      }
+      .slide.hero.dark::after {
+        background: linear-gradient(
+          180deg,
+          rgba(var(--ink-rgb), 0.32) 0%,
+          rgba(var(--ink-rgb), 0) 14%,
+          rgba(var(--ink-rgb), 0) 86%,
+          rgba(var(--ink-rgb), 0.32) 100%
+        );
+      }
+      .chrome {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        font-family: var(--mono);
+        font-size: 12px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        opacity: 0.7;
+      }
+      .chrome .left,
+      .chrome .right {
+        display: flex;
+        gap: 2.4em;
+        align-items: center;
+      }
+      .chrome .sep {
+        width: 40px;
+        height: 1px;
+        background: currentColor;
+        opacity: 0.4;
+      }
+      .foot {
+        margin-top: auto;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        font-family: var(--mono);
+        font-size: 12px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        opacity: 0.55;
+      }
+      .foot .title {
+        font-family: var(--serif-zh);
+        font-weight: 400;
+        letter-spacing: 0.05em;
+        text-transform: none;
+        opacity: 0.75;
+        font-size: 13px;
+      }
+      .tag {
+        display: inline-block;
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+        padding: 6px 14px;
+        border: 1px solid currentColor;
+        opacity: 0.85;
+      }
+      .rule {
+        width: 100%;
+        height: 1px;
+        background: currentColor;
+        opacity: 0.25;
+        margin: 3vh 0;
+      }
+      .rule.v {
+        width: 1px;
+        height: 100%;
+        margin: 0;
+      }
+      .kicker {
+        font-family: var(--mono);
+        font-size: 12px;
+        letter-spacing: 0.3em;
+        text-transform: uppercase;
+        opacity: 0.6;
+        margin-bottom: 2.6vh;
+      }
+      .display {
+        font-family: var(--serif-en);
+        font-weight: 700;
+        font-size: 11vw;
+        line-height: 0.92;
+        letter-spacing: -0.025em;
+      }
+      .display-zh {
+        font-family: var(--serif-zh);
+        font-weight: 700;
+        font-size: 7.8vw;
+        line-height: 1.04;
+        letter-spacing: -0.005em;
+      }
+      .h1-zh {
+        font-family: var(--serif-zh);
+        font-weight: 700;
+        font-size: 4.6vw;
+        line-height: 1.12;
+        letter-spacing: -0.005em;
+      }
+      .h2-zh {
+        font-family: var(--serif-zh);
+        font-weight: 600;
+        font-size: 3.2vw;
+        line-height: 1.2;
+        letter-spacing: 0;
+      }
+      .h3-zh {
+        font-family: var(--serif-zh);
+        font-weight: 500;
+        font-size: 1.9vw;
+        line-height: 1.35;
+      }
+      .body-zh {
+        font-family: var(--sans-zh);
+        font-weight: 400;
+        font-size: max(15px, 1.22vw);
+        line-height: 1.75;
+        opacity: 0.82;
+        letter-spacing: 0.01em;
+      }
+      .body-serif {
+        font-family: var(--serif-zh);
+        font-weight: 400;
+        font-size: max(15px, 1.3vw);
+        line-height: 1.65;
+        opacity: 0.88;
+      }
+      .lead {
+        font-family: var(--serif-zh);
+        font-weight: 400;
+        font-size: 1.75vw;
+        line-height: 1.5;
+        opacity: 0.86;
+      }
+      .meta {
+        font-family: var(--mono);
+        font-size: max(11px, 0.88vw);
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        opacity: 0.6;
+      }
+      .big-num {
+        font-family: var(--serif-en);
+        font-weight: 800;
+        font-size: 10vw;
+        line-height: 0.85;
+        letter-spacing: -0.03em;
+        font-feature-settings: "tnum";
+      }
+      .mid-num {
+        font-family: var(--serif-en);
+        font-weight: 700;
+        font-size: 5.5vw;
+        line-height: 0.88;
+        letter-spacing: -0.02em;
+        font-feature-settings: "tnum";
+      }
+      .ghost {
+        font-family: var(--serif-en);
+        font-weight: 900;
+        font-size: 34vw;
+        line-height: 0.8;
+        opacity: 0.06;
+        letter-spacing: -0.04em;
+        position: absolute;
+        font-feature-settings: "tnum";
+      }
+      em {
+        font-style: italic;
+        font-family: var(--serif-en);
+      }
+      .en {
+        font-family: var(--serif-en);
+        font-style: italic;
+        font-weight: 500;
+      }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 2.4vh;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 3vw;
+      }
+      .grid-6 {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: repeat(2, 1fr);
+        gap: 4vw 6vw;
+        flex: 1;
+        align-content: center;
+        padding: 2vh 0;
+      }
+      .grid-4 {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        grid-template-rows: repeat(2, 1fr);
+        gap: 4vh 6vw;
+        flex: 1;
+        align-content: center;
+      }
+      .grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 4vw;
+        flex: 1;
+        align-content: center;
+      }
+      .split {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4vw;
+        flex: 1;
+        align-items: center;
+      }
+      .fill {
+        flex: 1;
+      }
+      .center {
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+      }
+      .stat {
+        display: flex;
+        flex-direction: column;
+        gap: 1vh;
+        align-items: flex-start;
+      }
+      .stat .n {
+        font-family: var(--serif-en);
+        font-weight: 800;
+        font-size: 8vw;
+        line-height: 0.88;
+        letter-spacing: -0.03em;
+        font-feature-settings: "tnum";
+      }
+      .stat .l {
+        font-family: var(--sans-zh);
+        font-size: max(13px, 1.05vw);
+        opacity: 0.7;
+        margin-top: 1vh;
+        font-weight: 400;
+        line-height: 1.5;
+      }
+      .stat .m {
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        opacity: 0.5;
+        margin-bottom: 0.2vh;
+      }
+      .callout {
+        padding: 3vh 2.4vw;
+        border-left: 3px solid currentColor;
+        position: relative;
+        font-family: var(--serif-zh);
+        font-size: max(15px, 1.2vw);
+        line-height: 1.55;
+        opacity: 0.92;
+      }
+      .slide.light .callout {
+        background: rgba(var(--ink-rgb), 0.05);
+      }
+      .slide.dark .callout {
+        background: rgba(var(--paper-rgb), 0.06);
+      }
+      .callout .cite {
+        display: block;
+        margin-top: 1.6vh;
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        opacity: 0.6;
+      }
+      .callout .q-big {
+        font-family: var(--serif-zh);
+        font-weight: 600;
+        font-size: max(17px, 1.6vw);
+        line-height: 1.42;
+      }
+      .plat {
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        padding: 2vh 0;
+        border-top: 1px solid currentColor;
+        border-color: rgba(127, 127, 127, 0.35);
+      }
+      .plat .name {
+        font-family: var(--serif-zh);
+        font-weight: 700;
+        font-size: 1.8vw;
+        margin-bottom: 0.6vh;
+      }
+      .plat .nb {
+        font-family: var(--serif-en);
+        font-weight: 700;
+        font-size: 3.2vw;
+        letter-spacing: -0.02em;
+        line-height: 1;
+        font-feature-settings: "tnum";
+      }
+      .plat .sub {
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        opacity: 0.55;
+        margin-top: 0.6vh;
+      }
+      .rowline {
+        display: grid;
+        grid-template-columns: 1fr 2fr 1fr;
+        gap: 2vw;
+        padding: 2.2vh 0;
+        border-top: 1px solid currentColor;
+        align-items: center;
+        border-color: rgba(127, 127, 127, 0.25);
+      }
+      .rowline:last-child {
+        border-bottom: 1px solid currentColor;
+        border-color: rgba(127, 127, 127, 0.25);
+      }
+      .rowline .k {
+        font-family: var(--serif-zh);
+        font-weight: 700;
+        font-size: 1.7vw;
+      }
+      .rowline .v {
+        font-family: var(--sans-zh);
+        font-weight: 400;
+        font-size: max(14px, 1.2vw);
+        opacity: 0.85;
+        line-height: 1.55;
+      }
+      .rowline .m {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        opacity: 0.6;
+        justify-self: end;
+      }
+      .pillar {
+        display: flex;
+        flex-direction: column;
+        gap: 1.8vh;
+      }
+      .pillar .ic {
+        font-family: var(--serif-en);
+        font-style: italic;
+        font-size: 2.6vw;
+        opacity: 0.45;
+        font-weight: 400;
+      }
+      .pillar .ic svg {
+        width: 2.8vw;
+        height: 2.8vw;
+        stroke-width: 1.2;
+        opacity: 0.7;
+      }
+      .pillar .t {
+        font-family: var(--serif-zh);
+        font-weight: 700;
+        font-size: 2.4vw;
+        line-height: 1.1;
+      }
+      .pillar .d {
+        font-family: var(--sans-zh);
+        font-weight: 400;
+        font-size: max(14px, 1.1vw);
+        opacity: 0.76;
+        line-height: 1.6;
+      }
+      .hi {
+        position: relative;
+        display: inline;
+      }
+      .slide.dark .hi::after {
+        content: "";
+        position: absolute;
+        left: -0.1em;
+        right: -0.1em;
+        bottom: -0.05em;
+        height: 0.28em;
+        background: rgba(var(--paper-rgb), 0.15);
+        z-index: -1;
+      }
+      .slide.light .hi::after {
+        content: "";
+        position: absolute;
+        left: -0.1em;
+        right: -0.1em;
+        bottom: -0.05em;
+        height: 0.28em;
+        background: rgba(var(--ink-rgb), 0.08);
+        z-index: -1;
+      }
+      .ico-lg,
+      .ico-md,
+      .ico-sm {
+        fill: none;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .ico-lg {
+        width: 2.6vw;
+        height: 2.6vw;
+        stroke-width: 1.2;
+        display: inline-block;
+      }
+      .ico-md {
+        width: 1.8vw;
+        height: 1.8vw;
+        stroke-width: 1.3;
+        display: inline-block;
+        vertical-align: -0.4em;
+      }
+      .ico-sm {
+        width: 1.1vw;
+        height: 1.1vw;
+        stroke-width: 1.4;
+        display: inline-block;
+        vertical-align: -0.15em;
+        opacity: 0.7;
+      }
+      .frame-img {
+        overflow: hidden;
+        position: relative;
+        background: rgba(0, 0, 0, 0.04);
+        box-sizing: border-box;
+        width: 100%;
+        border-radius: 4px;
+      }
+      .slide.dark .frame-img {
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.12);
+      }
+      .frame-img > img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: top center;
+        display: block;
+      }
+      figure.frame-img {
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .img-cap {
+        display: block;
+        margin-top: 0.8vh;
+        font-family: var(--mono);
+        font-size: max(10px, 0.8vw);
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        opacity: 0.6;
+      }
+      .callout-src {
+        display: block;
+        margin-top: 1.6vh;
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        opacity: 0.6;
+      }
+      .chrome {
+        font-family: var(--mono);
+        font-size: max(11px, 0.78vw);
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        opacity: 0.62;
+      }
+      .foot {
+        font-family: var(--mono);
+        font-size: max(11px, 0.78vw);
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        opacity: 0.5;
+      }
+      #nav {
+        position: fixed;
+        left: 50%;
+        bottom: 2.6vh;
+        transform: translateX(-50%);
+        z-index: 30;
+        display: flex;
+        gap: 10px;
+        padding: 8px 14px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.18);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+      }
+      #nav .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.3);
+        cursor: pointer;
+        transition: all 0.3s ease;
+        border: 0;
+        padding: 0;
+      }
+      #nav .dot:hover {
+        background: rgba(255, 255, 255, 0.5);
+        transform: scale(1.15);
+      }
+      #nav .dot.active {
+        background: rgba(255, 255, 255, 0.95);
+        width: 22px;
+        border-radius: 999px;
+      }
+      body.light-bg #nav {
+        background: rgba(255, 255, 255, 0.25);
+      }
+      body.light-bg #nav .dot {
+        background: rgba(var(--ink-rgb), 0.25);
+      }
+      body.light-bg #nav .dot.active {
+        background: rgba(var(--ink-rgb), 0.9);
+      }
+      #hint {
+        position: fixed;
+        bottom: 3vh;
+        right: 3vw;
+        z-index: 30;
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        opacity: 0.4;
+        mix-blend-mode: difference;
+        color: #aaa;
+      }
+      body.low-power #hint {
+        opacity: 0.72;
+        color: var(--paper);
+        mix-blend-mode: normal;
+      }
+      body.light-bg.low-power #hint {
+        color: var(--ink);
+      }
+
+      .frame {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: visible;
+      }
+      .frame.grid-2-7-5,
+      .frame.grid-2-6-6,
+      .frame.grid-2-8-4,
+      .frame.grid-3-3,
+      .frame.grid-6 {
+        display: grid;
+      }
+      .h-hero {
+        font-family: var(--serif-zh);
+        font-weight: 900;
+        font-size: 10vw;
+        line-height: 0.96;
+        letter-spacing: -0.02em;
+      }
+      .h-xl {
+        font-family: var(--serif-zh);
+        font-weight: 700;
+        font-size: 6.2vw;
+        line-height: 1.08;
+        letter-spacing: -0.01em;
+      }
+      .h-sub {
+        font-family: var(--serif-zh);
+        font-weight: 500;
+        font-size: 3.1vw;
+        line-height: 1.25;
+        letter-spacing: 0;
+        opacity: 0.7;
+      }
+      .h-md {
+        font-family: var(--serif-zh);
+        font-weight: 600;
+        font-size: 2.3vw;
+        line-height: 1.3;
+      }
+      .h-hero-en,
+      .h-xl-en {
+        font-family: var(--serif-en);
+        letter-spacing: -0.025em;
+      }
+      .meta-row {
+        display: flex;
+        gap: 1.2em;
+        align-items: baseline;
+        flex-wrap: wrap;
+        font-family: var(--mono);
+        font-size: max(12px, 0.92vw);
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        opacity: 0.6;
+      }
+      .stat-card {
+        display: flex;
+        flex-direction: column;
+        gap: 0.8vh;
+        align-items: flex-start;
+        padding-top: 1.6vh;
+        border-top: 1px solid currentColor;
+        border-color: rgba(127, 127, 127, 0.3);
+      }
+      .stat-card .stat-label {
+        font-family: var(--mono);
+        font-size: max(10px, 0.78vw);
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+        opacity: 0.55;
+      }
+      .stat-card .stat-nb {
+        font-family: var(--serif-en);
+        font-weight: 800;
+        font-size: 3.8vw;
+        line-height: 0.9;
+        letter-spacing: -0.03em;
+        font-feature-settings: "tnum";
+        margin-top: 0.4vh;
+      }
+      .stat-card .stat-nb .stat-unit {
+        font-family: var(--serif-zh);
+        font-weight: 500;
+        font-size: 0.38em;
+        letter-spacing: 0;
+        opacity: 0.72;
+        margin-left: 0.14em;
+      }
+      .stat-card .stat-note {
+        font-family: var(--sans-zh);
+        font-weight: 400;
+        font-size: max(13px, 1.05vw);
+        line-height: 1.5;
+        opacity: 0.72;
+        margin-top: 0.6vh;
+      }
+      .grid-4 .stat-card .stat-nb {
+        font-size: 5vw;
+      }
+      .grid-3 .stat-card .stat-nb {
+        font-size: 6.8vw;
+      }
+      .pipeline-section {
+        margin-top: 4.4vh;
+        padding-top: 2.8vh;
+        border-top: 1px dashed rgba(127, 127, 127, 0.32);
+      }
+      .pipeline-section:first-of-type {
+        border-top: 0;
+        padding-top: 0;
+        margin-top: 3vh;
+      }
+      .pipeline-label {
+        font-family: var(--mono);
+        font-size: max(11px, 0.85vw);
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+        opacity: 0.62;
+        margin-bottom: 2.2vh;
+      }
+      .pipeline {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 1.2vw;
+      }
+      .step {
+        display: flex;
+        flex-direction: column;
+        gap: 0.8vh;
+        padding-top: 1.4vh;
+        border-top: 1px solid currentColor;
+        border-color: rgba(127, 127, 127, 0.35);
+      }
+      .step-nb {
+        font-family: var(--serif-en);
+        font-style: italic;
+        font-weight: 500;
+        font-size: 1.15vw;
+        opacity: 0.45;
+      }
+      .step-title {
+        font-family: var(--sans-zh);
+        font-weight: 700;
+        font-size: 1.55vw;
+        letter-spacing: 0.01em;
+        line-height: 1.2;
+      }
+      .step-desc {
+        font-family: var(--sans-zh);
+        font-weight: 400;
+        font-size: max(12px, 0.95vw);
+        line-height: 1.45;
+        opacity: 0.72;
+      }
+      .grid-2-7-5 {
+        display: grid;
+        grid-template-columns: 7fr 5fr;
+        gap: 3vw 4vh;
+        align-items: start;
+      }
+      .grid-2-6-6 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 3vw 4vh;
+        align-items: start;
+      }
+      .grid-2-8-4 {
+        display: grid;
+        grid-template-columns: 8fr 4fr;
+        gap: 3vw 4vh;
+        align-items: start;
+      }
+      .grid-3-3 {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        grid-auto-rows: minmax(0, 1fr);
+        gap: 2.4vh 2vw;
+      }
+
+      .role-card {
+        display: flex;
+        flex-direction: column;
+        gap: 1vh;
+        padding: 2vh 1.6vw;
+        border-top: 2px solid currentColor;
+        border-color: rgba(127, 127, 127, 0.3);
+      }
+      .role-card .role-icon {
+        margin-bottom: 0.6vh;
+      }
+      .role-card .role-icon svg {
+        width: 2.2vw;
+        height: 2.2vw;
+        stroke-width: 1.3;
+      }
+      .role-card .role-name {
+        font-family: var(--serif-zh);
+        font-weight: 700;
+        font-size: 1.6vw;
+        line-height: 1.2;
+      }
+      .role-card .role-desc {
+        font-family: var(--sans-zh);
+        font-weight: 400;
+        font-size: max(12px, 0.95vw);
+        opacity: 0.72;
+        line-height: 1.5;
+        margin-top: 0.6vh;
+      }
+
+      .module-card {
+        display: flex;
+        flex-direction: column;
+        gap: 1.2vh;
+        padding: 2.4vh 2vw;
+        border-left: 3px solid currentColor;
+        border-color: rgba(127, 127, 127, 0.3);
+      }
+      .slide.light .module-card {
+        background: rgba(var(--ink-rgb), 0.04);
+      }
+      .slide.dark .module-card {
+        background: rgba(var(--paper-rgb), 0.04);
+      }
+      .module-card .module-title {
+        font-family: var(--serif-zh);
+        font-weight: 700;
+        font-size: 1.6vw;
+        line-height: 1.2;
+      }
+      .module-card .module-body {
+        font-family: var(--sans-zh);
+        font-weight: 400;
+        font-size: max(13px, 1.05vw);
+        opacity: 0.78;
+        line-height: 1.6;
+      }
+      .module-card .module-tag {
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        opacity: 0.5;
+      }
+
+      [data-anim] {
+        opacity: 1;
+      }
+      body.motion-ready [data-anim] {
+        opacity: 0;
+      }
+      body.motion-ready [data-anim="left"] {
+        transform: translateX(-24px);
+      }
+      body.motion-ready [data-anim="right"] {
+        transform: translateX(24px);
+      }
+      body.motion-ready [data-anim="line"] {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      body.motion-ready [data-animate="pipeline"] [data-anim] {
+        opacity: 0.15;
+      }
+      body.low-power #deck {
+        transition: none !important;
+      }
+      body.low-power *,
+      body.low-power *::before,
+      body.low-power *::after {
+        animation: none !important;
+        transition: none !important;
+      }
+      body.low-power.motion-ready [data-anim],
+      body.low-power [data-anim] {
+        opacity: 1 !important;
+        transform: none !important;
+      }
+
+      @media (max-width: 900px) {
+        .display {
+          font-size: 16vw;
+        }
+        .display-zh {
+          font-size: 12vw;
+        }
+        .h1-zh {
+          font-size: 7vw;
+        }
+        .h-hero {
+          font-size: 14vw;
+        }
+        .h-xl {
+          font-size: 9vw;
+        }
+        .pipeline {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .grid-2-7-5,
+        .grid-2-6-6,
+        .grid-2-8-4 {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <script>
+      (function () {
+        const KEY = "guizang-ppt-low-power";
+        const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const stored = localStorage.getItem(KEY);
+        window.__lowPowerMode = stored === "1" || (stored === null && reduced);
+        function updateHint() {
+          const h = document.getElementById("hint");
+          if (h)
+            h.textContent = `← → 翻页 · B ${window.__lowPowerMode ? "动态" : "静态"} · ESC 索引`;
+        }
+        window.__setLowPowerMode = function (on, opts = {}) {
+          window.__lowPowerMode = !!on;
+          document.body.classList.toggle("low-power", window.__lowPowerMode);
+          if (opts.persist !== false)
+            localStorage.setItem(KEY, window.__lowPowerMode ? "1" : "0");
+          if (window.__lowPowerMode && document.getAnimations)
+            document.getAnimations().forEach((a) => a.cancel());
+          updateHint();
+          dispatchEvent(
+            new CustomEvent("ppt-low-power-change", {
+              detail: { on: window.__lowPowerMode },
+            }),
+          );
+          if (window.__playSlide)
+            window.__playSlide(window.__currentSlideIndex || 0);
+        };
+        document.body.classList.toggle("low-power", window.__lowPowerMode);
+        addEventListener("DOMContentLoaded", updateHint, { once: true });
+      })();
+    </script>
+
+    <canvas id="bg-dark" class="bg"></canvas>
+    <canvas id="bg-light" class="bg"></canvas>
+    <div id="hint">← → 翻页 · B 静态 · ESC 索引</div>
+
+    <div id="deck">
+      <!-- P01 · 封面 -->
+      <section class="slide hero dark">
+        <div class="chrome">
+          <div>Wood China · Internal</div>
+          <div>Vol.01</div>
+        </div>
+        <div
+          class="frame"
+          style="
+            display: grid;
+            gap: 3vh;
+            align-content: center;
+            justify-items: start;
+            flex: 1;
+          "
+        >
+          <div class="kicker" data-anim>面向开发团队 · 业务概览</div>
+          <h1 class="h-hero" style="font-size: 8.5vw" data-anim>
+            项目追踪表<br />线上化
+          </h1>
+          <h2 class="h-sub" data-anim>从 Excel 邮件流转到统一 Web 平台</h2>
+          <p class="lead" style="max-width: 58vw" data-anim>
+            一个月度产值报告平台，覆盖公司所有项目执行中心，让项目经理、板块管理员和审批决策者在同一个界面上完成填报、审核和归档的全流程。
+          </p>
+          <div class="meta-row" style="margin-top: 2vh" data-anim>
+            <span>项目追踪表线上化系统</span><span>·</span
+            ><span>业务需求解读</span>
+          </div>
+        </div>
+        <div class="foot">
+          <div>Wood China · 月度项目产值报告平台</div>
+          <div>— 2026 —</div>
+        </div>
+      </section>
+
+      <!-- P02 · 背景与痛点 -->
+      <section class="slide light" data-animate="directional">
+        <div class="chrome">
+          <div>背景 · Context</div>
+          <div>02 / 17</div>
+        </div>
+        <div class="frame" style="padding-top: 5vh">
+          <div class="kicker" data-anim>
+            Before / After · 为什么要做这个系统
+          </div>
+          <h2 class="h-xl" style="margin-bottom: 4vh" data-anim>
+            告别 Excel 邮件
+          </h2>
+          <div class="grid-2-6-6" style="gap: 5vw 4vh">
+            <div
+              data-anim="left"
+              style="
+                padding: 3vh 2vw;
+                border-left: 3px solid currentColor;
+                opacity: 0.55;
+              "
+            >
+              <div class="kicker" style="opacity: 0.9">Before · 旧模式</div>
+              <h3 class="h-md" style="margin-top: 2vh">Excel + 邮件流转</h3>
+              <ul
+                style="
+                  margin-top: 3vh;
+                  padding-left: 1.2em;
+                  display: flex;
+                  flex-direction: column;
+                  gap: 1.4vh;
+                  font-family: var(--sans-zh);
+                  font-size: max(14px, 1.1vw);
+                  line-height: 1.55;
+                "
+              >
+                <li>83 列 Excel 在各板块间邮件传递</li>
+                <li>版本混乱：谁手里的文件是最新的？</li>
+                <li>手动汇总：数据合并全靠人工</li>
+                <li>审批留痕：邮件链里找历史记录</li>
+                <li>变更追踪：无法知道谁改了什么</li>
+              </ul>
+            </div>
+            <div
+              data-anim="right"
+              style="padding: 3vh 2vw; border-left: 3px solid currentColor"
+            >
+              <div class="kicker" style="opacity: 0.9">After · 新模式</div>
+              <h3 class="h-md" style="margin-top: 2vh">统一 Web 平台</h3>
+              <ul
+                style="
+                  margin-top: 3vh;
+                  padding-left: 1.2em;
+                  display: flex;
+                  flex-direction: column;
+                  gap: 1.4vh;
+                  font-family: var(--sans-zh);
+                  font-size: max(14px, 1.1vw);
+                  line-height: 1.55;
+                "
+              >
+                <li>在线类 Excel 表格，实时保存</li>
+                <li>单一数据源，所有人看同一份表</li>
+                <li>自动汇总，公式实时计算</li>
+                <li>完整审批流程，全程数字化</li>
+                <li>变更自动高亮，审计日志留痕</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="foot">
+          <div>Page 02 · 背景与痛点</div>
+          <div>Before / After</div>
+        </div>
+      </section>
+
+      <!-- P03 · 系统是什么 -->
+      <section class="slide dark">
+        <div class="chrome">
+          <div>系统定位 · Overview</div>
+          <div>03 / 17</div>
+        </div>
+        <div class="frame grid-2-7-5" style="padding-top: 6vh">
+          <div
+            style="
+              display: flex;
+              flex-direction: column;
+              justify-content: space-between;
+              gap: 3vh;
+            "
+          >
+            <div>
+              <div class="kicker" data-anim>What Is It</div>
+              <h2 class="h-xl" data-anim>月度产值报告<br />平台</h2>
+              <p
+                style="
+                  font-family: var(--sans-zh);
+                  font-size: max(14px, 1.15vw);
+                  line-height: 1.75;
+                  opacity: 0.78;
+                  margin-top: 2.4vh;
+                "
+                data-anim
+              >
+                覆盖 Wood China
+                所有项目执行中心的全部已签署合同项目，以及经批准提前申报产值的项目。
+              </p>
+              <p
+                style="
+                  font-family: var(--sans-zh);
+                  font-size: max(14px, 1.15vw);
+                  line-height: 1.75;
+                  opacity: 0.78;
+                  margin-top: 2.4vh;
+                "
+                data-anim
+              >
+                每个月的核心任务：各项目经理填报本月产值进展 →
+                板块管理员汇总核查 → 总监/群主审批 →
+                系统管理员公司归档，形成该报告月的最终数据存档。
+              </p>
+            </div>
+            <div class="callout" data-anim>
+              "一个 Web 界面，替代了原先在十几个执行中心之间来回邮件传递的 Excel
+              文件。"
+              <div class="callout-src">— 系统核心价值</div>
+            </div>
+          </div>
+          <div
+            style="
+              display: flex;
+              flex-direction: column;
+              gap: 3vh;
+              margin-top: 7vh;
+            "
+          >
+            <div class="plat" data-anim>
+              <div class="sub">External Systems</div>
+              <div class="name">外部对接</div>
+              <div
+                class="body-zh"
+                style="
+                  font-size: max(13px, 1vw);
+                  opacity: 0.7;
+                  margin-top: 0.8vh;
+                "
+              >
+                CRB 合同系统 · 财务系统 · 工时系统 · 成本中心
+              </div>
+            </div>
+            <div class="plat" data-anim>
+              <div class="sub">Internal Flow</div>
+              <div class="name">内部流程</div>
+              <div
+                class="body-zh"
+                style="
+                  font-size: max(13px, 1vw);
+                  opacity: 0.7;
+                  margin-top: 0.8vh;
+                "
+              >
+                填报 → 汇总 → 审批 → 归档
+              </div>
+            </div>
+            <div class="plat" data-anim>
+              <div class="sub">Coverage</div>
+              <div class="name">覆盖范围</div>
+              <div
+                class="body-zh"
+                style="
+                  font-size: max(13px, 1vw);
+                  opacity: 0.7;
+                  margin-top: 0.8vh;
+                "
+              >
+                所有执行中心 · 全量项目
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="foot">
+          <div>Page 03 · 系统是什么</div>
+          <div>Overview</div>
+        </div>
+      </section>
+
+      <!-- P04 · 关键数字 -->
+      <section class="slide light">
+        <div class="chrome">
+          <div>系统规模 · Key Numbers</div>
+          <div>04 / 17</div>
+        </div>
+        <div class="frame" style="padding-top: 6vh">
+          <div class="kicker" data-anim>系统一览</div>
+          <h2 class="h-xl" data-anim>几个关键数字</h2>
+          <p class="lead" data-anim>
+            理解这个系统的业务规模。
+          </p>
+          <div class="grid-6" style="margin-top: 4vh">
+            <div class="stat-card" data-anim>
+              <div class="stat-label">Table Columns</div>
+              <div class="stat-nb">83 <span class="stat-unit">列</span></div>
+              <div class="stat-note">与源 Excel 字段字典一致</div>
+            </div>
+            <div class="stat-card" data-anim>
+              <div class="stat-label">User Roles</div>
+              <div class="stat-nb">6 <span class="stat-unit">个</span></div>
+              <div class="stat-note">从填报到审批的完整角色链</div>
+            </div>
+            <div class="stat-card" data-anim>
+              <div class="stat-label">Snapshot Types</div>
+              <div class="stat-nb">3 <span class="stat-unit">类</span></div>
+              <div class="stat-note">I 版 / D 版 / J 版</div>
+            </div>
+            <div class="stat-card" data-anim>
+              <div class="stat-label">Approval Steps</div>
+              <div class="stat-nb">4 <span class="stat-unit">步</span></div>
+              <div class="stat-note">PM → 管理员 → 总监 → 群主</div>
+            </div>
+            <div class="stat-card" data-anim>
+              <div class="stat-label">Warning Types</div>
+              <div class="stat-nb">4 <span class="stat-unit">类</span></div>
+              <div class="stat-note">存量预警 + 工时匹配</div>
+            </div>
+            <div class="stat-card" data-anim>
+              <div class="stat-label">Fill Period</div>
+              <div class="stat-nb">~25 <span class="stat-unit">天</span></div>
+              <div class="stat-note">每月 1 日至锁定日</div>
+            </div>
+          </div>
+        </div>
+        <div class="foot">
+          <div>Page 04 · 关键数字</div>
+          <div>Key Numbers</div>
+        </div>
+      </section>
+
+      <!-- P05 · 幕封：核心角色 -->
+      <section class="slide hero light">
+        <div class="chrome">
+          <div>第一幕 · 角色</div>
+          <div>Act I · 05 / 17</div>
+        </div>
+        <div
+          class="frame"
+          style="display: grid; gap: 5vh; align-content: center; flex: 1"
+        >
+          <div class="kicker" data-anim>Act I</div>
+          <h1 class="h-hero" style="font-size: 8.5vw" data-anim>六个角色</h1>
+          <p class="lead" style="max-width: 55vw" data-anim>
+            谁在填报，谁在审核，谁在拍板。
+          </p>
+        </div>
+        <div class="foot">
+          <div>第一幕引子 · 角色与权限</div>
+          <div>— · —</div>
+        </div>
+      </section>
+
+      <!-- P06 · 核心角色详解 -->
+      <section class="slide dark">
+        <div class="chrome">
+          <div>角色矩阵 · Roles</div>
+          <div>06 / 17</div>
+        </div>
+        <div class="frame" style="padding-top: 4vh">
+          <div class="kicker" data-anim>Who Does What</div>
+          <h2 class="h-xl" style="margin-bottom: 2vh" data-anim>
+            6 个角色，各司其职
+          </h2>
+          <div
+            style="
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 2.4vh 3vw;
+              flex: 1;
+              align-content: start;
+              margin-top: 2vh;
+            "
+          >
+            <div class="role-card" data-anim>
+              <div class="role-icon">
+                <i data-lucide="hard-hat" class="ico-lg"></i>
+              </div>
+              <div class="role-name">项目经理</div>
+              <div class="role-desc">
+                填报本人管辖项目的产值、进度、WIP
+                分析。每月一次提交，提交后锁定不可再改。
+              </div>
+            </div>
+            <div class="role-card" data-anim>
+              <div class="role-icon">
+                <i data-lucide="clipboard-list" class="ico-lg"></i>
+              </div>
+              <div class="role-name">板块管理员</div>
+              <div class="role-desc">
+                汇总本板块全部项目经理的数据，核查修正后提交审批，是数据质量的守门人。
+              </div>
+            </div>
+            <div class="role-card" data-anim>
+              <div class="role-icon">
+                <i data-lucide="shield-check" class="ico-lg"></i>
+              </div>
+              <div class="role-name">板块总监</div>
+              <div class="role-desc">
+                只读审阅本板块全部数据，通过或驳回。数据有误只能退回，不能直接修改。
+              </div>
+            </div>
+            <div class="role-card" data-anim>
+              <div class="role-icon">
+                <i data-lucide="crown" class="ico-lg"></i>
+              </div>
+              <div class="role-name">项目群群主</div>
+              <div class="role-desc">
+                总监通过后的终审角色，逻辑与总监相同。各板块审批独立并行，互不等待。
+              </div>
+            </div>
+            <div class="role-card" data-anim>
+              <div class="role-icon">
+                <i data-lucide="settings" class="ico-lg"></i>
+              </div>
+              <div class="role-name">系统管理员</div>
+              <div class="role-desc">
+                系统配置、锁定/解锁、公司归档、审计日志。唯一能访问管理设置和全量编辑的角色。
+              </div>
+            </div>
+            <div class="role-card" data-anim>
+              <div class="role-icon">
+                <i data-lucide="eye" class="ico-lg"></i>
+              </div>
+              <div class="role-name">经营管理（只读）</div>
+              <div class="role-desc">
+                按权限范围（全公司/板块/项目群）只读查阅项目追踪表，无编辑、无审批。
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="foot">
+          <div>Page 06 · 核心角色</div>
+          <div>Roles & Permissions</div>
+        </div>
+      </section>
+
+      <!-- P07 · 月度流程全景 -->
+      <section class="slide light" data-animate="pipeline">
+        <div class="chrome">
+          <div>月度流程 · Monthly Cycle</div>
+          <div>07 / 17</div>
+        </div>
+        <div class="frame">
+          <div class="kicker">Pipeline · 月度全景</div>
+          <h2 class="h-xl">一个月的完整生命周期</h2>
+          <div class="pipeline-section">
+            <div class="pipeline-label">填报与汇总 · Fill & Collect</div>
+            <div class="pipeline">
+              <div class="step" data-anim="step">
+                <div class="step-nb">01</div>
+                <div class="step-title">填报开放</div>
+                <div class="step-desc">
+                  每月 1-24 日，项目经理在线填报产值数据
+                </div>
+              </div>
+              <div class="step" data-anim="step">
+                <div class="step-nb">02</div>
+                <div class="step-title">财务核查</div>
+                <div class="step-desc">1-3 日系统提醒全员核对开票回款数据</div>
+              </div>
+              <div class="step" data-anim="step">
+                <div class="step-nb">03</div>
+                <div class="step-title">PM 提交</div>
+                <div class="step-desc">
+                  项目经理确认提交，每月一次，提交后锁定
+                </div>
+              </div>
+              <div class="step" data-anim="step">
+                <div class="step-nb">04</div>
+                <div class="step-title">板块汇总</div>
+                <div class="step-desc">板块管理员核查全板块数据并修正</div>
+              </div>
+              <div class="step" data-anim="step">
+                <div class="step-nb">05</div>
+                <div class="step-title">提交审批</div>
+                <div class="step-desc">生成 Draft 快照，板块进入锁定</div>
+              </div>
+            </div>
+          </div>
+          <div class="pipeline-section">
+            <div class="pipeline-label">审批与归档 · Approve & Archive</div>
+            <div class="pipeline">
+              <div class="step" data-anim="step">
+                <div class="step-nb">06</div>
+                <div class="step-title">总监初审</div>
+                <div class="step-desc">板块总监只读审阅，通过或驳回</div>
+              </div>
+              <div class="step" data-anim="step">
+                <div class="step-nb">07</div>
+                <div class="step-title">群主复审</div>
+                <div class="step-desc">项目群群主终审，逻辑相同</div>
+              </div>
+              <div class="step" data-anim="step">
+                <div class="step-nb">08</div>
+                <div class="step-title">月度锁定</div>
+                <div class="step-desc">25 日系统自动锁定，仅管理员可编辑</div>
+              </div>
+              <div class="step" data-anim="step">
+                <div class="step-nb">09</div>
+                <div class="step-title">公司归档</div>
+                <div class="step-desc">系统管理员生成 J 版快照</div>
+              </div>
+              <div class="step" data-anim="step">
+                <div class="step-nb">10</div>
+                <div class="step-title">新一轮开启</div>
+                <div class="step-desc">归档后重置流程，开启次月填报</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="foot">
+          <div>Page 07 · 月度流程全景</div>
+          <div>Monthly Cycle</div>
+        </div>
+      </section>
+
+      <!-- P08 · 幕封：功能模块 -->
+      <section class="slide hero dark">
+        <div class="chrome">
+          <div>第二幕 · 功能模块</div>
+          <div>Act II · 08 / 17</div>
+        </div>
+        <div
+          class="frame"
+          style="display: grid; gap: 5vh; align-content: center; flex: 1"
+        >
+          <div class="kicker" data-anim>Act II</div>
+          <h1 class="h-hero" style="font-size: 8.5vw" data-anim>功能模块</h1>
+          <p class="lead" style="max-width: 55vw" data-anim>
+            七大模块，覆盖填报到归档的完整业务链。
+          </p>
+        </div>
+        <div class="foot">
+          <div>第二幕引子 · 功能详解</div>
+          <div>— · —</div>
+        </div>
+      </section>
+
+      <!-- P09 · 在线填报 -->
+      <section class="slide light">
+        <div class="chrome">
+          <div>模块一 · Data Entry</div>
+          <div>09 / 17</div>
+        </div>
+        <div class="frame" style="padding-top: 5vh">
+          <div class="kicker" data-anim>Module 01 · 在线填报</div>
+          <h2 class="h-xl" style="margin-bottom: 3vh" data-anim>
+            类 Excel 在线表格
+          </h2>
+          <div
+            style="
+              display: grid;
+              grid-template-columns: repeat(2, 1fr);
+              gap: 3vh 4vw;
+              flex: 1;
+              align-content: start;
+            "
+          >
+            <div class="module-card" data-anim>
+              <div class="module-tag">Core Feature</div>
+              <div class="module-title">83 列完整字段</div>
+              <div class="module-body">
+                与原 Excel 字段字典一一对应。列字母 A-CQ
+                与公式引用保持一致，冻结窗格保留项目识别关键列。
+              </div>
+            </div>
+            <div class="module-card" data-anim>
+              <div class="module-tag">Auto Save</div>
+              <div class="module-title">自动保存 + 手动同步</div>
+              <div class="module-body">
+                单元格编辑失焦后自动保存，无需手动点击。工具栏「保存」按钮触发全表同步。
+              </div>
+            </div>
+            <div class="module-card" data-anim>
+              <div class="module-tag">Import / Export</div>
+              <div class="module-title">Excel 导入导出</div>
+              <div class="module-body">
+                支持下载模板、上传导入。导入按项目号合并，仅覆盖当前角色可编辑字段。导出保留千分位和日期格式。
+              </div>
+            </div>
+            <div class="module-card" data-anim>
+              <div class="module-tag">Detail Drawer</div>
+              <div class="module-title">项目详情抽屉</div>
+              <div class="module-body">
+                点击项目号打开右侧抽屉，展示预警信息、可编辑字段、工时统计、成本中心数据等辅助参考。
+              </div>
+            </div>
+          </div>
+          <div class="" style="margin-top: 0vh" data-anim>
+            <div class="q-big">
+              关键注意点：填报页仅展示在线表格，没有传统 HTML
+              表格。视图筛选支持「全部/新增/有变更/预警」四种模式。
+            </div>
+          </div>
+        </div>
+        <div class="foot">
+          <div>Page 09 · 在线填报</div>
+          <div>Module 01</div>
+        </div>
+      </section>
+
+      <!-- P10 · 审批流程 -->
+      <section class="slide dark">
+        <div class="chrome">
+          <div>模块二 · Approval</div>
+          <div>10 / 17</div>
+        </div>
+        <div class="frame" style="padding-top:2vh">
+          <div class="kicker" data-anim>Module 02 · 审批流程</div>
+          <h2 class="h-xl" style="font-size:5vw;margin-bottom:1.2vh" data-anim>四级审批，分板块并行</h2>
+          <div style="display:flex;flex-direction:column;gap:0">
+            <div class="rowline" style="padding:1.4vh 0" data-anim><div class="k" style="font-size:1.4vw">PM 提交</div><div class="v" style="font-size:max(13px,1.05vw);line-height:1.4">每月一次提交机会，提交后锁定不可再编辑，需联系板块管理员修正。</div><div class="m">STEP 01</div></div>
+            <div class="rowline" style="padding:1.4vh 0" data-anim><div class="k" style="font-size:1.4vw">板块汇总</div><div class="v" style="font-size:max(13px,1.05vw);line-height:1.4">管理员查看全板块 PM 数据，核查修正后「提交审批」生成 Draft 快照。</div><div class="m">STEP 02</div></div>
+            <div class="rowline" style="padding:1.4vh 0" data-anim><div class="k" style="font-size:1.4vw">总监初审</div><div class="v" style="font-size:max(13px,1.05vw);line-height:1.4">板块总监只读审阅。通过则推进，驳回则退回管理员修改并重新提交。</div><div class="m">STEP 03</div></div>
+            <div class="rowline" style="padding:1.4vh 0" data-anim><div class="k" style="font-size:1.4vw">群主复审</div><div class="v" style="font-size:max(13px,1.05vw);line-height:1.4">逻辑与总监相同。各板块审批独立并行，互不等待。</div><div class="m">STEP 04</div></div>
+            <div class="rowline" style="padding:1.4vh 0" data-anim><div class="k" style="font-size:1.4vw">公司归档</div><div class="v" style="font-size:max(13px,1.05vw);line-height:1.4">系统管理员在锁定期内「提交归档」，生成全公司 J 版快照作为下月基准。</div><div class="m">FINAL</div></div>
+          </div>
+          <div class="callout" style="margin-top:1.4vh;padding:1.8vh 2vw" data-anim><div class="q-big" style="font-size:max(14px,1.2vw)">审批角色只能「通过」或「驳回」，不能直接修改数据。有误必须退回板块管理员修正。</div></div>
+        </div>
+        <div class="foot">
+          <div>Page 10 · 审批流程</div>
+          <div>Module 02</div>
+        </div>
+      </section>
+
+      <!-- P11 · 版本快照体系 -->
+      <section class="slide light">
+        <div class="chrome">
+          <div>模块三 · Snapshots</div>
+          <div>11 / 17</div>
+        </div>
+        <div class="frame grid-2-7-5" style="padding-top: 6vh">
+          <div
+            style="
+              display: flex;
+              flex-direction: column;
+              justify-content: space-between;
+              gap: 3vh;
+            "
+          >
+            <div>
+              <div class="kicker" data-anim>Module 03 · 版本快照</div>
+              <h2 class="h-xl" data-anim>I · D · J<br />三类快照</h2>
+              <p class="lead" style="margin-top: 3vh" data-anim>
+                快照是系统在关键节点对数据的存档，只增不减，任何历史快照可随时只读预览。
+              </p>
+            </div>
+            <div class="callout" data-anim>
+              <div class="q-big">
+                Baseline 是判断"本月相对上月有无变化"的基准。每次 J
+                版归档后自动更新为最新 J 版。
+              </div>
+              <div class="callout-src">— 变更对比的核心机制</div>
+            </div>
+          </div>
+          <div
+            style="
+              display: flex;
+              flex-direction: column;
+              gap: 2.4vh;
+              margin-top: 7vh;
+            "
+          >
+            <div class="stat-card" data-anim>
+              <div class="stat-label">I Version · Import</div>
+              <div class="stat-nb" style="font-size: 4vw">
+                I <span class="stat-unit">版</span>
+              </div>
+              <div class="stat-note">
+                空库导入或重导入时自动生成，覆盖全量数据
+              </div>
+            </div>
+            <div class="stat-card" data-anim>
+              <div class="stat-label">D Version · Draft</div>
+              <div class="stat-nb" style="font-size: 4vw">
+                D <span class="stat-unit">版</span>
+              </div>
+              <div class="stat-note">
+                板块管理员「提交审批」时生成，仅含本板块数据
+              </div>
+            </div>
+            <div class="stat-card" data-anim>
+              <div class="stat-label">J Version · Archive</div>
+              <div class="stat-nb" style="font-size: 4vw">
+                J <span class="stat-unit">版</span>
+              </div>
+              <div class="stat-note">
+                系统管理员「提交归档」时生成，覆盖全量数据
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="foot">
+          <div>Page 11 · 版本快照体系</div>
+          <div>Module 03</div>
+        </div>
+      </section>
+
+      <!-- P12 · 变更追踪与高亮 -->
+      <section class="slide dark">
+        <div class="chrome">
+          <div>模块四 · Change Tracking</div>
+          <div>12 / 17</div>
+        </div>
+        <div class="frame" style="padding-top: 5vh;display: flex;gap: 2vh;justify-content: flex-start !important;">
+          <div class="kicker" data-anim>Module 04 · 变更追踪</div>
+          <h2 class="h-xl" style="margin-bottom: 2vh" data-anim>
+            让每一次变动可见
+          </h2>
+          <div class="grid-3" style="margin-top: 3vh">
+            <div class="pillar" data-anim>
+              <div class="ic">
+                <i data-lucide="file-search" class="ico-lg"></i>
+              </div>
+              <div class="t">审计日志</div>
+              <div class="d">
+                任何数据的增删改均自动记录：操作人、时间、项目、字段、原值、新值。仅系统管理员可访问审计日志页。
+              </div>
+            </div>
+            <div class="pillar" data-anim>
+              <div class="ic">
+                <i data-lucide="message-square" class="ico-lg"></i>
+              </div>
+              <div class="t">变更批注</div>
+              <div class="d">
+                变更单元格自动附加批注：「PM：0 →
+                100」。多角色修改同一格按序堆叠，不覆盖前一条记录。
+              </div>
+            </div>
+            <div class="pillar" data-anim>
+              <div class="ic">
+                <i data-lucide="alert-triangle" class="ico-lg"></i>
+              </div>
+              <div class="t">存量预警</div>
+              <div class="d">
+                R 列（存量开票额）或 S 列（存量合同额）为负时红底红字预警。S < 0
+                阻断提交，R < 0 仅展示不阻断。
+              </div>
+            </div>
+          </div>
+          <div class="rule" style="margin: 4vh 0"></div>
+          <div data-anim>
+            <h3 class="h-md" style="margin-bottom: 2vh">单元格底色优先级</h3>
+            <div style="display: flex; gap: 2vw; flex-wrap: wrap">
+              <div style="display: flex; align-items: center; gap: 0.8vw">
+                <span
+                  style="
+                    display: inline-block;
+                    width: 2.4vw;
+                    height: 2.4vh;
+                    background: #fee2e2;
+                    border: 1px solid rgba(255, 255, 255, 0.15);
+                  "
+                ></span
+                ><span
+                  style="
+                    font-family: var(--sans-zh);
+                    font-size: max(13px, 1vw);
+                    opacity: 0.8;
+                  "
+                  >预警（最高）</span
+                >
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.8vw">
+                <span
+                  style="
+                    display: inline-block;
+                    width: 2.4vw;
+                    height: 2.4vh;
+                    background: #ffedd5;
+                    border: 1px solid rgba(255, 255, 255, 0.15);
+                  "
+                ></span
+                ><span
+                  style="
+                    font-family: var(--sans-zh);
+                    font-size: max(13px, 1vw);
+                    opacity: 0.8;
+                  "
+                  >有变更</span
+                >
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.8vw">
+                <span
+                  style="
+                    display: inline-block;
+                    width: 2.4vw;
+                    height: 2.4vh;
+                    background: #e8f4fd;
+                    border: 1px solid rgba(255, 255, 255, 0.15);
+                  "
+                ></span
+                ><span
+                  style="
+                    font-family: var(--sans-zh);
+                    font-size: max(13px, 1vw);
+                    opacity: 0.8;
+                  "
+                  >引用已覆盖</span
+                >
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.8vw">
+                <span
+                  style="
+                    display: inline-block;
+                    width: 2.4vw;
+                    height: 2.4vh;
+                    background: #fefce8;
+                    border: 1px solid rgba(255, 255, 255, 0.15);
+                  "
+                ></span
+                ><span
+                  style="
+                    font-family: var(--sans-zh);
+                    font-size: max(13px, 1vw);
+                    opacity: 0.8;
+                  "
+                  >可编辑列</span
+                >
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.8vw">
+                <span
+                  style="
+                    display: inline-block;
+                    width: 2.4vw;
+                    height: 2.4vh;
+                    background: #d9e7d8;
+                    border: 1px solid rgba(255, 255, 255, 0.15);
+                  "
+                ></span
+                ><span
+                  style="
+                    font-family: var(--sans-zh);
+                    font-size: max(13px, 1vw);
+                    opacity: 0.8;
+                  "
+                  >新增行</span
+                >
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.8vw">
+                <span
+                  style="
+                    display: inline-block;
+                    width: 2.4vw;
+                    height: 2.4vh;
+                    background: #e8e8e8;
+                    border: 1px solid rgba(255, 255, 255, 0.15);
+                  "
+                ></span
+                ><span
+                  style="
+                    font-family: var(--sans-zh);
+                    font-size: max(13px, 1vw);
+                    opacity: 0.8;
+                  "
+                  >只读（最低）</span
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="foot">
+          <div>Page 12 · 变更追踪与高亮</div>
+          <div>Module 04</div>
+        </div>
+      </section>
+
+      <!-- P13 · 数据对接机制 -->
+      <section class="slide hero light">
+        <div class="chrome">
+          <div>模块五 · Data Sync</div>
+          <div>13 / 17</div>
+        </div>
+        <div
+          class="frame"
+          style="display: grid; gap: 4vh; align-content: center; flex: 1"
+        >
+          <div class="kicker" data-anim>Module 05 · 数据对接</div>
+          <h1
+            class="h-hero"
+            style="font-size: 7vw; line-height: 1.15"
+            data-anim
+          >
+            <span data-anim style="display: block">四个外部系统，</span
+            ><span data-anim style="display: block">一套引用机制</span>
+          </h1>
+          <p class="lead" style="max-width: 60vw" data-anim>
+            CRB
+            合同系统提供项目信息和合同额，财务系统同步开票回款，工时系统提供已审工时，成本中心提供成本分类统计。系统管理员可覆盖引用列的显示值，覆盖后自动同步不再改写。
+          </p>
+          <div class="meta-row" data-anim>
+            <span>CRB</span><span>·</span><span>财务系统</span><span>·</span
+            ><span>工时系统</span><span>·</span><span>成本中心</span>
+          </div>
+        </div>
+        <div class="foot">
+          <div>Page 13 · 数据对接机制</div>
+          <div>Module 05</div>
+        </div>
+      </section>
+
+      <!-- P14 · 系统管理 -->
+      <section class="slide dark">
+        <div class="chrome">
+          <div>模块六 · System Admin</div>
+          <div>14 / 17</div>
+        </div>
+        <div class="frame" style="padding-top: 5vh">
+          <div class="kicker" data-anim>Module 06 · 系统管理</div>
+          <h2 class="h-xl" style="margin-bottom: 3vh" data-anim>
+            配置、锁定与报告线
+          </h2>
+          <div class="grid-3" style="margin-top: 2vh">
+            <div class="pillar" data-anim>
+              <div class="ic">
+                <i data-lucide="columns-3" class="ico-lg"></i>
+              </div>
+              <div class="t">表头配置</div>
+              <div class="d">
+                维护 83
+                列字段字典的表头中文名。保存后填报页即时更新，无需刷新浏览器。仅系统管理员可访问。
+              </div>
+            </div>
+            <div class="pillar" data-anim>
+              <div class="ic"><i data-lucide="users" class="ico-lg"></i></div>
+              <div class="t">审批人员</div>
+              <div class="d">
+                按板块维护三类审批链路：板块管理员、板块审批、项目群审批。若管理员兼任总监，系统自动跳过该审批节点。
+              </div>
+            </div>
+            <div class="pillar" data-anim>
+              <div class="ic">
+                <i data-lucide="calendar" class="ico-lg"></i>
+              </div>
+              <div class="t">填报周期</div>
+              <div class="d">
+                配置报告月、提醒日、锁定日、解禁日。支持手动「立即锁定/解除锁定」，动作全程审计。
+              </div>
+            </div>
+          </div>
+          <div class="rule" style="margin: 3vh 0"></div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 3vw">
+            <div class="module-card" data-anim>
+              <div class="module-tag">Report Lines</div>
+              <div class="module-title">填报管理（报告线）</div>
+              <div class="module-body">
+                以「报告线」为核心数据单元，每条对应一个板块在一个月度内的填报实例。支持分发列配置、流转轨迹查看、逾期自动完结。
+              </div>
+            </div>
+            <div class="module-card" data-anim>
+              <div class="module-tag">Lock Control</div>
+              <div class="module-title">锁定与解锁</div>
+              <div class="module-body">
+                两种状态：开放/锁定。锁定日到达自动锁定；解锁默认关闭自动，需管理员手动操作。锁定期仅系统管理员可编辑。
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="foot">
+          <div>Page 14 · 系统管理</div>
+          <div>Module 06</div>
+        </div>
+      </section>
+
+      <!-- P15 · 预警体系 -->
+      <section class="slide light">
+        <div class="chrome">
+          <div>模块七 · Warnings</div>
+          <div>15 / 17</div>
+        </div>
+        <div class="frame" style="padding-top: 5vh">
+          <div class="kicker" data-anim>Module 07 · 预警体系</div>
+          <h2 class="h-xl" style="margin-bottom: 3vh" data-anim>
+            四类预警，两级管控
+          </h2>
+          <div
+            style="
+              display: grid;
+              grid-template-columns: repeat(4, 1fr);
+              gap: 2.4vh 3vw;
+              margin-bottom: 4vh;
+            "
+          >
+            <div class="stat-card" data-anim>
+              <div class="stat-label">Type A</div>
+              <div class="stat-nb" style="font-size: 3.2vw; color: #dc2626">
+                R &lt; 0
+              </div>
+              <div class="stat-note">
+                存量开票额为负：累计开票超过合同额。仅预警展示，不阻断提交。
+              </div>
+            </div>
+            <div class="stat-card" data-anim>
+              <div class="stat-label">Type B</div>
+              <div class="stat-nb" style="font-size: 3.2vw; color: #dc2626">
+                S &lt; 0
+              </div>
+              <div class="stat-note">
+                存量合同额为负：累计完成超过合同额。实时拦截编辑，阻断提交。
+              </div>
+            </div>
+            <div class="stat-card" data-anim>
+              <div class="stat-label">Type C</div>
+              <div class="stat-nb" style="font-size: 3.2vw; color: #ea580c">
+                WIP-C
+              </div>
+              <div class="stat-note">
+                有完成额无工时：当月填报了产值但工时系统无记录。
+              </div>
+            </div>
+            <div class="stat-card" data-anim>
+              <div class="stat-label">Type D</div>
+              <div class="stat-nb" style="font-size: 3.2vw; color: #ea580c">
+                WIP-D
+              </div>
+              <div class="stat-note">
+                有工时无完成额：工时系统有记录但未填报产值。
+              </div>
+            </div>
+          </div>
+          <div class="grid-2-6-6">
+            <div class="callout" data-anim>
+              <div class="q-big">全局预警抽屉</div>
+              系统管理员专属。聚合全公司所有项目的活跃预警，支持搜索、筛选、分页。点击预警卡片可直达项目详情。
+            </div>
+            <div class="callout" data-anim>
+              <div class="q-big">手动永久忽略</div>
+              系统管理员可对确认无需处理的预警执行永久忽略。跨月生效，即使条件在未来月份仍满足也不再激活。
+            </div>
+          </div>
+        </div>
+        <div class="foot">
+          <div>Page 15 · 预警体系</div>
+          <div>Module 07</div>
+        </div>
+      </section>
+
+      <!-- P16 · 关键业务规则 -->
+      <section class="slide dark">
+        <div class="chrome">
+          <div>业务规则 · Business Rules</div>
+          <div>16 / 17</div>
+        </div>
+        <div class="frame" style="padding-top: 5vh">
+          <div class="kicker" data-anim>Key Rules · 开发必知</div>
+          <h2 class="h-xl" style="margin-bottom: 3vh" data-anim>
+            四条核心业务规则
+          </h2>
+          <div
+            style="display: grid; grid-template-columns: 1fr 1fr; gap: 3vh 4vw"
+          >
+            <div class="module-card" data-anim>
+              <div class="module-tag">Rule 01 · S Column</div>
+              <div class="module-title">存量合同额校验</div>
+              <div class="module-body">
+                手工编辑完成额时实时拦截 S < 0；仅系统同步导致 S < 0
+                时自动对冲调减报告月完成额。提交时兜底校验全部项目 S ≥
+                0。已完成额加未来月份预测不得超过总合同额。
+              </div>
+            </div>
+            <div class="module-card" data-anim>
+              <div class="module-tag">Rule 02 · WIP</div>
+              <div class="module-title">WIP 催开票闭环</div>
+              <div class="module-body">
+                AL「WIP（催开票）」非零时，必须填写「WIP形成原因」和「高风险WIP」。WIP
+                归零时系统自动清空相关分析字段，避免过期内容残留。
+              </div>
+            </div>
+            <div class="module-card" data-anim>
+              <div class="module-tag">Rule 03 · Early Report</div>
+              <div class="module-title">提前申报产值</div>
+              <div class="module-body">
+                未签署合同但已开展工作的项目，经审批后可进入追踪表。合同签署后系统自动更新状态。未审批的未签署项目不可见。
+              </div>
+            </div>
+            <div class="module-card" data-anim>
+              <div class="module-tag">Rule 04 · Year End</div>
+              <div class="module-title">动态年份与跨年</div>
+              <div class="module-body">
+                字段名使用相对年份（"截止上一年底"而非"2025年底"）。跨年时全部项目自动标记为"旧项目"，当年调整值由
+                CRB 重新累计。
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="foot">
+          <div>Page 16 · 关键业务规则</div>
+          <div>Business Rules</div>
+        </div>
+      </section>
+
+      <!-- P17 · 结尾 -->
+      <section class="slide hero dark" data-animate="quote">
+        <div class="chrome">
+          <div>收束 · Takeaway</div>
+          <div>17 / 17</div>
+        </div>
+        <div
+          class="frame"
+          style="display: grid; gap: 4vh; align-content: center; flex: 1"
+        >
+          <div class="kicker" data-anim>Summary · 核心价值</div>
+          <blockquote
+            style="
+              font-family: var(--serif-zh);
+              font-weight: 700;
+              font-size: 5.8vw;
+              line-height: 1.2;
+              letter-spacing: -0.01em;
+              max-width: 78vw;
+            "
+          >
+            <span data-anim="line" style="display: block">一份数据，</span>
+            <span data-anim="line" style="display: block">一套流程，</span>
+            <span data-anim="line" style="display: block">全公司可见。</span>
+          </blockquote>
+          <p class="lead" style="max-width: 60vw; opacity: 0.65" data-anim>
+            从 Excel 邮件流转到统一 Web
+            平台——让项目经理专注填报，让管理员高效审核，让决策者随时掌握全局。
+          </p>
+          <div class="meta-row" data-anim>
+            <span>项目追踪表线上化系统</span><span>·</span
+            ><span>Wood China</span>
+          </div>
+        </div>
+        <div class="foot">
+          <div>Page 17 · 核心价值</div>
+          <div>— · —</div>
+        </div>
+      </section>
+    </div>
+
+    <div id="nav"></div>
+
+    <script>
+      /* WebGL */
+      const VS = `attribute vec2 position;void main(){gl_Position=vec4(position,0.0,1.0);}`;
+      const FS_DARK = `precision mediump float;uniform float u_time;uniform vec2 u_res;uniform float u_intensity;float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}float fbm(vec2 p){float v=0.0,a=0.5;for(int i=0;i<5;i++){v+=a*noise(p);p*=2.0;a*=0.5;}return v;}void main(){vec2 uv=gl_FragCoord.xy/u_res;vec2 c=uv-0.5;float d=length(c);float t=u_time*0.15;float n=fbm(uv*3.0+t);float n2=fbm(uv*5.0-t*0.7+vec2(n));float ripple=sin(d*18.0-u_time*0.8)*0.5+0.5;ripple*=smoothstep(0.6,0.0,d);float r=0.04+0.06*n2+0.03*ripple;float g=0.06+0.08*n+0.02*ripple;float b=0.12+0.14*n2+0.06*ripple;float hue=sin(atan(c.y,c.x)*2.0+u_time*0.2)*0.5+0.5;r+=hue*0.03*n2;g+=hue*0.02*n;b+=(1.0-hue)*0.04*n2;float vig=smoothstep(0.85,0.25,d);gl_FragColor=vec4(r*vig*u_intensity,g*vig*u_intensity,b*vig*u_intensity,1.0);}`;
+      const FS_LIGHT = `precision mediump float;uniform float u_time;uniform vec2 u_res;uniform float u_intensity;float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}float fbm(vec2 p){float v=0.0,a=0.5;for(int i=0;i<4;i++){v+=a*noise(p);p*=2.0;a*=0.5;}return v;}void main(){vec2 uv=gl_FragCoord.xy/u_res;float t=u_time*0.08;vec2 q=vec2(fbm(uv*2.5+t),fbm(uv*2.5-t+vec2(1.7,9.2)));float n=fbm(uv*3.0+q+t*0.5);float base=0.92+0.06*n;float r=base*u_intensity;float g=base*u_intensity;float b=(base+0.01)*u_intensity;gl_FragColor=vec4(r,g,b,1.0);}`;
+
+      function createGL(canvas, fs) {
+        const gl = canvas.getContext("webgl", {
+          alpha: false,
+          antialias: false,
+          preserveDrawingBuffer: false,
+        });
+        if (!gl) return null;
+        function compile(type, src) {
+          const s = gl.createShader(type);
+          gl.shaderSource(s, src);
+          gl.compileShader(s);
+          return s;
+        }
+        const vs = compile(gl.VERTEX_SHADER, VS),
+          fs2 = compile(gl.FRAGMENT_SHADER, fs);
+        const pg = gl.createProgram();
+        gl.attachShader(pg, vs);
+        gl.attachShader(pg, fs2);
+        gl.linkProgram(pg);
+        gl.useProgram(pg);
+        const buf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+        gl.bufferData(
+          gl.ARRAY_BUFFER,
+          new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+          gl.STATIC_DRAW,
+        );
+        const loc = gl.getAttribLocation(pg, "position");
+        gl.enableVertexAttribArray(loc);
+        gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+        return {
+          gl,
+          pg,
+          u_time: gl.getUniformLocation(pg, "u_time"),
+          u_res: gl.getUniformLocation(pg, "u_res"),
+          u_intensity: gl.getUniformLocation(pg, "u_intensity"),
+        };
+      }
+
+      const cDark = document.getElementById("bg-dark"),
+        cLight = document.getElementById("bg-light");
+      const glD = createGL(cDark, FS_DARK),
+        glL = createGL(cLight, FS_LIGHT);
+      function resize() {
+        const dpr = Math.min(devicePixelRatio || 1, 2);
+        [cDark, cLight].forEach((c) => {
+          c.width = innerWidth * dpr;
+          c.height = innerHeight * dpr;
+        });
+      }
+      resize();
+      addEventListener("resize", resize);
+
+      let t0 = performance.now(),
+        rafId;
+      function render() {
+        if (window.__lowPowerMode) {
+          rafId = null;
+          return;
+        }
+        const t = (performance.now() - t0) * 0.001;
+        [glD, glL].forEach((o) => {
+          if (!o) return;
+          o.gl.viewport(0, 0, o.gl.canvas.width, o.gl.canvas.height);
+          o.gl.uniform1f(o.u_time, t);
+          o.gl.uniform2f(o.u_res, o.gl.canvas.width, o.gl.canvas.height);
+          o.gl.uniform1f(o.u_intensity, 1.0);
+          o.gl.drawArrays(o.gl.TRIANGLE_STRIP, 0, 4);
+        });
+        rafId = requestAnimationFrame(render);
+      }
+      if (!window.__lowPowerMode) rafId = requestAnimationFrame(render);
+
+      /* 翻页 */
+      const navEl = document.getElementById("nav");
+      const slides = [...document.querySelectorAll(".slide")];
+      const total = slides.length;
+      let cur = 0,
+        animating = false;
+
+      slides.forEach((_, i) => {
+        const d = document.createElement("button");
+        d.className = "dot" + (i === 0 ? " active" : "");
+        d.onclick = () => go(i);
+        navEl.appendChild(d);
+      });
+      const dots = [...navEl.querySelectorAll(".dot")];
+
+      function go(n) {
+        n = Math.max(0, Math.min(total - 1, n));
+        if (n === cur) return;
+        cur = n;
+        animating = true;
+        document.getElementById("deck").style.transform =
+          `translateX(-${n * 100}vw)`;
+        dots.forEach((d, i) => d.classList.toggle("active", i === n));
+        document.body.classList.toggle(
+          "light-bg",
+          slides[n].classList.contains("light"),
+        );
+        setTimeout(() => {
+          animating = false;
+        }, 900);
+        playSlide(n);
+      }
+      if (slides[0] && slides[0].classList.contains("light"))
+        document.body.classList.add("light-bg");
+
+      addEventListener("keydown", (e) => {
+        if (e.key === "ArrowRight" || e.key === " ") {
+          const s = slides[cur];
+          if (s && s.dataset.animate === "pipeline") {
+            const steps = [...s.querySelectorAll(".step")];
+            const lit = steps.filter(
+              (st) => st.style.opacity === "1" || st.classList.contains("lit"),
+            );
+            if (lit.length < steps.length) {
+              const next = steps[lit.length];
+              next.style.opacity = "1";
+              next.classList.add("lit");
+              e.preventDefault();
+              return;
+            }
+          }
+          go(cur + 1);
+          e.preventDefault();
+        }
+        if (e.key === "ArrowLeft") {
+          go(cur - 1);
+          e.preventDefault();
+        }
+        if (e.key === "Home") {
+          go(0);
+          e.preventDefault();
+        }
+        if (e.key === "End") {
+          go(total - 1);
+          e.preventDefault();
+        }
+        if (e.key === "b" || e.key === "B")
+          window.__setLowPowerMode(!window.__lowPowerMode);
+      });
+
+      let wheelCool = false;
+      addEventListener(
+        "wheel",
+        (e) => {
+          if (wheelCool) return;
+          wheelCool = true;
+          setTimeout(() => (wheelCool = false), 800);
+          const s = slides[cur];
+          if (s && s.dataset.animate === "pipeline" && e.deltaY > 0) {
+            const steps = [...s.querySelectorAll(".step")];
+            const lit = steps.filter(
+              (st) => st.style.opacity === "1" || st.classList.contains("lit"),
+            );
+            if (lit.length < steps.length) {
+              const next = steps[lit.length];
+              next.style.opacity = "1";
+              next.classList.add("lit");
+              return;
+            }
+          }
+          if (e.deltaY > 30) go(cur + 1);
+          else if (e.deltaY < -30) go(cur - 1);
+        },
+        { passive: true },
+      );
+
+      let tx = 0;
+      addEventListener("touchstart", (e) => (tx = e.touches[0].clientX), {
+        passive: true,
+      });
+      addEventListener(
+        "touchend",
+        (e) => {
+          const dx = e.changedTouches[0].clientX - tx;
+          if (Math.abs(dx) > 50) {
+            dx < 0 ? go(cur + 1) : go(cur - 1);
+          }
+        },
+        { passive: true },
+      );
+
+      /* Motion One */
+      let motionLib = null;
+      async function loadMotion() {
+        try {
+          const s = document.createElement("script");
+          s.src = "https://cdn.jsdelivr.net/npm/motion@11.18.0/dist/motion.js";
+          document.head.appendChild(s);
+          await new Promise((r, j) => {
+            s.onload = r;
+            s.onerror = j;
+            setTimeout(j, 4000);
+          });
+          motionLib = window.Motion || window.motion;
+          document.body.classList.add("motion-ready");
+        } catch (e) {
+          document.querySelectorAll("[data-anim]").forEach((el) => {
+            el.style.opacity = "1";
+            el.style.transform = "none";
+          });
+        }
+      }
+
+      function playSlide(n) {
+        window.__currentSlideIndex = n;
+        if (window.__lowPowerMode || !motionLib) return;
+        const s = slides[n];
+        if (!s) return;
+        const els = [...s.querySelectorAll("[data-anim]")];
+        const recipe = s.dataset.animate || "cascade";
+        els.forEach((el) => {
+          el.style.opacity = "0";
+          el.style.transform = "";
+        });
+
+        if (recipe === "pipeline") {
+          els.forEach((el) => {
+            if (el.classList.contains("step")) {
+              el.style.opacity = ".15";
+            } else {
+              try {
+                motionLib.animate(
+                  el,
+                  {
+                    opacity: [0, 1],
+                    transform: ["translateY(12px)", "translateY(0)"],
+                  },
+                  { duration: 0.5, delay: 0.1 },
+                );
+              } catch (e) {
+                el.style.opacity = "1";
+              }
+            }
+          });
+          return;
+        }
+        if (recipe === "hero") {
+          els.forEach((el, i) => {
+            try {
+              motionLib.animate(
+                el,
+                {
+                  opacity: [0, 1],
+                  transform: ["translateY(16px)", "translateY(0)"],
+                },
+                { duration: 0.7, delay: i * 0.18, easing: [0.22, 1, 0.36, 1] },
+              );
+            } catch (e) {
+              el.style.opacity = "1";
+            }
+          });
+          return;
+        }
+        if (recipe === "quote") {
+          els.forEach((el, i) => {
+            try {
+              motionLib.animate(
+                el,
+                {
+                  opacity: [0, 1],
+                  transform: ["translateY(10px)", "translateY(0)"],
+                },
+                { duration: 0.6, delay: i * 0.55, easing: "ease-out" },
+              );
+            } catch (e) {
+              el.style.opacity = "1";
+            }
+          });
+          return;
+        }
+        if (recipe === "directional") {
+          const lefts = [...s.querySelectorAll('[data-anim="left"]')];
+          const rights = [...s.querySelectorAll('[data-anim="right"]')];
+          const others = els.filter(
+            (el) =>
+              !el.dataset.anim || !["left", "right"].includes(el.dataset.anim),
+          );
+          [...others, ...lefts, ...rights].forEach((el, i) => {
+            const dir =
+              el.dataset.anim === "left"
+                ? -24
+                : el.dataset.anim === "right"
+                  ? 24
+                  : 0;
+            try {
+              motionLib.animate(
+                el,
+                {
+                  opacity: [0, 1],
+                  transform: [`translateX(${dir}px)`, "translateX(0)"],
+                },
+                { duration: 0.6, delay: i * 0.12, easing: [0.22, 1, 0.36, 1] },
+              );
+            } catch (e) {
+              el.style.opacity = "1";
+            }
+          });
+          return;
+        }
+        els.forEach((el, i) => {
+          try {
+            motionLib.animate(
+              el,
+              {
+                opacity: [0, 1],
+                transform: ["translateY(12px)", "translateY(0)"],
+              },
+              { duration: 0.5, delay: i * 0.12, easing: [0.22, 1, 0.36, 1] },
+            );
+          } catch (e) {
+            el.style.opacity = "1";
+          }
+        });
+      }
+
+      loadMotion().then(() => playSlide(0));
+
+      /* Lucide */
+      (function () {
+        const s = document.createElement("script");
+        s.src = "https://unpkg.com/lucide@latest/dist/umd/lucide.min.js";
+        s.onload = () => {
+          if (window.lucide) lucide.createIcons();
+        };
+        document.head.appendChild(s);
+      })();
+    </script>
+  </body>
+</html>

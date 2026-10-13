@@ -172,7 +172,7 @@
           return;
         }
         this.$confirm(
-          '将更新表头名称并同步至项目追踪表 Luckysheet，是否保存？',
+          '将更新表头名称并同步至查看数据页 Luckysheet，是否保存？',
           '保存表头配置',
           { confirmButtonText: '保存', cancelButtonText: '取消', type: 'warning' }
         ).then(function () {
@@ -181,7 +181,7 @@
         }).then(function () {
           self._nameSnapshot = snapshotNames(self.fields);
           self.isDirty = false;
-          self.$message.success('表头已保存，项目追踪表将自动同步');
+          self.$message.success('表头已保存，查看数据页将自动同步');
         }).catch(function (e) {
           if (e === 'cancel' || e === 'close') return;
           self.$message.error('保存失败：' + (e.message || e));
@@ -215,12 +215,12 @@
             <div>
               <h2 class="fm-page-title">Luckysheet 表头配置</h2>
               <p class="fm-page-desc">
-                与项目追踪表共用字段字典（服务端同步）。当前仅<strong>表头中文名称</strong>可编辑；
+                与查看数据页共用字段字典（服务端同步）。当前仅<strong>表头中文名称</strong>可编辑；
                 列宽、冻结、公式等待定。
               </p>
             </div>
             <div class="fm-toolbar-actions">
-              <el-button size="small" icon="el-icon-s-grid" @click="goEditor">查看项目追踪表</el-button>
+              <el-button size="small" icon="el-icon-s-grid" @click="goEditor">查看数据</el-button>
               <el-button size="small" icon="el-icon-refresh" @click="reloadFromStore">重新加载</el-button>
               <el-button
                 size="small"

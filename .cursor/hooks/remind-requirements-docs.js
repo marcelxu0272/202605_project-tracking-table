@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * Cursor hook：业务代码变更后提醒同步需求文档（产品版 + 开发版）。
+ * Cursor hook：业务代码变更后提醒同步需求文档（产品版，唯一主文档）。
  * 用法：postToolUse | stop（见 .cursor/hooks.json）
  */
 
@@ -12,7 +12,6 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..', '..');
 const FLAG_FILE = path.join(__dirname, '.pending-req-doc-sync');
 const PRODUCT_DOC = path.join(ROOT, 'docs', '需求文档', '需求文档_产品版.md');
-const DEV_DOC = path.join(ROOT, 'docs', '需求文档', '需求文档_开发版.md');
 
 const CODE_RE = /(^|\/)(js|server|css|config)\/|(^|\/)index\.html$|(^|\/)package\.json$|config\/fields\/fields\.(json|js)$/;
 
@@ -76,9 +75,7 @@ function docsSyncedAfter(touchedAt) {
   const t = new Date(touchedAt).getTime();
   if (isNaN(t)) return false;
   try {
-    const pm = fs.statSync(PRODUCT_DOC).mtimeMs;
-    const dm = fs.statSync(DEV_DOC).mtimeMs;
-    return pm > t && dm > t;
+    return fs.statSync(PRODUCT_DOC).mtimeMs > t;
   } catch (e) {
     return false;
   }
@@ -87,10 +84,9 @@ function docsSyncedAfter(touchedAt) {
 function reminderText() {
   return [
     '【需求文档同步】本次会话涉及功能代码变更。',
-    '若属于功能新增或优化，请完成实现后同步更新：',
-    '- docs/需求文档/需求文档_产品版.md（业务流程、规则、交互）',
-    '- docs/需求文档/需求文档_开发版.md（实现细节、路径、API、§ 编号）',
-    '并更新两文档顶部「最后更新」日期；纯重构/样式微调可简要说明或跳过。'
+    '若属于功能新增或优化，请完成实现后同步更新唯一需求主文档：',
+    '- docs/需求文档/需求文档_产品版.md（业务流程、规则、角色权限、交互）',
+    '并更新文档顶部「最后更新」日期与更新记录；技术实现细节以代码为准，不写入文档；纯重构/样式微调可跳过。'
   ].join('\n');
 }
 

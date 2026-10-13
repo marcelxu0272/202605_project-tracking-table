@@ -23,6 +23,9 @@ function loadStockValidation() {
         const p = Object.assign({}, flatProject);
         p.monthly_completion = Array(12).fill(0).map((_, i) => p['mc_' + i] || 0);
         return p;
+      },
+      getMonthlyMonthIndex(col) {
+        return this.MC_COLS.indexOf(col);
       }
     },
     FormulaEngine: {
@@ -80,4 +83,38 @@ test('rejects submit when existing future forecasts plus completed exceed contra
   assert.equal(result.ok, false);
   assert.match(result.message, /未来月份预测完成额/);
   assert.match(result.message, /调整完成额/);
+});
+
+test('rejects negative completion in future months', () => {
+  const StockValidation = loadStockValidation();
+  const project = {
+    project_no: 'P-003',
+    prev_year_contract: 1200,
+    prev_year_completion: 200,
+    monthly_completion: [100, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  };
+  const result = StockValidation.validateCompletionEdit(
+    project,
+    { col: 'BC' },
+    -10,
+    1
+  );
+  assert.equal(result.ok, false);
+  assert.match(result.message, /未来月份完成合同额/);
+});
+
+test('requires remark when current month completion is negative on submit', () => {
+  const StockValidation = loadStockValidation();
+  const result = StockValidation.validateProjectsForSubmit([
+    {
+      project_no: 'P-004',
+      project_name: '负值项目',
+      prev_year_contract: 1500,
+      prev_year_completion: 200,
+      monthly_completion: [100, -20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      completion_remark: ''
+    }
+  ], 1, 'open');
+  assert.equal(result.ok, false);
+  assert.match(result.message, /备注/);
 });

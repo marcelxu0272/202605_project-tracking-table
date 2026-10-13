@@ -32,17 +32,23 @@
         {
           path: 'editor',
           component: window.ProjectEditorView,
-          meta: { requiresAuth: true, title: '项目追踪表' }
+          meta: { requiresAuth: true, title: '查看数据' }
         },
         {
           path: 'report-lines',
           component: window.ReportLineListView,
-          meta: { requiresAuth: true, title: '填报管理' }
+          meta: { requiresAuth: true, title: '填报与审批' }
         },
+        // 概览与明细是两个页面：概览走常规文档流，明细走 Luckysheet 全屏外壳
         {
           path: 'report-lines/:id',
+          component: window.ReportLineOverviewPageView,
+          meta: { requiresAuth: true, title: '报告线概览' }
+        },
+        {
+          path: 'report-lines/:id/sheet',
           component: window.ReportLineDetailView,
-          meta: { requiresAuth: true, title: '填报详情' }
+          meta: { requiresAuth: true, title: '填报明细' }
         },
         // /approval 保留兼容：重定向到 /report-lines（防止旧书签失效）
         {
