@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>2026年9月板块概览预览</title>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+  <style>
+    /* ── 自包含样式（摘自 css/style.css 必要片段 + 预览壳）── */
+    :root {
+      --color-brand: #007069;
+      --color-brand-light: rgba(0, 112, 105, 0.1);
+      --color-brand-tint-3: rgba(0, 112, 105, 0.03);
+      --color-warning: #f59e0b;
+      --color-danger: #ef4444;
+      --color-bg: #f8faff;
+      --color-text: #374151;
+      --color-text-secondary: #6b7280;
+      --color-text-muted: #9ca3af;
+      --color-heading: #233845;
+      --color-border: #e5e7eb;
+      --color-sidebar-dark: #233845;
+      --sidebar-width: 220px;
+      --header-height: 56px;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; padding: 0; }
+    body {
+      font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB",
+                   "Microsoft YaHei", "微软雅黑", Arial, sans-serif;
+      background: var(--color-bg);
+      color: var(--color-text);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .app-layout {
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .app-sidebar {
+      width: var(--sidebar-width);
+      min-width: var(--sidebar-width);
+      background: var(--color-sidebar-dark);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      z-index: 100;
+    }
+    .sidebar-logo {
+      height: var(--header-height);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      flex-shrink: 0;
+    }
+    .sidebar-logo-text {
+      color: #fff;
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: 0.5px;
+    }
+    .sidebar-nav {
+      flex: 1;
+      overflow-x: hidden;
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+    .sidebar-nav-plain {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .sidebar-nav-plain button {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      height: 42px;
+      padding: 0 16px;
+      border: 0;
+      background: transparent;
+      color: rgba(255,255,255,0.65);
+      font: inherit;
+      font-size: 13px;
+      text-align: left;
+      cursor: pointer;
+    }
+    .sidebar-nav-plain button:hover,
+    .sidebar-nav-plain button.is-active {
+      background: rgba(0,112,105,0.2);
+      color: #fff;
+    }
+    .sidebar-nav-plain button b {
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-weight: 600;
+      font-size: 12px;
+      opacity: 0.85;
+    }
+
+    .preview-note {
+      margin: 0;
+      padding: 8px 20px;
+      background: #fff8ef;
+      border-bottom: 1px solid #fde3c0;
+      color: #92400e;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .preview-main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--color-bg);
+    }
+    .preview-head {
+      flex: none;
+      height: var(--header-height);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 20px;
+      background: #fff;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .preview-head h1 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--color-heading);
+    }
+    .preview-head .meta {
+      font-size: 12px;
+      color: var(--color-text-muted);
+    }
+    .preview-body {
+      flex: 1;
+      overflow: auto;
+      padding: 16px 20px 24px;
+    }
+
+    /* 报告线概览 */
+    .rl-ov {
+      --ov-hair: #eceff3;
+      --ov-num: "SF Mono", "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding-bottom: 12px;
+    }
+    .rl-ov .rl-ov-num,
+    .rl-ov dd {
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum";
+    }
+    .rl-ov .is-neg { color: var(--color-danger); }
+    .rl-ov-surface {
+      background: #fff;
+      border: 1px solid var(--color-border);
+      border-radius: 10px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+      overflow: hidden;
+    }
+    .rl-ov-kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      background: var(--ov-hair);
+      align-items: stretch;
+    }
+    .rl-ov-kpi {
+      padding: 14px 16px 16px;
+      background: #fff;
+      min-width: 0;
+    }
+    .rl-ov-kpi.is-stock-col {
+      display: grid;
+      grid-template-rows: 1fr 1fr;
+      padding: 14px 16px 16px;
+      min-height: 100%;
+    }
+    .rl-ov-stock-block {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      min-height: 0;
+      padding: 0;
+    }
+    .rl-ov-stock-block + .rl-ov-stock-block {
+      border-top: 1px solid var(--ov-hair);
+      padding-top: 10px;
+    }
+    .rl-ov-kpi.is-stock-col .rl-ov-kpi-value .num { font-size: 22px; }
+    .rl-ov-kpi.is-stock-col .rl-ov-kpi-main { margin-top: 6px; }
+    .rl-ov-kpi-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .rl-ov-kpi-head h3 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-heading);
+    }
+    .rl-ov-src {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 1px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 500;
+      line-height: 18px;
+      white-space: nowrap;
+      color: var(--color-brand);
+      background: var(--color-brand-light);
+    }
+    .rl-ov-src.is-sync { cursor: help; }
+    .rl-ov-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      flex: none;
+    }
+    .rl-ov-kpi-main {
+      margin: 10px 0 0;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      min-width: 0;
+    }
+    .rl-ov-kpi-value {
+      margin: 0;
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+      color: var(--color-heading);
+    }
+    .rl-ov-kpi-value .num {
+      font-family: var(--ov-num);
+      font-size: 28px;
+      font-weight: 600;
+      line-height: 1.1;
+      letter-spacing: -0.012em;
+    }
+    .rl-ov-kpi-value .unit {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-text-muted);
+    }
+    .rl-ov-kpi.is-primary .rl-ov-kpi-value { color: var(--color-brand); }
+    .rl-ov-kpi-value.is-neg,
+    .rl-ov-kpi.is-primary .rl-ov-kpi-value.is-neg { color: var(--color-danger); }
+    .rl-ov-kpi-caption {
+      margin: 4px 0 0;
+      font-size: 12px;
+      color: var(--color-text-muted);
+    }
+    .rl-ov-delta {
+      margin: 0;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--color-text-muted);
+      white-space: nowrap;
+    }
+    .rl-ov-delta.is-up { color: var(--color-brand); }
+    .rl-ov-delta.is-down { color: var(--color-danger); }
+    .rl-ov-delta.is-flat { color: var(--color-text-muted); }
+    .rl-ov-kpi-meta {
+      margin: 14px 0 0;
+      padding-top: 12px;
+      border-top: 1px solid var(--ov-hair);
+      display: grid;
+      gap: 6px;
+    }
+    .rl-ov-kpi-meta > div {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 12px;
+    }
+    .rl-ov-kpi-meta dt { color: var(--color-text-muted); }
+    .rl-ov-kpi-meta dd {
+      margin: 0;
+      font-family: var(--ov-num);
+      color: var(--color-text);
+    }
+    .rl-ov-kpi-meta dd i {
+      margin-left: 3px;
+      font-style: normal;
+      font-size: 11px;
+      color: var(--color-text-muted);
+    }
+    .rl-ov-split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      align-items: stretch;
+    }
+    .rl-ov-sec-fixed {
+      display: flex;
+      flex-direction: column;
+      height: 380px;
+    }
+    .rl-ov-sec-fixed .rl-ov-sec-head { flex: none; }
+    .rl-ov-sec-body {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .rl-ov-mini-chart {
+      flex: 1;
+      width: 100%;
+      min-height: 0;
+    }
+    .rl-ov-chart-empty {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--color-text-muted);
+      font-size: 13px;
+      min-height: 80px;
+    }
+    .rl-ov-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin: -4px 0 8px;
+      font-size: 12px;
+      color: var(--color-text-secondary);
+    }
+    .rl-ov-legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .rl-ov-legend i {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      flex: none;
+    }
+    .rl-ov-legend i.is-pos { background: #d7ebe9; box-shadow: inset 0 0 0 1px rgba(12, 79, 74, 0.28); }
+    .rl-ov-legend i.is-neg { background: #f8d4d4; box-shadow: inset 0 0 0 1px rgba(159, 45, 45, 0.28); }
+    .rl-ov-sec {
+      background: #fff;
+      border: 1px solid var(--color-border);
+      border-radius: 10px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+      padding: 14px 16px 16px;
+      min-width: 0;
+    }
+    .rl-ov-sec-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--ov-hair);
+    }
+    .rl-ov-sec-head h2 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-heading);
+    }
+    .rl-ov-sec-note {
+      font-size: 12px;
+      color: var(--color-text-muted);
+      white-space: nowrap;
+    }
+    .rl-ov-sec-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: none;
+    }
+    .rl-ov-more {
+      margin: 0;
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--color-brand);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      pointer-events: none;
+      opacity: 0.45;
+    }
+    .rl-ov-share {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .rl-ov-share-track {
+      width: 56px;
+      flex: none;
+      height: 4px;
+      border-radius: 999px;
+      background: var(--color-brand-light);
+      overflow: hidden;
+    }
+    .rl-ov-share-track i {
+      display: block;
+      height: 100%;
+      border-radius: 999px;
+      background: var(--color-brand);
+    }
+    .rl-ov-chart {
+      width: 100%;
+      height: 300px;
+    }
+
+    /* PM 汇总表 + 排序 */
+    .rl-ov-pm-wrap { max-height: 320px; overflow: auto; }
+    .rl-ov-pm-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+    .rl-ov-pm-table th,
+    .rl-ov-pm-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--ov-hair);
+      vertical-align: middle;
+    }
+    .rl-ov-pm-table thead th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #fafbfc;
+      color: var(--color-text-secondary);
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .rl-ov-pm-table .is-right { text-align: right; }
+    .rl-ov-pm-table .is-center { text-align: center; }
+    .rl-ov-pm-table th.is-sortable {
+      cursor: pointer;
+      user-select: none;
+    }
+    .rl-ov-pm-table th.is-sortable:hover { color: var(--color-brand); }
+    .rl-ov-pm-table th.is-sortable .sort-ind {
+      display: inline-block;
+      margin-left: 4px;
+      font-size: 10px;
+      color: var(--color-text-muted);
+      vertical-align: middle;
+    }
+    .rl-ov-pm-table th.is-sortable.is-asc .sort-ind,
+    .rl-ov-pm-table th.is-sortable.is-desc .sort-ind {
+      color: var(--color-brand);
+      font-weight: 700;
+    }
+    .rl-ov-pm-table th.is-sortable .sort-ind::before { content: "↕"; }
+    .rl-ov-pm-table th.is-sortable.is-asc .sort-ind::before { content: "↑"; }
+    .rl-ov-pm-table th.is-sortable.is-desc .sort-ind::before { content: "↓"; }
+
+    @media (max-width: 960px) {
+      .rl-ov-kpis { grid-template-columns: 1fr 1fr; }
+      .rl-ov-kpi.is-stock-col { grid-column: 1 / -1; }
+    }
+    @media (max-width: 1180px) {
+      .rl-ov-split { grid-template-columns: 1fr; }
+      .rl-ov-sec-fixed { height: 380px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="app-sidebar">
+      <div class="sidebar-logo">
+        <div class="sidebar-logo-text">板块概览</div>
+      </div>
+      <nav class="sidebar-nav">
+        <ul class="sidebar-nav-plain" id="sectorNav"></ul>
+      </nav>
+    </aside>
+    <div class="preview-main">
+      <p class="preview-note">数据来自项目跟踪表_2026-10_20261016_131821.xlsx。表中 10 月完成合同额整列为空，本页按最近有发生额的 <b>9 月</b> 作为当月；10–12 月在走势中仍作预测。「较上一期」按较前一个月（8 月）计算。工时类预警未接入，仅存量四类。本页样式已内联，可直接用浏览器打开分享（图表需联网加载 ECharts）。PM 汇总表头可点击排序。</p>
+      <header class="preview-head">
+        <h1 id="sectorTitle">—</h1>
+        <span class="meta" id="sectorMeta"></span>
+      </header>
+      <div class="preview-body">
+        <div class="rl-ov" id="overviewRoot"></div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const DATA = [{"code":"ALL","name":"全部板块","projectCount":4769,"monthLabel":"9月","kpis":[{"key":"completion","label":"完成合同额","sourceType":"manual","values":{"current":74775132.34,"ytd":370327405.5999998,"future":53012071.440000005,"deltaCurrent":29216442.610000007}},{"key":"invoice","label":"完成开票额","sourceType":"system_ref","values":{"current":75698595.27,"ytd":366887513.11000013,"future":100247561.01000002,"deltaCurrent":null}},{"key":"payment","label":"完成回款额","sourceType":"system_ref","values":{"current":73362095.86,"ytd":330411743.65999997,"future":186762750.39,"deltaCurrent":null}}],"stockKpis":[{"key":"contractStock","label":"存量合同额","value":589001596.5699995,"delta":-74775132.34000003,"invertDelta":true},{"key":"invoiceStock","label":"存量开票额","value":744624382.9999999,"delta":-75698595.26999998,"invertDelta":true}],"tiles":[{"name":"D24001-0003","value":20000000,"kind":"project","monthCompletion":20000000,"projectNo":"D24001-0003","projectName":"Hyena open book EPC Project","pmName":"钟晓玲","count":0},{"name":"D20002_C","value":12505565.66,"kind":"project","monthCompletion":12505565.66,"projectNo":"D20002_C","projectName":"海南项目化工区工艺及热力管网等主项工程EPC_施工部分","pmName":"高绪海","count":0},{"name":"G24007","value":3104818.54,"kind":"project","monthCompletion":3104818.54,"projectNo":"G24007","projectName":"哈密能源集成创新基地项目（一阶段煤制油项目）","pmName":"任晓峰","count":0},{"name":"其他项目","value":39164748.13999999,"kind":"other","monthCompletion":39164748.13999999,"projectNo":"","projectName":"","pmName":"","count":681}],"alerts":[{"label":"累计开票超总合同额","count":6},{"label":"累计回款超总合同额","count":3},{"label":"累计回款超累计开票","count":3},{"label":"存量合同额为负","count":3}],"trend":{"months":["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"],"completion":[36673288.17,17920587.27,34369280.119999975,34347074.57000001,35167904.03999999,37265104.37,54250344.99000002,45558689.73,74775132.34,0,25815171.189999998,27196900.250000004],"invoice":[22506533.57,12174618,37707246.65999999,19333797.4,39576935.38,41676169.55,57926327.04,60287290.239999995,75698595.27,13015780.389999997,46127753.73,41104026.89],"payment":[48870229.739999995,31540273.739999995,22244254.55,31937125.34,17050818.64,38789566.03,40440224.269999996,26177155.489999995,73362095.86,48793115.589999996,64000024.15,73969610.65],"reportingMonthIdx":8},"pmSummary":[{"pmName":"钟晓玲","projectCount":1,"current":{"c":20000000,"i":6083354.27,"p":26763352.48},"ytd":{"c":40000000},"sharePctCurrent":0.2674686005109383,"sharePctYtd":0.10801252998057889},{"pmName":"何平","projectCount":678,"current":{"c":1114144,"i":657500,"p":3747645.5999999996},"ytd":{"c":28288259.52},"sharePctCurrent":0.014899926822382942,"sharePctYtd":0.0763871619875599},{"pmName":"任晓峰","projectCount":1,"current":{"c":3104818.54,"i":2960390.05,"p":2075092.9},"ytd":{"c":21171152.05},"sharePctCurrent":0.041522073486710734,"sharePctYtd":0.057168742388100484},{"pmName":"李晓冬","projectCount":1,"current":{"c":2160000,"i":2501898.93,"p":2669613.06},"ytd":{"c":19920333.34},"sharePctCurrent":0.028886608855181337,"sharePctYtd":0.05379114005274688},{"pmName":"高绪海","projectCount":5,"current":{"c":13490732.77,"i":32610980.02,"p":0},"ytd":{"c":14640732.77},"sharePctCurrent":0.1804173706929477,"sharePctYtd":0.03953456468143172},{"pmName":"任鹏飞","projectCount":1,"current":{"c":1350540,"i":2894656.5,"p":2894656.5},"ytd":{"c":14338215},"sharePctCurrent":0.018061352186702132,"sharePctYtd":0.03871767193888715},{"pmName":"王喆","projectCount":2,"current":{"c":1580000,"i":0,"p":4700000},"ytd":{"c":14090000},"sharePctCurrent":0.021130019440364127,"sharePctYtd":0.038047413685658914},{"pmName":"时新园","projectCount":78,"current":{"c":1166589.59,"i":0,"p":400349},"ytd":{"c":13588044.9},"sharePctCurrent":0.015601304250396466,"sharePctYtd":0.036691977678467554},{"pmName":"买涛","projectCount":153,"current":{"c":3918514.25,"i":4609800,"p":5306850},"ytd":{"c":11531929.25},"sharePctCurrent":0.052403976126483454,"sharePctYtd":0.03113982134623849},{"pmName":"郭宗环","projectCount":2,"current":{"c":1460485,"i":1274217.44,"p":0},"ytd":{"c":10825132.790000001},"sharePctCurrent":0.019531693950860886,"sharePctYtd":0.029231249500590566},{"pmName":"吕全海","projectCount":5,"current":{"c":1745233.94,"i":2997769.4699999997,"p":1882404.47},"ytd":{"c":10785233.94},"sharePctCurrent":0.023339763974799543,"sharePctYtd":0.02912351010729517},{"pmName":"孙磊","projectCount":2,"current":{"c":1400000,"i":0,"p":2904665.9},"ytd":{"c":9300116.24},"sharePctCurrent":0.018722802035765682,"sharePctYtd":0.025113227104896715},{"pmName":"张文俊","projectCount":1,"current":{"c":1800000,"i":0,"p":0},"ytd":{"c":8530000},"sharePctCurrent":0.024072174045984447,"sharePctYtd":0.02303367201835845},{"pmName":"夏滨","projectCount":233,"current":{"c":339214,"i":0,"p":795518},"ytd":{"c":7732951.01},"sharePctCurrent":0.004536454692685871,"sharePctYtd":0.02088139007014932},{"pmName":"朱雪梅","projectCount":45,"current":{"c":701713.78,"i":934978.96,"p":0},"ytd":{"c":7401362.05},"sharePctCurrent":0.009384320134792023,"sharePctYtd":0.019985996008068593},{"pmName":"孟浩亮","projectCount":442,"current":{"c":680700,"i":280000,"p":190000},"ytd":{"c":6244647.77},"sharePctCurrent":0.009103293818389785,"sharePctYtd":0.016862505111882},{"pmName":"何孝刚","projectCount":80,"current":{"c":178634,"i":310184.12,"p":798462.34},"ytd":{"c":6236218.74},"sharePctCurrent":0.0023889492991835477,"sharePctYtd":0.016839744090492447},{"pmName":"王晓宇","projectCount":14,"current":{"c":669125,"i":242350,"p":1294900},"ytd":{"c":5871145},"sharePctCurrent":0.00894849636584408,"sharePctYtd":0.015853930633320645},{"pmName":"赵宏海","projectCount":30,"current":{"c":1223450.2,"i":689703.31,"p":607932},"ytd":{"c":5515691.67},"sharePctCurrent":0.01636172563944138,"sharePctYtd":0.014894095296737606},{"pmName":"周子渊","projectCount":1,"current":{"c":1387870,"i":0,"p":0},"ytd":{"c":5207544.8100000005},"sharePctCurrent":0.0185605823295558,"sharePctYtd":0.014062002247883326},{"pmName":"王钰","projectCount":232,"current":{"c":673301,"i":253000,"p":288200},"ytd":{"c":5201223},"sharePctCurrent":0.009004343809630763,"sharePctYtd":0.014044931380579412},{"pmName":"张雯","projectCount":37,"current":{"c":410008,"i":584490.96,"p":281175.31},"ytd":{"c":5173941.04},"sharePctCurrent":0.0054832132979144394,"sharePctYtd":0.013971261542518688},{"pmName":"胡振清","projectCount":575,"current":{"c":467523.95999999996,"i":3016138.6,"p":56000},"ytd":{"c":5076936.369999998},"sharePctCurrent":0.006252398964326594,"sharePctYtd":0.013709318546852903},{"pmName":"宋建生","projectCount":106,"current":{"c":849712,"i":199320,"p":281882.8},"ytd":{"c":4564806.949999999},"sharePctCurrent":0.01136356397386752,"sharePctYtd":0.012326408688560745},{"pmName":"杨进才","projectCount":1,"current":{"c":917720,"i":555706.73,"p":1004346.73},"ytd":{"c":4564776.8},"sharePctCurrent":0.012273064203044914,"sharePctYtd":0.012326327274116273},{"pmName":"吴敏","projectCount":61,"current":{"c":724491.56,"i":899657.56,"p":783327.5700000001},"ytd":{"c":4384151.069999999},"sharePctCurrent":0.009688937181759325,"sharePctYtd":0.011838581222194049},{"pmName":"钱东峰","projectCount":7,"current":{"c":280000,"i":422422,"p":557743.6},"ytd":{"c":4284072},"sharePctCurrent":0.0037445604071531364,"sharePctYtd":0.011568336383473965},{"pmName":"陈贺明","projectCount":9,"current":{"c":0,"i":725000,"p":870000},"ytd":{"c":4080000},"sharePctCurrent":0,"sharePctYtd":0.011017278058019046},{"pmName":"秦益","projectCount":17,"current":{"c":0,"i":0,"p":36800},"ytd":{"c":3689091.23},"sharePctCurrent":0,"sharePctYtd":0.009961701927036642},{"pmName":"周建中","projectCount":3,"current":{"c":447280,"i":605040,"p":0},"ytd":{"c":3561360},"sharePctCurrent":0.005981667781826624,"sharePctYtd":0.009616787594290861},{"pmName":"陈琳","projectCount":1,"current":{"c":0,"i":0,"p":677532.22},"ytd":{"c":3493000},"sharePctCurrent":0,"sharePctYtd":0.00943219418055405},{"pmName":"赵海杰","projectCount":101,"current":{"c":370046.77999999997,"i":584390.72,"p":676877.8400000001},"ytd":{"c":3243423.4999999995},"sharePctCurrent":0.004948794718508953,"sharePctYtd":0.008758259450836602},{"pmName":"朱勇","projectCount":2,"current":{"c":405463,"i":774211.0900000001,"p":0},"ytd":{"c":3214916.56},"sharePctCurrent":0.005422431058448329,"sharePctYtd":0.008681281783051489},{"pmName":"翁应彬","projectCount":2,"current":{"c":680000,"i":811976.96,"p":1789538.6400000001},"ytd":{"c":3040000},"sharePctCurrent":0.009093932417371902,"sharePctYtd":0.008208952278523996},{"pmName":"杨银花","projectCount":54,"current":{"c":172544.36,"i":744123.2200000001,"p":110763.16000000002},"ytd":{"c":2834267.76},"sharePctCurrent":0.002307509924762776,"sharePctYtd":0.0076534107849997035},{"pmName":"冯慧玲","projectCount":116,"current":{"c":1095660.8,"i":530779.58,"p":302179.92},"ytd":{"c":2663364.12},"sharePctCurrent":0.014652743040534754,"sharePctYtd":0.007191917421517453},{"pmName":"周彬","projectCount":3,"current":{"c":0,"i":0,"p":0},"ytd":{"c":2564613.3499999996},"sharePctCurrent":0,"sharePctYtd":0.006925259408886695},{"pmName":"刘翔","projectCount":240,"current":{"c":938788.9,"i":1380358.75,"p":826300},"ytd":{"c":2430688.93},"sharePctCurrent":0.01255482766291016,"sharePctYtd":0.006563621523127156},{"pmName":"黄俊","projectCount":5,"current":{"c":215000,"i":0,"p":0},"ytd":{"c":2372049.18},"sharePctCurrent":0.0028752874554925866,"sharePctYtd":0.006405275829253939},{"pmName":"罗艳玲","projectCount":98,"current":{"c":303764,"i":282193.6,"p":82366.5},"ytd":{"c":2204127.88},"sharePctCurrent":0.004062366598280233,"sharePctYtd":0.005951835717988244},{"pmName":"徐辑敏","projectCount":203,"current":{"c":421000,"i":0,"p":0},"ytd":{"c":2119000},"sharePctCurrent":0.005630214040755251,"sharePctYtd":0.005721963775721166},{"pmName":"李福双","projectCount":2,"current":{"c":408360,"i":789000,"p":0},"ytd":{"c":2047020},"sharePctCurrent":0.0054611738852323385,"sharePctYtd":0.005527595228021115},{"pmName":"陈刚","projectCount":9,"current":{"c":472250,"i":450000,"p":450000},"ytd":{"c":1989175},"sharePctCurrent":0.00631560232956453,"sharePctYtd":0.00537139560810295},{"pmName":"刘骁韡","projectCount":7,"current":{"c":320000,"i":368682,"p":80286.2},"ytd":{"c":1911845.5999999999},"sharePctCurrent":0.004279497608175013,"sharePctYtd":0.0051625820047059455},{"pmName":"马晓安","projectCount":169,"current":{"c":217500,"i":50000,"p":0},"ytd":{"c":1721526},"sharePctCurrent":0.002908721030556454,"sharePctYtd":0.0046486594671836514},{"pmName":"高尚","projectCount":2,"current":{"c":158346,"i":158345.62,"p":0},"ytd":{"c":1624862.09},"sharePctCurrent":0.002117629150825252,"sharePctYtd":0.004387636630260777},{"pmName":"陈熹","projectCount":55,"current":{"c":432025,"i":0,"p":1759913.45},"ytd":{"c":1607425},"sharePctCurrent":0.005777656106786906,"sharePctYtd":0.0043405510251008006},{"pmName":"朱昌伟","projectCount":120,"current":{"c":277917.9,"i":107360,"p":253724.7},"ytd":{"c":1492349.0299999998},"sharePctCurrent":0.0037167155884969454,"sharePctYtd":0.00402980985860907},{"pmName":"汪德健","projectCount":9,"current":{"c":64000,"i":0,"p":0},"ytd":{"c":1416250},"sharePctCurrent":0.0008558995216350026,"sharePctYtd":0.003824318639624871},{"pmName":"杨树雄","projectCount":1,"current":{"c":5901,"i":0,"p":0},"ytd":{"c":1381516.46},"sharePctCurrent":0.00007891661058075234,"sharePctYtd":0.0037305272013603303},{"pmName":"李兴龙","projectCount":3,"current":{"c":100000,"i":0,"p":0},"ytd":{"c":1381000},"sharePctCurrent":0.0013373430025546914,"sharePctYtd":0.003729132597579486},{"pmName":"赵炜琼","projectCount":1,"current":{"c":196000,"i":0,"p":0},"ytd":{"c":1351350},"sharePctCurrent":0.0026211922850071954,"sharePctYtd":0.003649068309731382},{"pmName":"李宏昌","projectCount":158,"current":{"c":105720.02,"i":349400,"p":0},"ytd":{"c":1329450.7199999997},"sharePctCurrent":0.0014138392897694203,"sharePctYtd":0.003589933393792554},{"pmName":"邱伟安","projectCount":162,"current":{"c":302811.79000000004,"i":353624.18,"p":71308},"ytd":{"c":1324403.29},"sharePctCurrent":0.004049632284475607,"sharePctYtd":0.003576303751687558},{"pmName":"尚亚儒","projectCount":1,"current":{"c":176310,"i":165188,"p":179469},"ytd":{"c":1184618.44},"sharePctCurrent":0.0023578694478041764,"sharePctYtd":0.0031988408691511648},{"pmName":"王文升","projectCount":2,"current":{"c":300000,"i":0,"p":0},"ytd":{"c":1180000},"sharePctCurrent":0.0040120290076640745,"sharePctYtd":0.003186369634427077},{"pmName":"许玉海","projectCount":5,"current":{"c":1102880,"i":257820,"p":257820},"ytd":{"c":1102880.4000000001},"sharePctCurrent":0.014749288506575182,"sharePctYtd":0.0029781225567498213},{"pmName":"李可","projectCount":32,"current":{"c":189058.8,"i":0,"p":374879.6},"ytd":{"c":1097147.28},"sharePctCurrent":0.002528364632513869,"sharePctYtd":0.0029626413368527647},{"pmName":"高山","projectCount":8,"current":{"c":0,"i":2000,"p":2000},"ytd":{"c":1065632.8},"sharePctCurrent":0,"sharePctYtd":0.002877542368957206},{"pmName":"田丰","projectCount":67,"current":{"c":117000,"i":32500,"p":25000},"ytd":{"c":1046400},"sharePctCurrent":0.0015646913129889891,"sharePctYtd":0.002825607784291944},{"pmName":"姚佳晖","projectCount":1,"current":{"c":17013,"i":0,"p":2000000},"ytd":{"c":1028098},"sharePctCurrent":0.00022752216502462967,"sharePctYtd":0.0027761866511993296},{"pmName":"池彧","projectCount":2,"current":{"c":0,"i":0,"p":402681.76},"ytd":{"c":904835.28},"sharePctCurrent":0,"sharePctYtd":0.002443338695212137},{"pmName":"王晓栋","projectCount":4,"current":{"c":0,"i":0,"p":0},"ytd":{"c":696801.95},"sharePctCurrent":0,"sharePctYtd":0.0018815835378725207},{"pmName":"沈晓伟","projectCount":30,"current":{"c":102432,"i":0,"p":0},"ytd":{"c":674907.81},"sharePctCurrent":0.0013698671843768216,"sharePctYtd":0.001822462501543796},{"pmName":"刘亚歌","projectCount":31,"current":{"c":245601.92,"i":276021.92000000004,"p":0},"ytd":{"c":590960.4400000001},"sharePctCurrent":0.0032845400912599717,"sharePctYtd":0.0015957783060709025},{"pmName":"李铭","projectCount":3,"current":{"c":91275.48000000001,"i":228268.71000000002,"p":44904.61},"ytd":{"c":491722.54},"sharePctCurrent":0.001220666244828207,"sharePctYtd":0.00132780488984691},{"pmName":"何红阳","projectCount":6,"current":{"c":35000,"i":0,"p":0},"ytd":{"c":490000},"sharePctCurrent":0.00046807005089414205,"sharePctYtd":0.0013231534922620914},{"pmName":"潘颖","projectCount":13,"current":{"c":0,"i":19500,"p":0},"ytd":{"c":383800},"sharePctCurrent":0,"sharePctYtd":0.0010363802251636544},{"pmName":"张燕","projectCount":2,"current":{"c":0,"i":0,"p":0},"ytd":{"c":379413},"sharePctCurrent":0,"sharePctYtd":0.0010245339509380345},{"pmName":"龙悦","projectCount":3,"current":{"c":0,"i":0,"p":886000},"ytd":{"c":303000},"sharePctCurrent":0,"sharePctYtd":0.000818194914602885},{"pmName":"洪爱邦","projectCount":5,"current":{"c":0,"i":0,"p":0},"ytd":{"c":291000},"sharePctCurrent":0,"sharePctYtd":0.0007857911556087114},{"pmName":"马翔","projectCount":12,"current":{"c":0,"i":214000,"p":214000},"ytd":{"c":278500},"sharePctCurrent":0,"sharePctYtd":0.0007520372399897805},{"pmName":"顾川望","projectCount":1,"current":{"c":272120,"i":0,"p":0},"ytd":{"c":272120},"sharePctCurrent":0.0036391777785518267,"sharePctYtd":0.0007348092414578782},{"pmName":"刘德华","projectCount":1,"current":{"c":0,"i":0,"p":0},"ytd":{"c":210000},"sharePctCurrent":0,"sharePctYtd":0.0005670657823980391},{"pmName":"刘健","projectCount":135,"current":{"c":22840,"i":242340,"p":0},"ytd":{"c":189839.70999999985},"sharePctCurrent":0.00030544914178349153,"sharePctYtd":0.0005126266841969846},{"pmName":"陈玉美","projectCount":4,"current":{"c":86700,"i":86700,"p":45000},"ytd":{"c":131700},"sharePctCurrent":0.0011594763832149175,"sharePctYtd":0.000355631254961056},{"pmName":"潘漩","projectCount":1,"current":{"c":0,"i":0,"p":0},"ytd":{"c":102300},"sharePctCurrent":0,"sharePctYtd":0.0002762420454253305},{"pmName":"周翔","projectCount":5,"current":{"c":100000,"i":80000,"p":0},"ytd":{"c":100000},"sharePctCurrent":0.0013373430025546914,"sharePctYtd":0.0002700313249514472},{"pmName":"于洪涛","projectCount":2,"current":{"c":0,"i":0,"p":0},"ytd":{"c":85760},"sharePctCurrent":0,"sharePctYtd":0.00023157886427836114},{"pmName":"钟富优","projectCount":6,"current":{"c":0,"i":0,"p":643632},"ytd":{"c":39784},"sharePctCurrent":0,"sharePctYtd":0.00010742926231868376},{"pmName":"孙博","projectCount":1,"current":{"c":0,"i":36252,"p":0},"ytd":{"c":36252},"sharePctCurrent":0,"sharePctYtd":0.00009789175592139864},{"pmName":"王平","projectCount":5,"current":{"c":0,"i":0,"p":0},"ytd":{"c":29000},"sharePctCurrent":0,"sharePctYtd":0.0000783090842359197},{"pmName":"祝广涛","projectCount":5,"current":{"c":0,"i":0,"p":0},"ytd":{"c":13500},"sharePctCurrent":0,"sharePctYtd":0.000036454228868445375},{"pmName":"窦如江","projectCount":3,"current":{"c":0,"i":0,"p":0},"ytd":{"c":0},"sharePctCurrent":0,"sharePctYtd":0},{"pmName":"梁泽磊","projectCount":1,"current":{"c":0,"i":0,"p":0},"ytd":{"c":0},"sharePctCurrent":0,"sharePctYtd":0},{"pmName":"田洪鹏","projectCount":1,"current":{"c":0,"i":0,"p":0},"ytd":{"c":0},"sharePctCurrent":0,"sharePctYtd":0},{"pmName":"白海涛","projectCount":1,"current":{"c":0,"i":0,"p":0},"ytd":{"c":0},"sharePctCurrent":0,"sharePctYtd":0},{"pmName":"刘东","projectCount":6,"current":{"c":0,"i":0,"p":0},"ytd":{"c":0},"sharePctCurrent":0,"sharePctYtd":0},{"pmName":"孟佳","projectCount":2,"current":{"c":0,"i":0,"p":0},"ytd":{"c":0},"sharePctCurrent":0,"sharePctYtd":0},{"pmName":"王建平","projectCount":2,"current":{"c":0,"i":0,"p":0},"ytd":{"c":0},"sharePctCurrent":0,"sharePctYtd":0},{"pmName":"吕若鸣","projectCount":1,"current":{"c":0,"i":0,"p":0},"ytd":{"c":0},"sharePctCurrent":0,"sharePctYtd":0},{"pmName":"潘日成","projectCount":2,"current":{"c":0,"i":0,"p":0},"ytd":{"c":0},"sharePctCurrent":0,"sharePctYtd":0},{"pmName":"宋希予","projectCount":1,"current":{"c":0,"i":0,"p":0},"ytd":{"c":0},"sharePctCurrent":0,"sharePctYtd":0},{"pmName":"吕迪","projectCount":6,"current":{"c":12000,"i":15000,"p":15000},"ytd":{"c":-15000},"sharePctCurrent":0.00016048116030656297,"sharePctYtd":-0.000040504698742717086},{"pmName":"丁鹏艳","projectCount":4,"current":{"c":0,"i":0,"p":0},"ytd":{"c":-614261.83},"sharePctCurrent":0,"sharePctYtd":-0.0016586993582200062}]},{"code":"SAS170","name":"PMC板块","projectCount":16,"monthLabel":"9月","kpis":[{"key":"completion","label":"完成合同额","sourceType":"manual","values":{"current":7883741.539999999,"ytd":49401940.28999999,"future":12714796,"deltaCurrent":1565996.6399999997}},{"key":"invoice","label":"完成开票额","sourceType":"system_ref","values":{"current":8314501.279999999,"ytd":40007951.900000006,"future":23259027.44,"deltaCurrent":null}},{"key":"payment","label":"完成回款额","sourceType":"system_ref","values":{"current":8456385.13,"ytd":42385053.81,"future":18285377,"deltaCurrent":null}}],"stockKpis":[{"key":"contractStock","label":"存量合同额","value":228186141.32,"delta":-7883741.540000021,"invertDelta":true},{"key":"invoiceStock","label":"存量开票额","value":250936747.21,"delta":-8314501.279999971,"invertDelta":true}],"tiles":[{"name":"G24007","value":3104818.54,"kind":"project","monthCompletion":3104818.54,"projectNo":"G24007","projectName":"哈密能源集成创新基地项目（一阶段煤制油项目）","pmName":"任晓峰","count":0},{"name":"G24001","value":1350540,"kind":"project","monthCompletion":1350540,"projectNo":"G24001","projectName":"甘肃巨化高性能硅氟新材料一体化项目","pmName":"任鹏飞","count":0},{"name":"G25009-0001","value":1225440,"kind":"project","monthCompletion":1225440,"projectNo":"G25009-0001","projectName":"神华化工公司重点工程项目项目管理服务","pmName":"周建中","count":0},{"name":"G26050","value":1102880,"kind":"project","monthCompletion":1102880,"projectNo":"G26050","projectName":"新疆新业准东20亿立方米/年煤制天然气项目","pmName":"许玉海","count":0},{"name":"G24002","value":917720,"kind":"project","monthCompletion":917720,"projectNo":"G24002","projectName":"榆能能化新材料环氧树脂一体化项目","pmName":"杨进才","count":0},{"name":"G25009-0002","value":778160,"kind":"project","monthCompletion":-778160,"projectNo":"G25009-0002","projectName":"国能宝清生物科技有限公司褐煤蜡、腐植酸、有机肥等项目","pmName":"周建中","count":0},{"name":"其他项目","value":960503,"kind":"other","monthCompletion":960503,"projectNo":"","projectName":"","pmName":"","count":6}],"alerts":[],"trend":{"months":["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"],"completion":[4328015,3018170.44,5293383.4,4959787.07,5347340,5504511.9399999995,6749246,6317744.899999999,7883741.539999999,0,6537358,6177438],"invoice":[6264599.57,851048.44,5664921.9,1060276,5744942.9399999995,2396916.23,6449847.64,3260897.9,8314501.279999999,6681981.4399999995,7769829,8807217],"payment":[8995630.46,1787005.07,3817749.94,876340,3613188,4531071.34,7834602.03,2473081.84,8456385.13,86700,8019264,10179413],"reportingMonthIdx":8},"pmSummary":[{"pmName":"任晓峰","projectCount":1,"current":{"c":3104818.54,"i":2960390.05,"p":2075092.9},"ytd":{"c":21171152.05},"sharePctCurrent":0.39382551092612306,"sharePctYtd":0.42854899879884867},{"pmName":"任鹏飞","projectCount":1,"current":{"c":1350540,"i":2894656.5,"p":2894656.5},"ytd":{"c":14338215},"sharePctCurrent":0.17130698579446327,"sharePctYtd":0.29023586757588066},{"pmName":"杨进才","projectCount":1,"current":{"c":917720,"i":555706.73,"p":1004346.73},"ytd":{"c":4564776.8},"sharePctCurrent":0.11640665733950481,"sharePctYtd":0.09240075942774273},{"pmName":"周建中","projectCount":3,"current":{"c":447280,"i":605040,"p":0},"ytd":{"c":3561360},"sharePctCurrent":0.05673448295211362,"sharePctYtd":0.07208947622490235},{"pmName":"李福双","projectCount":2,"current":{"c":408360,"i":789000,"p":0},"ytd":{"c":2047020},"sharePctCurrent":0.05179774069559363,"sharePctYtd":0.04143602433393412},{"pmName":"尚亚儒","projectCount":1,"current":{"c":176310,"i":165188,"p":179469},"ytd":{"c":1184618.44},"sharePctCurrent":0.022363746846018495,"sharePctYtd":0.023979188530775016},{"pmName":"许玉海","projectCount":1,"current":{"c":1102880,"i":257820,"p":257820},"ytd":{"c":1102880},"sharePctCurrent":0.13989296762257886,"sharePctYtd":0.022324629225610525},{"pmName":"姚佳晖","projectCount":1,"current":{"c":17013,"i":0,"p":2000000},"ytd":{"c":1028098},"sharePctCurrent":0.0021579855089972925,"sharePctYtd":0.020810883013194302},{"pmName":"顾川望","projectCount":1,"current":{"c":272120,"i":0,"p":0},"ytd":{"c":272120},"sharePctCurrent":0.034516605931249236,"sharePctYtd":0.005508285674663732},{"pmName":"陈玉美","projectCount":4,"current":{"c":86700,"i":86700,"p":45000},"ytd":{"c":131700},"sharePctCurrent":0.010997316383357743,"sharePctYtd":0.002665887194448087}]},{"code":"SAS610","name":"咨询板块","projectCount":12,"monthLabel":"9月","kpis":[{"key":"completion","label":"完成合同额","sourceType":"manual","values":{"current":100000,"ytd":1672000,"future":0,"deltaCurrent":-80000}},{"key":"invoice","label":"完成开票额","sourceType":"system_ref","values":{"current":0,"ytd":1750446.8,"future":545500,"deltaCurrent":null}},{"key":"payment","label":"完成回款额","sourceType":"system_ref","values":{"current":0,"ytd":2282646.8,"future":722900,"deltaCurrent":null}}],"stockKpis":[{"key":"contractStock","label":"存量合同额","value":1293800,"delta":-100000,"invertDelta":true},{"key":"invoiceStock","label":"存量开票额","value":3742373.4,"delta":0,"invertDelta":true}],"tiles":[{"name":"E24052","value":100000,"kind":"project","monthCompletion":100000,"projectNo":"E24052","projectName":"榆林市“十五五”材料基地建设规划项目","pmName":"李兴龙","count":0}],"alerts":[],"trend":{"months":["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"],"completion":[300000,100000,0,66000,41000,590000,295000,180000,100000,0,0,0],"invoice":[0,0,600000,0,383046.8,590000,0,177400,0,0,400000,145500],"payment":[709600,0,0,0,200000,645146.8,727900,0,0,177400,0,545500],"reportingMonthIdx":8},"pmSummary":[{"pmName":"李兴龙","projectCount":3,"current":{"c":100000,"i":0,"p":0},"ytd":{"c":1381000},"sharePctCurrent":1,"sharePctYtd":0.8259569377990431},{"pmName":"洪爱邦","projectCount":5,"current":{"c":0,"i":0,"p":0},"ytd":{"c":291000},"sharePctCurrent":0,"sharePctYtd":0.17404306220095694},{"pmName":"孟佳","projectCount":2,"current":{"c":0,"i":0,"p":0},"ytd":{"c":0},"sharePctCurrent":0,"sharePctYtd":0},{"pmName":"王建平","projectCount":2,"current":{"c":0,"i":0,"p":0},"ytd":{"c":0},"sharePctCurrent":0,"sharePctYtd":0}]},{"code":"SAS680","name":"数字技术板块","projectCount":19,"monthLabel":"9月","kpis":[{"key":"completion","label":"完成合同额","sourceType":"manual","values":{"current":0,"ytd":686800,"future":69200,"deltaCurrent":0}},{"key":"invoice","label":"完成开票额","sourceType":"system_ref","values":{"current":19500,"ytd":2324300,"future":434200,"deltaCurrent":null}},{"key":"payment","label":"完成回款额","sourceType":"system_ref","values":{"current":886000,"ytd":1013800,"future":1718200,"deltaCurrent":null}}],"stockKpis":[{"key":"contractStock","label":"存量合同额","value":2008975,"delta":0,"invertDelta":true},{"key":"invoiceStock","label":"存量开票额","value":2256475,"delta":-19500,"invertDelta":true}],"tiles":[],"alerts":[],"trend":{"months":["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"],"completion":[220000,100000,130000,7800,0,126000,103000,0,0,0,69200,0],"invoice":[37800,0,0,0,70000,795000,1402000,0,19500,0,434200,0],"payment":[0,20000,0,0,37800,0,0,70000,886000,384000,900000,434200],"reportingMonthIdx":8},"pmSummary":[{"pmName":"潘颖","projectCount":13,"current":{"c":0,"i":19500,"p":0},"ytd":{"c":383800},"sharePctCurrent":0,"sharePctYtd":0.5588235294117647},{"pmName":"龙悦","projectCount":3,"current":{"c":0,"i":0,"p":886000},"ytd":{"c":303000},"sharePctCurrent":0,"sharePctYtd":0.4411764705882353},{"pmName":"吕若鸣","projectCount":1,"current":{"c":0,"i":0,"p":0},"ytd":{"c":0},"sharePctCurrent":0,"sharePctYtd":0},{"pmName":"潘日成","projectCount":2,"current":{"c":0,"i":0,"p":0},"ytd":{"c":0},"sharePctCurrent":0,"sharePctYtd":0}]},{"code":"SAS650","name":"新材料板块","projectCount":44,"monthLabel":"9月","kpis":[{"key":"completion","label":"完成合同额","sourceType":"manual","values":{"current":26372483.939999998,"ytd":90186898.36,"future":13576500,"deltaCurrent":13924620.939999998}},{"key":"invoice","label":"完成开票额","sourceType":"system_ref","values":{"current":11526774.7,"ytd":99104449.74,"future":18414760.42,"deltaCurrent":null}},{"key":"payment","label":"完成回款额","sourceType":"system_ref","values":{"current":39917705.09,"ytd":93909557.81,"future":58356871.94,"deltaCurrent":null}}],"stockKpis":[{"key":"contractStock","label":"存量合同额","value":97007717.63000003,"delta":-26372483.940000013,"invertDelta":true},{"key":"invoiceStock","label":"存量开票额","value":81173972.56000005,"delta":-11526774.699999973,"invertDelta":true}],"tiles":[{"name":"D24001-0003","value":20000000,"kind":"project","monthCompletion":20000000,"projectNo":"D24001-0003","projectName":"Hyena open book EPC Project","pmName":"钟晓玲","count":0},{"name":"其他项目","value":6372483.9399999995,"kind":"other","monthCompletion":6372483.9399999995,"projectNo":"","projectName":"","pmName":"","count":20}],"alerts":[{"label":"累计开票超总合同额","count":1}],"trend":{"months":["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"],"completion":[5504839,1994059,5072841,5809597,6076379.18,6251086.24,20657750,12447863,26372483.939999998,0,7601500,5975000],"invoice":[7910021.2,1187202,6901447.2,2177850.9299999997,4937478.11,8538003.71,25027249.7,30898422.19,11526774.7,1349010.42,7842750,9223000],"payment":[15003775.25,10044397.08,7481189.04,3297818.2,1197305,4876681.13,8985826.34,3104860.68,39917705.09,40026917.739999995,10228204.2,8101750],"reportingMonthIdx":8},"pmSummary":[{"pmName":"钟晓玲","projectCount":1,"current":{"c":20000000,"i":6083354.27,"p":26763352.48},"ytd":{"c":40000000},"sharePctCurrent":0.758366183689863,"sharePctYtd":0.4435234022610643},{"pmName":"王喆","projectCount":2,"current":{"c":1580000,"i":0,"p":4700000},"ytd":{"c":14090000},"sharePctCurrent":0.05991092851149918,"sharePctYtd":0.1562311184464599},{"pmName":"吕全海","projectCount":5,"current":{"c":1745233.94,"i":2997769.4699999997,"p":1882404.47},"ytd":{"c":10785233.94},"sharePctCurrent":0.06617632013619117,"sharePctYtd":0.11958759128125758},{"pmName":"孙磊","projectCount":2,"current":{"c":1400000,"i":0,"p":2904665.9},"ytd":{"c":9300116.24},"sharePctCurrent":0.05308563285829041,"sharePctYtd":0.10312047990470442},{"pmName":"钱东峰","projectCount":7,"current":{"c":280000,"i":422422,"p":557743.6},"ytd":{"c":4284072},"sharePctCurrent":0.010617126571658081,"sharePctYtd":0.047502154724284054},{"pmName":"陈贺明","projectCount":9,"current":{"c":0,"i":725000,"p":870000},"ytd":{"c":4080000},"sharePctCurrent":0,"sharePctYtd":0.04523938703062856},{"pmName":"翁应彬","projectCount":2,"current":{"c":680000,"i":811976.96,"p":1789538.6400000001},"ytd":{"c":3040000},"sharePctCurrent":0.02578445024545534,"sharePctYtd":0.03370777857184089},{"pmName":"黄俊","projectCount":5,"current":{"c":215000,"i":0,"p":0},"ytd":{"c":2372049.18},"sharePctCurrent":0.008152436474666028,"sharePctYtd":0.026301483066104196},{"pmName":"陈刚","projectCount":9,"current":{"c":472250,"i":450000,"p":450000},"ytd":{"c":1989175},"sharePctCurrent":0.01790692151237689,"sharePctYtd":0.022056141592316315},{"pmName":"刘德华","projectCount":1,"current":{"c":0,"i":0,"p":0},"ytd":{"c":210000},"sharePctCurrent":0,"sharePctYtd":0.0023284978618705876},{"pmName":"孙博","projectCount":1,"current":{"c":0,"i":36252,"p":0},"ytd":{"c":36252},"sharePctCurrent":0,"sharePctYtd":0.0004019652594692026}]},{"code":"SAS710","name":"生命科学板块","projectCount":43,"monthLabel":"9月","kpis":[{"key":"completion","label":"完成合同额","sourceType":"manual","values":{"current":929125,"ytd":12430136.23,"future":486750,"deltaCurrent":-404875}},{"key":"invoice","label":"完成开票额","sourceType":"system_ref","values":{"current":242350,"ytd":9584765,"future":2440300,"deltaCurrent":null}},{"key":"payment","label":"完成回款额","sourceType":"system_ref","values":{"current":1331700,"ytd":12413100,"future":6338540,"deltaCurrent":null}}],"stockKpis":[{"key":"contractStock","label":"存量合同额","value":8197728.04,"delta":-929124.9999999991,"invertDelta":true},{"key":"invoiceStock","label":"存量开票额","value":14353228.04,"delta":-242350,"invertDelta":true}],"tiles":[{"name":"B25355","value":196000,"kind":"project","monthCompletion":196000,"projectNo":"B25355","projectName":"BGCC E3D三维全景可视化项目","pmName":"赵炜琼","count":0},{"name":"I21004","value":193775,"kind":"project","monthCompletion":193775,"projectNo":"I21004","projectName":"君实生物临港二期基础设计详细设计","pmName":"王晓宇","count":0},{"name":"B26254","value":192000,"kind":"project","monthCompletion":192000,"projectNo":"B26254","projectName":"常州恒邦新建ADC车间及QC实验室设计项目","pmName":"王晓宇","count":0},{"name":"B26255","value":191200,"kind":"project","monthCompletion":191200,"projectNo":"B26255","projectName":"动物房项目FEED工程设计","pmName":"王晓宇","count":0},{"name":"C26060","value":70400,"kind":"project","monthCompletion":70400,"projectNo":"C26060","projectName":"石药集团与阿斯利康合作项目","pmName":"王晓宇","count":0},{"name":"I23003","value":64000,"kind":"project","monthCompletion":64000,"projectNo":"I23003","projectName":"远大赛威信疫苗产业化基地项目","pmName":"汪德健","count":0},{"name":"其他项目","value":21750,"kind":"other","monthCompletion":21750,"projectNo":"","projectName":"","pmName":"","count":1}],"alerts":[],"trend":{"months":["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"],"completion":[912670,430400,1648900.91,604150,1537048.65,3774491.67,1259350,1334000,929125,0,250500,236250],"invoice":[550000,146800,835040,922850,1310000,2349175,1792150,1436400,242350,0,1903500,536800],"payment":[298800,2001100.77,415200,778000,1078400,1753500,2567450,2188949.23,1331700,95600,1815100,4427840],"reportingMonthIdx":8},"pmSummary":[{"pmName":"王晓宇","projectCount":14,"current":{"c":669125,"i":242350,"p":1294900},"ytd":{"c":5871145},"sharePctCurrent":0.7201668236243778,"sharePctYtd":0.4723315087915171},{"pmName":"秦益","projectCount":17,"current":{"c":0,"i":0,"p":36800},"ytd":{"c":3689091.23},"sharePctCurrent":0,"sharePctYtd":0.29678606587564327},{"pmName":"汪德健","projectCount":9,"current":{"c":64000,"i":0,"p":0},"ytd":{"c":1416250},"sharePctCurrent":0.06888201264630701,"sharePctYtd":0.11393680437563475},{"pmName":"赵炜琼","projectCount":1,"current":{"c":196000,"i":0,"p":0},"ytd":{"c":1351350},"sharePctCurrent":0.21095116372931522,"sharePctYtd":0.1087156226605571},{"pmName":"潘漩","projectCount":1,"current":{"c":0,"i":0,"p":0},"ytd":{"c":102300},"sharePctCurrent":0,"sharePctYtd":0.008229998296647792},{"pmName":"宋希予","projectCount":1,"current":{"c":0,"i":0,"p":0},"ytd":{"c":0},"sharePctCurrent":0,"sharePctYtd":0}]},{"code":"SAS690","name":"COII板块","projectCount":24,"monthLabel":"9月","kpis":[{"key":"completion","label":"完成合同额","sourceType":"manual","values":{"current":3967870,"ytd":34567345.38,"future":0,"deltaCurrent":315872.71999999974}},{"key":"invoice","label":"完成开票额","sourceType":"system_ref","values":{"current":2950580.93,"ytd":30562832.37,"future":690000,"deltaCurrent":null}},{"key":"payment","label":"完成回款额","sourceType":"system_ref","values":{"current":3830113.24,"ytd":32716808.749999996,"future":2372629.6,"deltaCurrent":null}}],"stockKpis":[{"key":"contractStock","label":"存量合同额","value":25474145.9,"delta":-3967870,"invertDelta":true},{"key":"invoiceStock","label":"存量开票额","value":30783384.72,"delta":-2950580.930000007,"invertDelta":true}],"tiles":[{"name":"C24021","value":2160000,"kind":"project","monthCompletion":2160000,"projectNo":"C24021","projectName":"Chevron Zinc Additives (ZDTP)","pmName":"李晓冬","count":0},{"name":"C25027","value":1387870,"kind":"project","monthCompletion":1387870,"projectNo":"C25027","projectName":"珍珠项目","pmName":"周子渊","count":0},{"name":"其他项目","value":420000,"kind":"other","monthCompletion":420000,"projectNo":"","projectName":"","pmName":"","count":3}],"alerts":[],"trend":{"months":["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"],"completion":[3082296.4699999997,2272366,3485404.99,3519810,3432358.68,3986016.22,7169225.74,3651997.2800000003,3967870,0,0,0],"invoice":[125840,1736760,3480863.6999999997,6026998.65,2609120.5700000003,4236393.6899999995,5799626.460000001,3596648.37,2950580.93,690000,0,0],"payment":[2351171.5,4646796.4,2760076,5780852.58,213000,4859235.74,5916558.57,2359004.7199999997,3830113.24,2372629.6,0,0],"reportingMonthIdx":8},"pmSummary":[{"pmName":"李晓冬","projectCount":1,"current":{"c":2160000,"i":2501898.93,"p":2669613.06},"ytd":{"c":19920333.34},"sharePctCurrent":0.5443726734998878,"sharePctYtd":0.5762760524713454},{"pmName":"周子渊","projectCount":1,"current":{"c":1387870,"i":0,"p":0},"ytd":{"c":5207544.8100000005},"sharePctCurrent":0.3497770844306895,"sharePctYtd":0.1506492544554198},{"pmName":"陈琳","projectCount":1,"current":{"c":0,"i":0,"p":677532.22},"ytd":{"c":3493000},"sharePctCurrent":0,"sharePctYtd":0.1010491248778676},{"pmName":"周彬","projectCount":3,"current":{"c":0,"i":0,"p":0},"ytd":{"c":2564613.3499999996},"sharePctCurrent":0,"sharePctYtd":0.07419179349201155},{"pmName":"刘骁韡","projectCount":7,"current":{"c":320000,"i":368682,"p":80286.2},"ytd":{"c":1911845.5999999999},"sharePctCurrent":0.08064780348146487,"sharePctYtd":0.05530785135459539},{"pmName":"池彧","projectCount":2,"current":{"c":0,"i":0,"p":402681.76},"ytd":{"c":904835.28},"sharePctCurrent":0,"sharePctYtd":0.026176012940916205},{"pmName":"张燕","projectCount":2,"current":{"c":0,"i":0,"p":0},"ytd":{"c":379413},"sharePctCurrent":0,"sharePctYtd":0.010976052567216255},{"pmName":"周翔","projectCount":5,"current":{"c":100000,"i":80000,"p":0},"ytd":{"c":100000},"sharePctCurrent":0.02520243858795777,"sharePctYtd":0.0028929036609753106},{"pmName":"于洪涛","projectCount":2,"current":{"c":0,"i":0,"p":0},"ytd":{"c":85760},"sharePctCurrent":0,"sharePctYtd":0.0024809541796524262}]},{"code":"SAS720","name":"模块化板块","projectCount":6,"monthLabel":"9月","kpis":[{"key":"completion","label":"完成合同额","sourceType":"manual","values":{"current":2024294,"ytd":15664911.440000001,"future":159052,"deltaCurrent":73803.52000000002}},{"key":"invoice","label":"完成开票额","sourceType":"system_ref","values":{"current":2206774.1500000004,"ytd":16135741.18,"future":2773440.9499999997,"deltaCurrent":null}},{"key":"payment","label":"完成回款额","sourceType":"system_ref","values":{"current":0,"ytd":14307086.27,"future":5403723.26,"deltaCurrent":null}}],"stockKpis":[{"key":"contractStock","label":"存量合同额","value":2944797.1899999976,"delta":-2024294,"invertDelta":true},{"key":"invoiceStock","label":"存量开票额","value":4228692.52,"delta":-2206774.1500000004,"invertDelta":true}],"tiles":[{"name":"G25002","value":1460485,"kind":"project","monthCompletion":1460485,"projectNo":"G25002","projectName":"Astron GHT模块化项目","pmName":"郭宗环","count":0},{"name":"G25006","value":364134,"kind":"project","monthCompletion":364134,"projectNo":"G25006","projectName":"Wood Zone和Brunel间代理Wood南非办公室的服务合同","pmName":"朱勇","count":0},{"name":"其他项目","value":199675,"kind":"other","monthCompletion":199675,"projectNo":"","projectName":"","pmName":"","count":2}],"alerts":[],"trend":{"months":["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"],"completion":[1662141.6,1331839,1815812.35,1994512,1622844.72,1744899,1518078.29,1950490.48,2024294,0,79526,79526],"invoice":[1574276.54,1378796.47,2433811.05,1686389.3900000001,1698676.9900000002,1415158.02,1622607.08,2119251.4899999998,2206774.1500000004,1634388.9500000002,1059526,79526],"payment":[992292.65,2071502.0899999999,1475144.32,161924.29,3968582.41,1906543.52,0,3731096.99,0,2294037.26,2050160,1059526],"reportingMonthIdx":8},"pmSummary":[{"pmName":"郭宗环","projectCount":2,"current":{"c":1460485,"i":1274217.44,"p":0},"ytd":{"c":10825132.790000001},"sharePctCurrent":0.7214786982523289,"sharePctYtd":0.6910433443216453},{"pmName":"朱勇","projectCount":2,"current":{"c":405463,"i":774211.0900000001,"p":0},"ytd":{"c":3214916.56},"sharePctCurrent":0.20029847443108562,"sharePctYtd":0.2052304331444085},{"pmName":"高尚","projectCount":2,"current":{"c":158346,"i":158345.62,"p":0},"ytd":{"c":1624862.09},"sharePctCurrent":0.07822282731658543,"sharePctYtd":0.10372622253394623}]},{"code":"SAS670","name":"供应链板块","projectCount":37,"monthLabel":"9月","kpis":[{"key":"completion","label":"完成合同额","sourceType":"manual","values":{"current":410008,"ytd":5173941.04,"future":0,"deltaCurrent":-176015}},{"key":"invoice","label":"完成开票额","sourceType":"system_ref","values":{"current":584490.96,"ytd":5218113.05,"future":527584.62,"deltaCurrent":null}},{"key":"payment","label":"完成回款额","sourceType":"system_ref","values":{"current":281175.31,"ytd":3983534.43,"future":632237.14,"deltaCurrent":null}}],"stockKpis":[{"key":"contractStock","label":"存量合同额","value":2917959.57,"delta":-410008,"invertDelta":true},{"key":"invoiceStock","label":"存量开票额","value":2859975.4,"delta":-584490.9599999995,"invertDelta":true}],"tiles":[{"name":"E25034","value":210743,"kind":"project","monthCompletion":210743,"projectNo":"E25034","projectName":"Expediting Service for of purchase orders placed in China (SNY, KCM and future request).e for Habshan DBN P5","pmName":"张雯","count":0},{"name":"G26044","value":99900,"kind":"project","monthCompletion":99900,"projectNo":"G26044","projectName":"Expediting service for Thai Oil project","pmName":"张雯","count":0},{"name":"G26054","value":35188,"kind":"project","monthCompletion":35188,"projectNo":"G26054","projectName":"Coalburn 2 BESS FAT support","pmName":"张雯","count":0},{"name":"G26052","value":34805,"kind":"project","monthCompletion":34805,"projectNo":"G26052","projectName":"Project Support Services (e.g. Project Controls,  Supply Chain, Document Control, etc.)","pmName":"张雯","count":0},{"name":"其他项目","value":29372,"kind":"other","monthCompletion":29372,"projectNo":"","projectName":"","pmName":"","count":2}],"alerts":[{"label":"累计开票超总合同额","count":3},{"label":"累计回款超总合同额","count":2}],"trend":{"months":["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"],"completion":[223460,281419.32,184701.22,206574,1329583.85,1632673.8099999998,319497.84,586023,410008,0,0,0],"invoice":[69976.2,473973.61,29876,725693.39,296695.54,1407945.55,248269.08,1381192.72,584490.96,0,227584.62,300000],"payment":[276047.78,390966.26,274983.9,244270.91,755569.39,323962.66000000003,1248444.26,188113.96000000002,281175.31,29377.48,275275.04000000004,327584.62],"reportingMonthIdx":8},"pmSummary":[{"pmName":"张雯","projectCount":37,"current":{"c":410008,"i":584490.96,"p":281175.31},"ytd":{"c":5173941.04},"sharePctCurrent":1,"sharePctYtd":1}]},{"code":"SAS520","name":"金山中心","projectCount":1428,"monthLabel":"9月","kpis":[{"key":"completion","label":"完成合同额","sourceType":"manual","values":{"current":21065103.369999997,"ytd":74402082.98000002,"future":1344110.7100000002,"deltaCurrent":13554662.019999998}},{"key":"invoice","label":"完成开票额","sourceType":"system_ref","values":{"current":38245197.62000001,"ytd":80440586.56000002,"future":22726259.999999996,"deltaCurrent":null}},{"key":"payment","label":"完成回款额","sourceType":"system_ref","values":{"current":5282071.549999999,"ytd":56628927.790000014,"future":41618122.39,"deltaCurrent":null}}],"stockKpis":[{"key":"contractStock","label":"存量合同额","value":110453333.05999985,"delta":-21065103.37000008,"invertDelta":true},{"key":"invoiceStock","label":"存量开票额","value":187886048.93999994,"delta":-38245197.619999856,"invertDelta":true}],"tiles":[{"name":"D20002_C","value":12505565.66,"kind":"project","monthCompletion":12505565.66,"projectNo":"D20002_C","projectName":"海南项目化工区工艺及热力管网等主项工程EPC_施工部分","pmName":"高绪海","count":0},{"name":"其他项目","value":8559537.709999997,"kind":"other","monthCompletion":8559537.709999997,"projectNo":"","projectName":"","pmName":"","count":217}],"alerts":[{"label":"存量合同额为负","count":3},{"label":"累计开票超总合同额","count":1},{"label":"累计回款超总合同额","count":1}],"trend":{"months":["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"],"completion":[7123040.58,3735523.2499999995,6225518.510000002,7727685.900000002,6750023.750000002,5624829.799999999,8639916.469999999,7510441.35,21065103.369999997,0,783753.64,560357.0700000001],"invoice":[4095376.3800000004,4346257.15,3315760.8499999996,4052513.9899999998,5786127.589999999,7979309.629999999,6112108.26,6507935.090000001,38245197.62000001,1507155.5199999998,14232890.01,6986214.469999999],"payment":[14743075.600000001,5350977.150000001,1346053.24,9972227.08,3496821.7699999996,8916406.450000001,3508619.47,4012675.4800000004,5282071.549999999,1504669.62,11186962.549999999,28926490.219999995],"reportingMonthIdx":8},"pmSummary":[{"pmName":"高绪海","projectCount":5,"current":{"c":13490732.77,"i":32610980.02,"p":0},"ytd":{"c":14640732.77},"sharePctCurrent":0.6404304091482841,"sharePctYtd":0.19677853339046394},{"pmName":"时新园","projectCount":78,"current":{"c":1166589.59,"i":0,"p":400349},"ytd":{"c":13588044.9},"sharePctCurrent":0.05538019773790458,"sharePctYtd":0.18262989899963686},{"pmName":"朱雪梅","projectCount":45,"current":{"c":701713.78,"i":934978.96,"p":0},"ytd":{"c":7401362.05},"sharePctCurrent":0.0333116703808513,"sharePctYtd":0.0994778876283552},{"pmName":"孟浩亮","projectCount":442,"current":{"c":680700,"i":280000,"p":190000},"ytd":{"c":6244647.77},"sharePctCurrent":0.03231410679756849,"sharePctYtd":0.08393108794653802},{"pmName":"何孝刚","projectCount":80,"current":{"c":178634,"i":310184.12,"p":798462.34},"ytd":{"c":6236218.74},"sharePctCurrent":0.008480091308471941,"sharePctYtd":0.08381779770435131},{"pmName":"赵宏海","projectCount":30,"current":{"c":1223450.2,"i":689703.31,"p":607932},"ytd":{"c":5515691.67},"sharePctCurrent":0.058079477632299883,"sharePctYtd":0.07413356520519286},{"pmName":"宋建生","projectCount":106,"current":{"c":849712,"i":199320,"p":281882.8},"ytd":{"c":4564806.949999999},"sharePctCurrent":0.04033742370379832,"sharePctYtd":0.061353214415073076},{"pmName":"吴敏","projectCount":61,"current":{"c":724491.56,"i":899657.56,"p":783327.5700000001},"ytd":{"c":4384151.069999999},"sharePctCurrent":0.034392974355482595,"sharePctYtd":0.05892511196465429},{"pmName":"赵海杰","projectCount":101,"current":{"c":370046.77999999997,"i":584390.72,"p":676877.8400000001},"ytd":{"c":3243423.4999999995},"sharePctCurrent":0.01756681529163557,"sharePctYtd":0.04359318140154575},{"pmName":"刘翔","projectCount":240,"current":{"c":938788.9,"i":1380358.75,"p":826300},"ytd":{"c":2430688.93},"sharePctCurrent":0.04456607136032297,"sharePctYtd":0.03266963548121889},{"pmName":"邱伟安","projectCount":162,"current":{"c":302811.79000000004,"i":353624.18,"p":71308},"ytd":{"c":1324403.29},"sharePctCurrent":0.014375044104044195,"sharePctYtd":0.017800621124492072},{"pmName":"王文升","projectCount":2,"current":{"c":300000,"i":0,"p":0},"ytd":{"c":1180000},"sharePctCurrent":0.014241563154503523,"sharePctYtd":0.015859771027071853},{"pmName":"高山","projectCount":8,"current":{"c":0,"i":2000,"p":2000},"ytd":{"c":1065632.8},"sharePctCurrent":0,"sharePctYtd":0.014322620514353776},{"pmName":"王晓栋","projectCount":4,"current":{"c":0,"i":0,"p":0},"ytd":{"c":696801.95},"sharePctCurrent":0,"sharePctYtd":0.009365355405268788},{"pmName":"沈晓伟","projectCount":30,"current":{"c":102432,"i":0,"p":0},"ytd":{"c":674907.81},"sharePctCurrent":0.004862639323473683,"sharePctYtd":0.009071087568629252},{"pmName":"刘健","projectCount":3,"current":{"c":0,"i":0,"p":0},"ytd":{"c":638284.38},"sharePctCurrent":0,"sharePctYtd":0.008578850946573324},{"pmName":"何红阳","projectCount":6,"current":{"c":35000,"i":0,"p":0},"ytd":{"c":490000},"sharePctCurrent":0.0016615157013587442,"sharePctYtd":0.006585837121411193},{"pmName":"钟富优","projectCount":6,"current":{"c":0,"i":0,"p":643632},"ytd":{"c":39784},"sharePctCurrent":0,"sharePctYtd":0.0005347162123229039},{"pmName":"王平","projectCount":5,"current":{"c":0,"i":0,"p":0},"ytd":{"c":29000},"sharePctCurrent":0,"sharePctYtd":0.0003897740337161727},{"pmName":"祝广涛","projectCount":5,"current":{"c":0,"i":0,"p":0},"ytd":{"c":13500},"sharePctCurrent":0,"sharePctYtd":0.000181446532936839},{"pmName":"许玉海","projectCount":4,"current":{"c":0,"i":0,"p":0},"ytd":{"c":0.4},"sharePctCurrent":0,"sharePctYtd":5.376193568498934e-9},{"pmName":"窦如江","projectCount":3,"current":{"c":0,"i":0,"p":0},"ytd":{"c":0},"sharePctCurrent":0,"sharePctYtd":0},{"pmName":"梁泽磊","projectCount":1,"current":{"c":0,"i":0,"p":0},"ytd":{"c":0},"sharePctCurrent":0,"sharePctYtd":0},{"pmName":"田洪鹏","projectCount":1,"current":{"c":0,"i":0,"p":0},"ytd":{"c":0},"sharePctCurrent":0,"sharePctYtd":0}]},{"code":"SAS560","name":"沈阳中心","projectCount":254,"monthLabel":"9月","kpis":[{"key":"completion","label":"完成合同额","sourceType":"manual","values":{"current":2422058.8,"ytd":12009647.280000001,"future":2068050,"deltaCurrent":-49441.200000000186}},{"key":"invoice","label":"完成开票额","sourceType":"system_ref","values":{"current":229000,"ytd":8730670.280000001,"future":3342541.87,"deltaCurrent":null}},{"key":"payment","label":"完成回款额","sourceType":"system_ref","values":{"current":603879.6,"ytd":11427783.61,"future":3316640.56,"deltaCurrent":null}}],"stockKpis":[{"key":"contractStock","label":"存量合同额","value":18153628.13,"delta":-2422058.8000000007,"invertDelta":true},{"key":"invoiceStock","label":"存量开票额","value":24100370.13,"delta":-229000,"invertDelta":true}],"tiles":[{"name":"G25007","value":1800000,"kind":"project","monthCompletion":1800000,"projectNo":"G25007","projectName":"梨树风光制绿氢生物质耦合绿色甲醇项目业主工程师服务","pmName":"张文俊","count":0},{"name":"其他项目","value":622058.8,"kind":"other","monthCompletion":622058.8,"projectNo":"","projectName":"","pmName":"","count":39}],"alerts":[],"trend":{"months":["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"],"completion":[1723000,692000,1017115.6799999999,509066,1070600,813100,1291206.8,2471500,2422058.8,0,1037000,1031050],"invoice":[0,1373264,759474.6799999999,17066,-121654,1967954,2388979.6,2116586,229000,0,1007747.2,2334794.67],"payment":[989700,828874.56,1481700,194068.21,233251.68,222566,3889929.3,2983814.26,603879.6,45686,2292454.56,978500],"reportingMonthIdx":8},"pmSummary":[{"pmName":"张文俊","projectCount":1,"current":{"c":1800000,"i":0,"p":0},"ytd":{"c":8530000},"sharePctCurrent":0.7431694061267217,"sharePctYtd":0.7102623250397408},{"pmName":"徐辑敏","projectCount":203,"current":{"c":421000,"i":0,"p":0},"ytd":{"c":2119000},"sharePctCurrent":0.17381906665519434,"sharePctYtd":0.17644148496590983},{"pmName":"李可","projectCount":32,"current":{"c":189058.8,"i":0,"p":374879.6},"ytd":{"c":1097147.28},"sharePctCurrent":0.07805706451057258,"sharePctYtd":0.09135549566281682},{"pmName":"马翔","projectCount":12,"current":{"c":0,"i":214000,"p":214000},"ytd":{"c":278500},"sharePctCurrent":0,"sharePctYtd":0.023189690213782862},{"pmName":"吕迪","projectCount":6,"current":{"c":12000,"i":15000,"p":15000},"ytd":{"c":-15000},"sharePctCurrent":0.004954462707511478,"sharePctYtd":-0.0012489958822504235}]},{"code":"SAS550","name":"惠湛中心","projectCount":558,"monthLabel":"9月","kpis":[{"key":"completion","label":"完成合同额","sourceType":"manual","values":{"current":2209604.46,"ytd":9214085.270000003,"future":2278089.69,"deltaCurrent":1351712.45}},{"key":"invoice","label":"完成开票额","sourceType":"system_ref","values":{"current":2411087.03,"ytd":14303927.33000001,"future":6332483.71,"deltaCurrent":null}},{"key":"payment","label":"完成回款额","sourceType":"system_ref","values":{"current":793938.8899999998,"ytd":13158015.950000003,"future":5692897.150000001,"deltaCurrent":null}}],"stockKpis":[{"key":"contractStock","label":"存量合同额","value":10239563.730000002,"delta":-2209604.459999999,"invertDelta":true},{"key":"invoiceStock","label":"存量开票额","value":18686440.80999999,"delta":-2411087.030000016,"invertDelta":true}],"tiles":[{"name":"B26107-0009","value":1000000,"kind":"project","monthCompletion":1000000,"projectNo":"B26107-0009","projectName":"SC Tar Upgrade Project","pmName":"冯慧玲","count":0},{"name":"B26107-0006","value":236021.92,"kind":"project","monthCompletion":236021.92,"projectNo":"B26107-0006","projectName":"FOP_GMOC_EAP(WOOD) in house office engineering service (2026)","pmName":"刘亚歌","count":0},{"name":"C26024","value":150000,"kind":"project","monthCompletion":150000,"projectNo":"C26024","projectName":"GUA SF L2 EPs PACKAGE ","pmName":"罗艳玲","count":0},{"name":"其他项目","value":823582.5399999999,"kind":"other","monthCompletion":823582.5399999999,"projectNo":"","projectName":"","pmName":"","count":52}],"alerts":[{"label":"累计回款超累计开票","count":1}],"trend":{"months":["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"],"completion":[1259212.52,888384.25,1359116.2699999998,1187640.1600000001,1235835.2899999998,527709.1700000002,-311308.85999999987,857892.01,2209604.46,0,1231892.83,1046196.86],"invoice":[1383997.6400000001,680516.3300000001,1932229.2799999996,1358745.7999999998,1167760.29,2196205.54,1696476.9100000001,1476908.51,2411087.03,13244.06,3198886.9,3120352.7499999995],"payment":[506700.07000000007,2205928.95,903591.11,2219571.5300000007,1055274.3900000001,885606.8999999999,2174653.93,2412750.18,793938.8899999998,178652.38,1900768.2999999998,3613476.4699999997],"reportingMonthIdx":8},"pmSummary":[{"pmName":"杨银花","projectCount":54,"current":{"c":172544.36,"i":744123.2200000001,"p":110763.16000000002},"ytd":{"c":2834267.76},"sharePctCurrent":0.07808834708814807,"sharePctYtd":0.3076016421541104},{"pmName":"冯慧玲","projectCount":116,"current":{"c":1095660.8,"i":530779.58,"p":302179.92},"ytd":{"c":2663364.12},"sharePctCurrent":0.49586286588143474,"sharePctYtd":0.2890535568052107},{"pmName":"罗艳玲","projectCount":98,"current":{"c":303764,"i":282193.6,"p":82366.5},"ytd":{"c":2204127.88},"sharePctCurrent":0.13747437855913813,"sharePctYtd":0.23921288065092977},{"pmName":"朱昌伟","projectCount":120,"current":{"c":277917.9,"i":107360,"p":253724.7},"ytd":{"c":1492349.0299999998},"sharePctCurrent":0.12577721715858595,"sharePctYtd":0.1619638831495207},{"pmName":"刘亚歌","projectCount":31,"current":{"c":245601.92,"i":276021.92000000004,"p":0},"ytd":{"c":590960.4400000001},"sharePctCurrent":0.11115198418815647,"sharePctYtd":0.06413663675591316},{"pmName":"李铭","projectCount":3,"current":{"c":91275.48000000001,"i":228268.71000000002,"p":44904.61},"ytd":{"c":491722.54},"sharePctCurrent":0.04130851546163154,"sharePctYtd":0.053366397812812945},{"pmName":"刘健","projectCount":132,"current":{"c":22840,"i":242340,"p":0},"ytd":{"c":-448444.6699999999},"sharePctCurrent":0.010336691662905134,"sharePctYtd":-0.048669472536800165},{"pmName":"丁鹏艳","projectCount":4,"current":{"c":0,"i":0,"p":0},"ytd":{"c":-614261.83},"sharePctCurrent":0,"sharePctYtd":-0.06666552479169753}]},{"code":"SAS530","name":"银川中心","projectCount":2328,"monthLabel":"9月","kpis":[{"key":"completion","label":"完成合同额","sourceType":"manual","values":{"current":7390843.23,"ytd":64917617.330000006,"future":20315523.04,"deltaCurrent":-859894.4799999995}},{"key":"invoice","label":"完成开票额","sourceType":"system_ref","values":{"current":8968338.6,"ytd":58723728.89999998,"future":18761462,"deltaCurrent":null}},{"key":"payment","label":"完成回款额","sourceType":"system_ref","values":{"current":11979127.05,"ytd":46185428.44,"future":42304611.349999994,"deltaCurrent":null}}],"stockKpis":[{"key":"contractStock","label":"存量合同额","value":82123807.00000001,"delta":-7390843.229999989,"invertDelta":true},{"key":"invoiceStock","label":"存量开票额","value":123616674.26999998,"delta":-8968338.599999994,"invertDelta":true}],"tiles":[{"name":"D25011_P","value":2640378,"kind":"project","monthCompletion":2640378,"projectNo":"D25011_P","projectName":"乙二醇装置甲酸甲酯（MF）脱除及压缩机干气密封改造项目_采购部分","pmName":"买涛","count":0},{"name":"D25011_C","value":869774,"kind":"project","monthCompletion":869774,"projectNo":"D25011_C","projectName":"乙二醇装置甲酸甲酯（MF）脱除及压缩机干气密封改造项目_施工部分","pmName":"买涛","count":0},{"name":"C24035","value":400000,"kind":"project","monthCompletion":400000,"projectNo":"C24035","projectName":"年产10万吨绿色甲醇项目","pmName":"陈熹","count":0},{"name":"其他项目","value":3480691.2299999995,"kind":"other","monthCompletion":3480691.2299999995,"projectNo":"","projectName":"","pmName":"","count":312}],"alerts":[{"label":"累计回款超累计开票","count":2},{"label":"累计开票超总合同额","count":1}],"trend":{"months":["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"],"completion":[10334613,3076426.01,8136485.79,7754452.44,6724889.919999999,6689786.5200000005,6559382.709999998,8250737.71,7390843.23,0,8224440.72,12091082.32],"invoice":[494646.04,0,11753822,1305413.25,15694740.549999999,7804108.18,5387012.3100000005,7315647.97,8968338.6,1140000,8050840,9570622],"payment":[4003436.43,2192725.41,2288567,8412052.54,1201626,9868845.49,3586240.37,2652808.15,11979127.05,1597445.51,25331835.5,15375330.34],"reportingMonthIdx":8},"pmSummary":[{"pmName":"何平","projectCount":678,"current":{"c":1114144,"i":657500,"p":3747645.5999999996},"ytd":{"c":28288259.52},"sharePctCurrent":0.1507465339648396,"sharePctYtd":0.43575628132191646},{"pmName":"买涛","projectCount":153,"current":{"c":3918514.25,"i":4609800,"p":5306850},"ytd":{"c":11531929.25},"sharePctCurrent":0.5301850043435435,"sharePctYtd":0.17763944094526737},{"pmName":"夏滨","projectCount":233,"current":{"c":339214,"i":0,"p":795518},"ytd":{"c":7732951.01},"sharePctCurrent":0.04589652214825831,"sharePctYtd":0.11911945213100754},{"pmName":"王钰","projectCount":232,"current":{"c":673301,"i":253000,"p":288200},"ytd":{"c":5201223},"sharePctCurrent":0.09109934807804061,"sharePctYtd":0.08012036198987835},{"pmName":"胡振清","projectCount":575,"current":{"c":467523.95999999996,"i":3016138.6,"p":56000},"ytd":{"c":5076936.369999998},"sharePctCurrent":0.0632571880434812,"sharePctYtd":0.07820583346724008},{"pmName":"马晓安","projectCount":169,"current":{"c":217500,"i":50000,"p":0},"ytd":{"c":1721526},"sharePctCurrent":0.029428306518145424,"sharePctYtd":0.02651862577224382},{"pmName":"陈熹","projectCount":55,"current":{"c":432025,"i":0,"p":1759913.45},"ytd":{"c":1607425},"sharePctCurrent":0.0584540879241461,"sharePctYtd":0.02476099810978691},{"pmName":"杨树雄","projectCount":1,"current":{"c":5901,"i":0,"p":0},"ytd":{"c":1381516.46},"sharePctCurrent":0.0007984203989129938,"sharePctYtd":0.021281071561472232},{"pmName":"李宏昌","projectCount":158,"current":{"c":105720.02,"i":349400,"p":0},"ytd":{"c":1329450.7199999997},"sharePctCurrent":0.014304189212250414,"sharePctYtd":0.0204790436660963},{"pmName":"田丰","projectCount":67,"current":{"c":117000,"i":32500,"p":25000},"ytd":{"c":1046400},"sharePctCurrent":0.015830399368381678,"sharePctYtd":0.016118891035090923},{"pmName":"白海涛","projectCount":1,"current":{"c":0,"i":0,"p":0},"ytd":{"c":0},"sharePctCurrent":0,"sharePctYtd":0},{"pmName":"刘东","projectCount":6,"current":{"c":0,"i":0,"p":0},"ytd":{"c":0},"sharePctCurrent":0,"sharePctYtd":0}]}];
+    const MONTH_IDX = 8;
+    const POS_FILL = '#d7ebe9';
+    const POS_TEXT = '#0c4f4a';
+    const NEG_FILL = '#f8d4d4';
+    const NEG_TEXT = '#9f2d2d';
+    const AMBER = '#d97706';
+    const BRAND = '#007069';
+    const INVOICE = '#4d8fa8';
+    const PAYMENT = '#c08a2e';
+
+    function wan(v) {
+      const n = Number(v);
+      if (!isFinite(n)) return '—';
+      return (n / 10000).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function pct(v) {
+      if (v == null || !isFinite(Number(v))) return '—';
+      return (Number(v) * 100).toFixed(1) + '%';
+    }
+    function signClass(v) {
+      const n = Number(v);
+      return n < 0 ? 'is-neg' : '';
+    }
+    /** invert：存量类指标下降为好（绿），上升为差（红） */
+    function deltaClass(v, invert) {
+      if (v == null || v === '' || isNaN(Number(v))) return 'is-flat';
+      const n = Number(v);
+      if (Math.abs(n) < 0.005) return 'is-flat';
+      let down = n < 0;
+      if (invert) down = !down;
+      return down ? 'is-down' : 'is-up';
+    }
+    function formatDelta(v) {
+      if (v == null || v === '' || isNaN(Number(v))) return '—';
+      const n = Number(v);
+      if (Math.abs(n) < 0.005) return '持平';
+      const abs = wan(Math.abs(n));
+      if (abs === '—') return '—';
+      return (n > 0 ? '+' : '−') + abs + ' 万';
+    }
+    function shareBar(v) {
+      const w = Math.max(0, Math.min(1, Number(v) || 0)) * 100;
+      return '<div class="rl-ov-share">'
+        + '<span class="rl-ov-share-track"><i style="width:' + w + '%"></i></span>'
+        + '<span class="rl-ov-num">' + pct(v) + '</span></div>';
+    }
+    function tipBase() {
+      return {
+        backgroundColor: 'rgba(255,255,255,0.98)',
+        borderColor: '#e5e7eb',
+        borderWidth: 1,
+        padding: [8, 12],
+        extraCssText: 'border-radius:8px;box-shadow:0 4px 16px rgba(15,23,42,0.10);',
+        textStyle: { color: '#374151', fontSize: 12 }
+      };
+    }
+
+    let activeCode = DATA[0].code;
+    let charts = [];
+    /** 默认与线上一致：按本年累计完成合同额降序 */
+    let pmSort = { key: 'ytd.c', dir: 'desc' };
+
+    function disposeCharts() {
+      charts.forEach(function (c) { try { c.dispose(); } catch (e) {} });
+      charts = [];
+    }
+
+    function byCode(code) {
+      return DATA.find(function (s) { return s.code === code; }) || DATA[0];
+    }
+
+    function pmSortValue(row, key) {
+      if (key === 'projectCount') return Number(row.projectCount) || 0;
+      if (key === 'current.i') return Number(row.current && row.current.i) || 0;
+      if (key === 'current.p') return Number(row.current && row.current.p) || 0;
+      if (key === 'current.c') return Number(row.current && row.current.c) || 0;
+      if (key === 'ytd.c') return Number(row.ytd && row.ytd.c) || 0;
+      if (key === 'sharePctCurrent') return Number(row.sharePctCurrent) || 0;
+      if (key === 'sharePctYtd') return Number(row.sharePctYtd) || 0;
+      return 0;
+    }
+
+    function sortedPmRows(rows) {
+      const list = (rows || []).slice();
+      const key = pmSort.key;
+      const dir = pmSort.dir === 'asc' ? 1 : -1;
+      list.sort(function (a, b) {
+        const av = pmSortValue(a, key);
+        const bv = pmSortValue(b, key);
+        if (av === bv) {
+          return String(a.pmName || '').localeCompare(String(b.pmName || ''), 'zh-CN');
+        }
+        return av < bv ? -dir : dir;
+      });
+      return list;
+    }
+
+    function sortClass(key) {
+      if (pmSort.key !== key) return '';
+      return pmSort.dir === 'asc' ? ' is-asc' : ' is-desc';
+    }
+
+    function bindPmSort(wrap) {
+      if (!wrap) return;
+      wrap.querySelectorAll('th.is-sortable').forEach(function (th) {
+        th.addEventListener('click', function () {
+          const key = th.getAttribute('data-sort');
+          if (!key) return;
+          if (pmSort.key === key) {
+            pmSort.dir = pmSort.dir === 'desc' ? 'asc' : 'desc';
+          } else {
+            pmSort.key = key;
+            pmSort.dir = 'desc';
+          }
+          const sector = byCode(activeCode);
+          wrap.outerHTML = renderPmTable(sector.pmSummary);
+          bindPmSort(document.querySelector('.rl-ov-pm-wrap'));
+        });
+      });
+    }
+
+    function renderNav() {
+      const nav = document.getElementById('sectorNav');
+      nav.innerHTML = DATA.map(function (s) {
+        return '<li><button type="button" data-code="' + s.code + '"'
+          + (s.code === activeCode ? ' class="is-active"' : '')
+          + '><span>' + s.name + '</span><b>' + s.projectCount + '</b></button></li>';
+      }).join('');
+      nav.querySelectorAll('button').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          activeCode = btn.getAttribute('data-code');
+          renderNav();
+          renderSector();
+        });
+      });
+    }
+
+    function renderSector() {
+      const sector = byCode(activeCode);
+      document.getElementById('sectorTitle').textContent = sector.name;
+      document.getElementById('sectorMeta').textContent =
+        sector.code + ' · ' + sector.projectCount + ' 个项目 · 当月 ' + sector.monthLabel;
+      disposeCharts();
+
+      const root = document.getElementById('overviewRoot');
+      const emptyTree = !sector.tiles.length;
+      const emptyAlert = !sector.alerts.length;
+
+      const stockHtml = '<article class="rl-ov-kpi is-stock-col">'
+        + (sector.stockKpis || []).map(function (m) {
+          return '<div class="rl-ov-stock-block">'
+            + '<header class="rl-ov-kpi-head"><h3>' + m.label + '</h3></header>'
+            + '<div class="rl-ov-kpi-main"><p class="rl-ov-kpi-value ' + signClass(m.value) + '">'
+            + '<span class="num">' + wan(m.value) + '</span><span class="unit">万</span></p>'
+            + '<p class="rl-ov-delta ' + deltaClass(m.delta, m.invertDelta) + '">较上一期 ' + formatDelta(m.delta) + '</p>'
+            + '</div></div>';
+        }).join('')
+        + '</article>';
+
+      root.innerHTML =
+        '<section class="rl-ov-surface"><div class="rl-ov-kpis">' +
+        sector.kpis.map(function (kpi) {
+          return '<article class="rl-ov-kpi' + (kpi.sourceType === 'manual' ? ' is-primary' : '') + '">'
+            + '<header class="rl-ov-kpi-head"><h3>' + kpi.label + '</h3>'
+            + (kpi.sourceType === 'manual'
+              ? '<span class="rl-ov-src is-manual"><i class="rl-ov-dot"></i>本期填报申报值</span>'
+              : '<span class="rl-ov-src is-sync" title="审批阶段，当月尚未结束，仅代表截至同步时刻的累计发生额，不代表全月最终结果，不作为本次审批口径。"><i class="rl-ov-dot"></i>本月金额 · 实时同步</span>')
+            + '</header>'
+            + '<div class="rl-ov-kpi-main"><p class="rl-ov-kpi-value ' + signClass(kpi.values.current) + '">'
+            + '<span class="num">' + wan(kpi.values.current) + '</span><span class="unit">万</span></p>'
+            + (kpi.key === 'completion'
+              ? '<p class="rl-ov-delta ' + deltaClass(kpi.values.deltaCurrent) + '">较上一期 ' + formatDelta(kpi.values.deltaCurrent) + '</p>'
+              : '')
+            + '</div>'
+            + '<dl class="rl-ov-kpi-meta">'
+            + '<div><dt>本年累计</dt><dd class="' + signClass(kpi.values.ytd) + '">' + wan(kpi.values.ytd) + '<i>万</i></dd></div>'
+            + '<div><dt>未来预测</dt><dd class="' + signClass(kpi.values.future) + '">' + wan(kpi.values.future) + '<i>万</i></dd></div>'
+            + '</dl></article>';
+        }).join('') +
+        stockHtml +
+        '</div></section>' +
+        '<div class="rl-ov-split">' +
+          '<section class="rl-ov-sec rl-ov-sec-fixed">' +
+            '<header class="rl-ov-sec-head"><h2>本月完成合同额情况</h2>'
+            + '<div class="rl-ov-sec-meta"><span class="rl-ov-sec-note">单位：万元</span>'
+            + '<button type="button" class="rl-ov-more">更多</button></div></header>'
+            + (emptyTree ? '' : '<div class="rl-ov-legend"><span><i class="is-pos"></i>正值</span><span><i class="is-neg"></i>负值</span></div>')
+            + '<div class="rl-ov-sec-body">'
+            + (emptyTree
+              ? '<div class="rl-ov-chart-empty">本月完成合同额均为 0</div>'
+              : '<div id="treeChart" class="rl-ov-mini-chart"></div>')
+            + '</div></section>' +
+          '<section class="rl-ov-sec rl-ov-sec-fixed">' +
+            '<header class="rl-ov-sec-head"><h2>项目预警一览</h2>'
+            + '<div class="rl-ov-sec-meta"><button type="button" class="rl-ov-more">更多</button></div></header>'
+            + '<div class="rl-ov-sec-body">'
+            + (emptyAlert
+              ? '<div class="rl-ov-chart-empty">未发现异常</div>'
+              : '<div id="alertChart" class="rl-ov-mini-chart"></div>')
+            + '</div></section>' +
+        '</div>' +
+        '<section class="rl-ov-sec">' +
+          '<header class="rl-ov-sec-head"><h2>月度走势</h2>'
+          + '<span class="rl-ov-sec-note">柱=各月，线=累计；右侧为预测月。单位：万元</span></header>'
+          + '<div id="trendChart" class="rl-ov-chart"></div></section>' +
+        '<section class="rl-ov-sec">' +
+          '<header class="rl-ov-sec-head"><h2>按项目经理汇总</h2>'
+          + '<span class="rl-ov-sec-note">点击表头排序 · 单位：万元</span></header>'
+          + renderPmTable(sector.pmSummary) +
+        '</section>';
+
+      bindPmSort(root.querySelector('.rl-ov-pm-wrap'));
+
+      requestAnimationFrame(function () {
+        if (!emptyTree) charts.push(renderTree(sector));
+        if (!emptyAlert) charts.push(renderAlerts(sector));
+        charts.push(renderTrend(sector));
+      });
+    }
+
+    function renderPmTable(rows) {
+      if (!rows || !rows.length) {
+        return '<div class="rl-ov-chart-empty">暂无项目</div>';
+      }
+      function th(label, key, align, rowspan) {
+        return '<th class="' + align + ' is-sortable' + sortClass(key) + '" data-sort="' + key + '"'
+          + (rowspan ? ' rowspan="' + rowspan + '"' : '') + '>'
+          + label + '<span class="sort-ind" aria-hidden="true"></span></th>';
+      }
+      const sorted = sortedPmRows(rows);
+      return '<div class="rl-ov-pm-wrap"><table class="rl-ov-pm-table">'
+        + '<thead><tr>'
+        + '<th rowspan="2">项目经理</th>'
+        + th('项目数', 'projectCount', 'is-right', 2)
+        + th('当月开票额', 'current.i', 'is-right', 2)
+        + th('当月回款额', 'current.p', 'is-right', 2)
+        + th('当月完成合同额', 'current.c', 'is-right', 2)
+        + th('本年累计完成合同额', 'ytd.c', 'is-right', 2)
+        + '<th class="is-center" colspan="2">完成合同额占比</th>'
+        + '</tr><tr>'
+        + th('当月', 'sharePctCurrent', 'is-center', 0)
+        + th('本年累计', 'sharePctYtd', 'is-center', 0)
+        + '</tr></thead><tbody>'
+        + sorted.map(function (row) {
+          return '<tr>'
+            + '<td>' + (row.pmName || '—') + '</td>'
+            + '<td class="is-right">' + row.projectCount + '</td>'
+            + '<td class="is-right"><span class="rl-ov-num ' + signClass(row.current.i) + '">' + wan(row.current.i) + '</span></td>'
+            + '<td class="is-right"><span class="rl-ov-num ' + signClass(row.current.p) + '">' + wan(row.current.p) + '</span></td>'
+            + '<td class="is-right"><span class="rl-ov-num ' + signClass(row.current.c) + '">' + wan(row.current.c) + '</span></td>'
+            + '<td class="is-right"><span class="rl-ov-num ' + signClass(row.ytd.c) + '">' + wan(row.ytd.c) + '</span></td>'
+            + '<td class="is-center">' + shareBar(row.sharePctCurrent) + '</td>'
+            + '<td class="is-center">' + shareBar(row.sharePctYtd) + '</td>'
+            + '</tr>';
+        }).join('')
+        + '</tbody></table></div>';
+    }
+
+    function renderTree(sector) {
+      const el = document.getElementById('treeChart');
+      const chart = echarts.init(el);
+      chart.setOption({
+        textStyle: { fontFamily: '"Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif' },
+        tooltip: Object.assign(tipBase(), {
+          trigger: 'item',
+          formatter: function (item) {
+            const row = item.data || {};
+            const amt = wan(row.monthCompletion);
+            if (row.kind === 'project') {
+              return '<div style="font-weight:600;margin-bottom:4px;">' + (row.projectName || '—') + '</div>'
+                + '<div>项目号：' + (row.projectNo || row.name) + '</div>'
+                + '<div>项目经理：' + (row.pmName || '—') + '</div>'
+                + '<div>本月完成合同额：' + amt + ' 万</div>';
+            }
+            return '<div style="font-weight:600;margin-bottom:4px;">' + (row.name || '') + '</div>'
+              + '<div>项目数：' + (row.count || 0) + '</div>'
+              + '<div>合计：' + amt + ' 万</div>';
+          }
+        }),
+        series: [{
+          type: 'treemap',
+          roam: false,
+          nodeClick: false,
+          breadcrumb: { show: false },
+          width: '100%',
+          height: '100%',
+          left: 0,
+          top: 0,
+          label: {
+            show: true,
+            color: '#0c4f4a',
+            fontSize: 12,
+            formatter: function (info) { return (info.data && info.data.name) || ''; }
+          },
+          upperLabel: { show: false },
+          itemStyle: { borderColor: '#fff', borderWidth: 2, gapWidth: 2 },
+          data: sector.tiles.map(function (tile) {
+            const negative = Number(tile.monthCompletion) < 0;
+            return Object.assign({}, tile, {
+              itemStyle: { color: negative ? NEG_FILL : POS_FILL },
+              label: { color: negative ? NEG_TEXT : POS_TEXT }
+            });
+          })
+        }]
+      });
+      return chart;
+    }
+
+    function renderAlerts(sector) {
+      const el = document.getElementById('alertChart');
+      const ranked = sector.alerts.slice().reverse();
+      const chart = echarts.init(el);
+      chart.setOption({
+        textStyle: { fontFamily: '"Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif' },
+        tooltip: Object.assign(tipBase(), {
+          trigger: 'axis',
+          axisPointer: { type: 'shadow' },
+          formatter: function (items) {
+            const item = (items && items[0]) || {};
+            const full = item.data && item.data.label;
+            if (!full) return '';
+            return full + '：' + item.value + ' 条';
+          }
+        }),
+        grid: { top: 8, left: 4, right: 36, bottom: 4, containLabel: true },
+        xAxis: {
+          type: 'value',
+          minInterval: 1,
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: { color: '#9ca3af', fontSize: 11 },
+          splitLine: { lineStyle: { color: 'rgba(15,23,42,0.06)' } }
+        },
+        yAxis: {
+          type: 'category',
+          data: ranked.map(function (r) { return r.label.length > 12 ? r.label.slice(0, 11) + '…' : r.label; }),
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: { color: '#6b7280', fontSize: 11 }
+        },
+        series: [{
+          type: 'bar',
+          data: ranked.map(function (r) {
+            return { value: r.count, label: r.label, itemStyle: { color: AMBER, borderRadius: [0, 4, 4, 0] } };
+          }),
+          barMaxWidth: 18,
+          label: { show: true, position: 'right', color: '#92400e', fontSize: 11, formatter: '{c}' }
+        }]
+      });
+      return chart;
+    }
+
+    function renderTrend(sector) {
+      const el = document.getElementById('trendChart');
+      const chart = echarts.init(el);
+      const idx = sector.trend.reportingMonthIdx == null ? MONTH_IDX : sector.trend.reportingMonthIdx;
+      const months = sector.trend.months || [];
+      function toWanMonth(arr) {
+        return (arr || []).map(function (v) { return v == null ? 0 : v / 10000; });
+      }
+      function toWanYtd(arr) {
+        const src = arr || [];
+        let sum = 0;
+        return src.map(function (v) {
+          sum += Number(v) || 0;
+          return sum / 10000;
+        });
+      }
+      function fmtWan(v) {
+        if (v == null || !isFinite(Number(v))) return '—';
+        return Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' 万';
+      }
+      const mC = toWanMonth(sector.trend.completion);
+      const mI = toWanMonth(sector.trend.invoice);
+      const mP = toWanMonth(sector.trend.payment);
+      const yC = toWanYtd(sector.trend.completion);
+      const yI = toWanYtd(sector.trend.invoice);
+      const yP = toWanYtd(sector.trend.payment);
+      function bar(name, color, data) {
+        return {
+          name: name,
+          type: 'bar',
+          yAxisIndex: 0,
+          data: data,
+          barMaxWidth: 14,
+          itemStyle: { color: color, opacity: 0.78, borderRadius: [2, 2, 0, 0] }
+        };
+      }
+      function line(name, color, data, opts) {
+        return Object.assign({
+          name: name,
+          type: 'line',
+          yAxisIndex: 1,
+          data: data,
+          smooth: 0.2,
+          symbol: 'circle',
+          symbolSize: 5,
+          lineStyle: { width: 2.4, color: color },
+          itemStyle: { color: color, borderColor: '#fff', borderWidth: 1.5 }
+        }, opts || {});
+      }
+      const legend = [
+        '完成合同额·当月', '完成开票额·当月', '完成回款额·当月',
+        '完成合同额·累计', '完成开票额·累计', '完成回款额·累计'
+      ];
+      chart.setOption({
+        color: [BRAND, INVOICE, PAYMENT, BRAND, INVOICE, PAYMENT],
+        textStyle: { fontFamily: '"Helvetica Neue", Helvetica, "PingFang SC", "Microsoft YaHei", Arial, sans-serif' },
+        tooltip: Object.assign(tipBase(), {
+          trigger: 'axis',
+          axisPointer: { type: 'cross' },
+          formatter: function (items) {
+            if (!items || !items.length) return '';
+            const title = items[0].axisValueLabel || items[0].name || '';
+            const lines = ['<div style="font-weight:600;margin-bottom:4px;">' + title + '</div>'];
+            items.forEach(function (it) {
+              lines.push(
+                '<div style="display:flex;justify-content:space-between;gap:18px;">'
+                + '<span>' + it.marker + it.seriesName + '</span>'
+                + '<span style="font-variant-numeric:tabular-nums;">' + fmtWan(it.value) + '</span></div>'
+              );
+            });
+            return lines.join('');
+          }
+        }),
+        legend: {
+          data: legend,
+          top: 0,
+          right: 0,
+          itemWidth: 12,
+          itemHeight: 8,
+          itemGap: 12,
+          textStyle: { color: '#6b7280', fontSize: 11 }
+        },
+        grid: { top: 48, left: 8, right: 12, bottom: 0, containLabel: true },
+        xAxis: {
+          type: 'category',
+          data: months,
+          axisLine: { lineStyle: { color: '#e5e7eb' } },
+          axisTick: { show: false },
+          axisLabel: { color: '#9ca3af', fontSize: 11 }
+        },
+        yAxis: [
+          {
+            type: 'value',
+            name: '当月·万',
+            nameTextStyle: { color: '#9ca3af', fontSize: 11 },
+            axisLine: { show: false },
+            axisTick: { show: false },
+            axisLabel: { color: '#9ca3af', fontSize: 11 },
+            splitLine: { lineStyle: { color: 'rgba(15,23,42,0.06)' } }
+          },
+          {
+            type: 'value',
+            name: '累计·万',
+            nameTextStyle: { color: '#9ca3af', fontSize: 11 },
+            axisLine: { show: false },
+            axisTick: { show: false },
+            axisLabel: { color: '#9ca3af', fontSize: 11 },
+            splitLine: { show: false }
+          }
+        ],
+        series: [
+          bar(legend[0], BRAND, mC),
+          bar(legend[1], INVOICE, mI),
+          bar(legend[2], PAYMENT, mP),
+          line(legend[3], BRAND, yC, {
+            markArea: idx < months.length - 1 ? {
+              silent: true,
+              itemStyle: { color: 'rgba(15,23,42,0.028)' },
+              label: {
+                show: true, position: 'insideTop', color: '#9ca3af', fontSize: 11,
+                padding: [4, 0, 0, 0], formatter: '预测'
+              },
+              data: [[{ xAxis: months[idx] }, { xAxis: months[months.length - 1] }]]
+            } : undefined
+          }),
+          line(legend[4], INVOICE, yI),
+          line(legend[5], PAYMENT, yP)
+        ]
+      });
+      return chart;
+    }
+
+    window.addEventListener('resize', function () {
+      charts.forEach(function (c) { c.resize(); });
+    });
+
+    renderNav();
+    renderSector();
+  </script>
+</body>
+</html>

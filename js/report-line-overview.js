@@ -309,6 +309,147 @@
     return { items: list, counts: counts, total: list.length };
   }
 
+  /** 绝对值小于 50 元时，四舍五入到万元两位为 0.00，不进排名图 */
+  var COMPLETION_NEAR_ZERO = 50;
+
+  var ALERT_TYPE_ORDER = [
+    '累计开票超总合同额',
+    '累计回款超总合同额',
+    '累计回款超累计开票',
+    '存量合同额为负',
+    '有完成额无工时',
+    '有工时无完成额'
+  ];
+
+  /**
+   * 本月完成合同额横向条形图数据：过滤近零后按金额从高到低，最多 limit 条。
+   * @param {Array<{projectNo, projectName, pmName, monthCompletion}>} projects
+   * @param {number} [limit=8]
+   */
+  function buildCompletionRank(projects, limit) {
+    var max = Math.max(1, Number(limit) || 8);
+    return (projects || [])
+      .filter(function (p) {
+        return Math.abs(toNumber(p && p.monthCompletion)) >= COMPLETION_NEAR_ZERO;
+      })
+      .slice()
+      .sort(function (a, b) {
+        return toNumber(b.monthCompletion) - toNumber(a.monthCompletion);
+      })
+      .slice(0, max)
+      .map(function (p) {
+        return {
+          projectNo: p.projectNo || '',
+          projectName: p.projectName || '',
+          pmName: p.pmName || '',
+          monthCompletion: toNumber(p.monthCompletion)
+        };
+      });
+  }
+
+  var TREEMAP_NAMED_CAP = 12;
+  var TREEMAP_FALLBACK_CAP = 8;
+  var TREEMAP_MIN_RATIO = 0.15;
+
+  function completionSnapshot(p) {
+    return {
+      projectNo: p.projectNo || '',
+      projectName: p.projectName || '',
+      pmName: p.pmName || '',
+      monthCompletion: toNumber(p.monthCompletion)
+    };
+  }
+
+  /**
+   * 本月完成合同额树状图：大项目单独成块，长尾合并为一块「其他项目」。
+   * 面积用绝对值；「其他项目」颜色看净额正负。近零项目（绝对值不足 50 元）不占块。
+   * @param {Array<{projectNo, projectName, pmName, monthCompletion}>} projects
+   */
+  function buildCompletionTreemap(projects) {
+    var list = projects || [];
+    var significant = [];
+    var nearZeroCount = 0;
+    list.forEach(function (p) {
+      if (!p) return;
+      if (Math.abs(toNumber(p.monthCompletion)) >= COMPLETION_NEAR_ZERO) significant.push(p);
+      else nearZeroCount += 1;
+    });
+    significant.sort(function (a, b) {
+      return Math.abs(toNumber(b.monthCompletion)) - Math.abs(toNumber(a.monthCompletion));
+    });
+
+    var named = [];
+    if (significant.length) {
+      var maxAbs = Math.abs(toNumber(significant[0].monthCompletion));
+      var floor = maxAbs * TREEMAP_MIN_RATIO;
+      significant.forEach(function (p) {
+        if (named.length >= TREEMAP_NAMED_CAP) return;
+        if (Math.abs(toNumber(p.monthCompletion)) >= floor) named.push(p);
+      });
+      if (!named.length) named = significant.slice(0, TREEMAP_FALLBACK_CAP);
+    }
+
+    var namedNos = {};
+    named.forEach(function (p) { namedNos[p.projectNo || ''] = true; });
+    var rest = [];
+    significant.forEach(function (p) {
+      if (namedNos[p.projectNo || '']) return;
+      rest.push(p);
+    });
+
+    var tiles = named.map(function (p) {
+      var snap = completionSnapshot(p);
+      snap.kind = 'project';
+      return snap;
+    });
+
+    if (rest.length) {
+      var sum = 0;
+      var nos = [];
+      rest.forEach(function (p) {
+        sum += toNumber(p.monthCompletion);
+        nos.push(p.projectNo || '');
+      });
+      if (Math.abs(sum) >= COMPLETION_NEAR_ZERO) {
+        tiles.push({
+          kind: 'other',
+          label: '其他项目',
+          monthCompletion: sum,
+          count: rest.length,
+          projectNos: nos
+        });
+      }
+    }
+
+    return { tiles: tiles, nearZeroCount: nearZeroCount };
+  }
+
+  /**
+   * 预警类型横向条形图数据：只含条数 > 0 的类型，按条数降序，相同时按六类固定顺序。
+   * @param {Array<{type?, label}>} items
+   */
+  function buildAlertTypeRank(items) {
+    var counts = {};
+    (items || []).forEach(function (item) {
+      if (!item || !item.label) return;
+      counts[item.label] = (counts[item.label] || 0) + 1;
+    });
+    var orderIndex = {};
+    ALERT_TYPE_ORDER.forEach(function (label, idx) { orderIndex[label] = idx; });
+    return Object.keys(counts)
+      .filter(function (label) { return counts[label] > 0; })
+      .sort(function (a, b) {
+        var dc = counts[b] - counts[a];
+        if (dc !== 0) return dc;
+        var ia = orderIndex.hasOwnProperty(a) ? orderIndex[a] : 999;
+        var ib = orderIndex.hasOwnProperty(b) ? orderIndex[b] : 999;
+        return ia - ib;
+      })
+      .map(function (label) {
+        return { label: label, count: counts[label] };
+      });
+  }
+
   function buildOverview(projects, baselineProjects, monthIdx, options) {
     options = options || {};
     var currentProjects = projects || [];
@@ -333,8 +474,12 @@
 
   return {
     MONTH_LABELS: MONTH_LABELS,
+    ALERT_TYPE_ORDER: ALERT_TYPE_ORDER,
     throughMonthTotal: throughMonthTotal,
     futureTotal: futureTotal,
+    buildCompletionRank: buildCompletionRank,
+    buildCompletionTreemap: buildCompletionTreemap,
+    buildAlertTypeRank: buildAlertTypeRank,
     buildOverview: buildOverview
   };
 });

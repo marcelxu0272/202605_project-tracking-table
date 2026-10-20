@@ -67,8 +67,8 @@
             </template>
           </div>
           <div class="rl-page-actions">
-            <el-button v-if="rlCanReject" size="small" plain icon="el-icon-refresh-left" @click="handleRlReject">退回</el-button>
             <el-button v-if="rlCanApprove" size="small" type="success" icon="el-icon-circle-check" @click="handleRlApprove">审批通过</el-button>
+            <el-button v-if="rlCanReject" size="small" type="danger" plain icon="el-icon-circle-close" @click="handleRlReject">退回</el-button>
             <el-button
               size="small"
               :type="canEdit ? 'primary' : ''"

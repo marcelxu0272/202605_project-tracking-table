@@ -3,7 +3,7 @@
 /**
  * 报告线模拟数据种子：为 report_lines 及关联表插入演示数据
  * - 2026-05（上月）：12 个板块全部已完结（completed/closed）
- * - 2026-06（当月）：6 个板块各状态演示
+ * - 2026-06（当月）：6 个板块各状态演示（金山/沈阳 = 待总监审批）
  * 表为空时自动插入；force 时可清除后重建
  */
 const dbm = require('./db');
@@ -112,14 +112,16 @@ const JUNE_SEED_CONFIGS = [
   {
     sector_code: 'SAS520',
     sector_name: '金山中心',
-    status: 'open',
-    approval_node: null,
+    status: 'reviewing_director',
+    approval_node: 'director',
     useDbProjects: true,
     pms: [
-      { name: '何孝刚', status: 'open' },
-      { name: '宋建生', status: 'open' }
+      { name: '何孝刚', status: 'submitted' },
+      { name: '宋建生', status: 'submitted' }
     ],
-    approvals: [],
+    approvals: [
+      { action: 'submit', actor_role: 'sector_admin', actor_name: '运营总监 周明', comment: '板块管理员提交审批', from_status: 'open', to_status: 'reviewing_director' }
+    ],
     projects: []
   },
   {

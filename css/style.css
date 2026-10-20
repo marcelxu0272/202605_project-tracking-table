@@ -3011,7 +3011,7 @@ body {
 }
 .rl-ov .is-neg { color: var(--color-danger); }
 
-/* 指标面：主指标、次指标各一张卡片 */
+/* 指标面：四列（三项金额 + 第四列叠放两项存量） */
 .rl-ov-surface {
   background: #fff;
   border: 1px solid var(--color-border);
@@ -3022,14 +3022,40 @@ body {
 /* 用 1px gap + 容器底色做分隔线，列数变化时无需重排边框规则 */
 .rl-ov-kpis {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1px;
   background: var(--ov-hair);
+  align-items: stretch;
 }
 .rl-ov-kpi {
-  padding: 16px 20px 18px;
+  padding: 14px 16px 16px;
   background: #fff;
+  min-width: 0;
   transition: background-color 160ms cubic-bezier(0.2, 0, 0, 1);
+}
+.rl-ov-kpi.is-stock-col {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  /* 与前三列相同顶距，保证「存量合同额」标题基线对齐 */
+  padding: 14px 16px 16px;
+  min-height: 100%;
+}
+.rl-ov-stock-block {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  min-height: 0;
+  padding: 0;
+}
+.rl-ov-stock-block + .rl-ov-stock-block {
+  border-top: 1px solid var(--ov-hair);
+  padding-top: 10px;
+}
+.rl-ov-kpi.is-stock-col .rl-ov-kpi-value .num {
+  font-size: 22px;
+}
+.rl-ov-kpi.is-stock-col .rl-ov-kpi-main {
+  margin-top: 6px;
 }
 @media (hover: hover) {
   .rl-ov-kpi:hover { background: #fbfcfd; }
@@ -3069,6 +3095,12 @@ body {
   color: var(--color-brand);
   background: var(--color-brand-light);
 }
+.rl-ov-src.is-sync { cursor: help; }
+.rl-ov-src-tip {
+  max-width: 280px;
+  line-height: 1.5;
+  font-size: 12px;
+}
 .rl-ov-kpi-main {
   margin: 10px 0 0;
   display: flex;
@@ -3085,7 +3117,7 @@ body {
 }
 .rl-ov-kpi-value .num {
   font-family: var(--ov-num);
-  font-size: 30px;
+  font-size: 28px;
   font-weight: 600;
   line-height: 1.1;
   letter-spacing: -0.012em;
@@ -3188,16 +3220,52 @@ body {
 .rl-ov-sec-fixed {
   display: flex;
   flex-direction: column;
-  height: 328px;
+  height: 380px;
 }
 .rl-ov-sec-fixed .rl-ov-sec-head { flex: none; }
 .rl-ov-sec-body {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 .rl-ov-sec-body .el-table {
   height: 100%;
 }
+.rl-ov-mini-chart {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+}
+.rl-ov-chart-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+.rl-ov-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: -4px 0 8px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+.rl-ov-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.rl-ov-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: none;
+}
+.rl-ov-legend i.is-pos { background: #d7ebe9; box-shadow: inset 0 0 0 1px rgba(12, 79, 74, 0.28); }
+.rl-ov-legend i.is-neg { background: #f8d4d4; box-shadow: inset 0 0 0 1px rgba(159, 45, 45, 0.28); }
 .rl-ov-sec {
   background: #fff;
   border: 1px solid var(--color-border);
@@ -3366,7 +3434,7 @@ body {
 
 .rl-ov-chart {
   width: 100%;
-  height: 300px;
+  height: 340px;
 }
 
 /* 表格：贴合紧凑报表密度 */
@@ -3381,9 +3449,17 @@ body {
 .rl-ov .el-table--mini td.el-table__cell,
 .rl-ov .el-table--mini th.el-table__cell { padding: 6px 0; }
 
+.rl-ov-drill .rl-ov-chips {
+  margin-bottom: 12px;
+}
+
+@media (max-width: 960px) {
+  .rl-ov-kpis { grid-template-columns: 1fr 1fr; }
+  .rl-ov-kpi.is-stock-col { grid-column: 1 / -1; }
+}
 @media (max-width: 1180px) {
   .rl-ov-split { grid-template-columns: 1fr; }
-  .rl-ov-sec-fixed { height: 328px; }
+  .rl-ov-sec-fixed { height: 380px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
